@@ -29,14 +29,20 @@
 
             // Hash the password before storing it
             $password_hash = password_hash($password, PASSWORD_DEFAULT);
-
+            
+            $response = $this->userModel->createUser($username, $password_hash, $first_name, $middle_name, $last_name, $contact_no, $email, $role_id);
             // Call the model to create the user
-            if ($this->userModel->createUser($username, $password_hash, $first_name, $middle_name, $last_name, $contact_no, $email, $role_id)) {
+            if ($response["success"]) {
                 http_response_code(201);
                 echo json_encode(["message" => "User registered successfully"]);
-            } else {
-                http_response_code(500);
-                echo json_encode(["error" => "Failed to register user"]);
+            } else if (!$response["success"]) {
+                if ($response["error"] == "duplicate") {
+                  http_response_code(409);
+                  echo json_encode(["error" => "Username already exists"]);
+                } else {
+                  http_response_code(500);
+                  echo json_encode(["error" => "Failed to register user"]);
+                }
             }
         }
 

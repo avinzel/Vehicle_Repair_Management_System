@@ -28,11 +28,15 @@
     use App\Config\Database;
     use App\Models\User;
     use App\Controllers\RegisterUserController;
+    use App\Controllers\LoginController;
+    use App\Auth\Auth;
 
     $db = new Database();
 
     $userModel = new User($db);
     $registerUserController = new RegisterUserController($userModel); 
+    $loginController = new LoginController($userModel);
+    $auth = new Auth();
 
     $action = $_GET['action'] ?? null;
 
@@ -41,6 +45,27 @@
         case "register": {
             $registerUserController->registerUser(); 
             break;
+        }
+        case "login": {
+            $loginController->loginUser();
+            break;
+        }
+        case "logout": {
+            $loginController->logoutUser();
+            break;
+        }
+        case "check-auth": {
+            $auth->checkAuthentication();
+            break;
+        }
+
+        case "test-auth":{
+            if($auth->isAuthenticated()){
+                echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated."]);
+            } else {
+                http_response_code(401);
+                echo json_encode(["error" => "Unauthorized access"]);
+            }
         }
     }
 

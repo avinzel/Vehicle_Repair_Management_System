@@ -33,6 +33,19 @@
             }
         }
 
+        public function getUserByUserName(String $username){
+            $query = "SELECT * FROM users WHERE username = ?"; //procedure
+            $stmt = $this->conn->prepare($query);
+            $stmt->bind_param("s", $username);
+            try {
+                $stmt->execute();
+                $result = $stmt->get_result();
+                return $result->fetch_assoc();
+            } catch (\Exception $e) {
+                return false;
+            }
+        }
+
         public function createUser(
            String $username,
             String $password_hash,
@@ -61,8 +74,16 @@
                 return true;
             } catch (\Exception $e) {
                 // Handle the exception (e.g., log it, rethrow it, etc.)
-                error_log("Error creating user: " . $e->getMessage());
-                return false;
+                if ($e->getCode() === 1062) {
+                    return [
+                        "success" => false, 
+                        "error" => "duplicate"
+                    ];
+                }
+                return [
+                    "success" => false, 
+                    "error" => "Error creating user: " . $e->getMessage()
+                ];
             }
         }
 
