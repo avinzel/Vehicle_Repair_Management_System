@@ -32,7 +32,7 @@
     use App\Auth\Auth;
 
     $db = new Database();
-
+    
     $userModel = new User($db);
     $registerUserController = new RegisterUserController($userModel); 
     $loginController = new LoginController($userModel);
@@ -50,7 +50,7 @@
             $loginController->loginUser();
             break;
         }
-        case "logout": {
+        case "logout":{
             $loginController->logoutUser();
             break;
         }
