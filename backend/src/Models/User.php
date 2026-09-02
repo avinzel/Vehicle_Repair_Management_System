@@ -3,14 +3,14 @@
 
     use App\Config\Database;
     class User{
-        private $conn;
+        private static $conn;
         public function __construct(Database $db){
-            $this->conn = $db->getConnection();
+            self::$conn = $db->getConnection();
         }
 
         public function getAllUsers(){
             $query = "SELECT * FROM users"; //procedure
-            $stmt = $this->conn->prepare($query);
+            $stmt = self::$conn->prepare($query);
             try {
                 $stmt->execute();
                 $result = $stmt->get_result();
@@ -20,9 +20,9 @@
             }
         }
 
-        public function getUserById(int $id){
-            $query = "SELECT * FROM users WHERE id = ?"; //procedure
-            $stmt = $this->conn->prepare($query);
+        public static function getUserById(int $id){
+            $query = "SELECT * FROM users WHERE user_id = ?"; //procedure
+            $stmt = self::$conn->prepare($query);
             $stmt->bind_param("i", $id);
             try {
                 $stmt->execute();
@@ -33,9 +33,9 @@
             }
         }
 
-        public function getUserByUserName(String $username){
+        public static function getUserByUserName(String $username){
             $query = "SELECT * FROM users WHERE username = ?"; //procedure
-            $stmt = $this->conn->prepare($query);
+            $stmt = self::$conn->prepare($query);
             $stmt->bind_param("s", $username);
             try {
                 $stmt->execute();
@@ -46,7 +46,7 @@
             }
         }
 
-        public function createUser(
+        public static function createUser(
            String $username,
             String $password_hash,
             String $first_name,
@@ -57,7 +57,7 @@
             int $role_id
         ){
             $query = 'INSERT INTO users (username, password_hash, first_name, middle_name, last_name, contact_no, email, role_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "ACTIVE")'; //procedure
-            $stmt = $this->conn->prepare($query);
+            $stmt = self::$conn->prepare($query);
             $stmt->bind_param(
                 "sssssssi",
                 $username,

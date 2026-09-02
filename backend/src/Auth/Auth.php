@@ -1,18 +1,17 @@
 <?php
     namespace App\Auth;
-
+    use App\Resources\UserResource;
     class Auth {
         public static function isAuthenticated() {
             return isset($_SESSION['user_id']);
         }
 
-        public function checkAuthentication(){
+        public static function checkAuthentication(){
             if (isset($_SESSION['user_id'])) {
+                $userData = UserResource::toArray($_SESSION['user_id']);
                 echo json_encode([
-                "user_id" => $_SESSION['user_id'], 
-                "username" => $_SESSION['username'],
-                "role_id" => $_SESSION['role_id'],
-                "message" => "User is authenticated"
+                    "user" => $userData,
+                    "message" => "User is authenticated"
                 ]);
             } else {
                 http_response_code(401);
