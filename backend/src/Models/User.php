@@ -71,7 +71,7 @@
             );
             try {
                 $stmt->execute();
-                return true;
+                return ["success" => true];
             } catch (\Exception $e) {
                 // Handle the exception (e.g., log it, rethrow it, etc.)
                 if ($e->getCode() === 1062) {
