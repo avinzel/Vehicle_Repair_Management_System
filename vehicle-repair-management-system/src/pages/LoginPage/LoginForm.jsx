@@ -17,7 +17,7 @@ export function LoginForm({ authenticateUser }) {
         const data = await response.json();
 
         if (!response.ok) {
-            alert(data.error);//toast notification
+            alert(data.error);//toast notification and make the txt field on some
             return;
         } 
         await authenticateUser()
