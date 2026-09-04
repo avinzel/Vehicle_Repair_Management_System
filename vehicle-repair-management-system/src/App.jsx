@@ -38,7 +38,6 @@ function App() {
       alert(data.error);//toast notification
       return;
     }
-    alert(data.message); //toast notification
 
     authenticateUser();
   }

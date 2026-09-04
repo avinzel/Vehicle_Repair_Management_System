@@ -2,19 +2,21 @@
     namespace App\Models;
 
     use App\Config\Database;
+    use \App\Resources\UserResource; 
     class User{
         private static $conn;
         public function __construct(Database $db){
             self::$conn = $db->getConnection();
         }
 
-        public function getAllUsers(){
+        public static function getAllUsers(){
             $query = "SELECT * FROM users"; //procedure
             $stmt = self::$conn->prepare($query);
             try {
                 $stmt->execute();
                 $result = $stmt->get_result();
-                return $result->fetch_all(MYSQLI_ASSOC);
+                $data = $result->fetch_all(MYSQLI_ASSOC);
+                return UserResource::collection($data);
             } catch (\Exception $e) {
                 return false;
             }
@@ -27,7 +29,8 @@
             try {
                 $stmt->execute();
                 $result = $stmt->get_result();
-                return $result->fetch_assoc();
+                $user = $result->fetch_assoc();
+                return UserResource::toArray($user);
             } catch (\Exception $e) {
                 return false;
             }
