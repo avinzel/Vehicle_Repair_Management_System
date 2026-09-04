@@ -11,16 +11,16 @@
 
         public function registerUser(){
             $data = $this->getInputData();  
-
-            $username = $data['username'] ?? null;
-            $password = $data['password'] ?? null;
-            $first_name = $data['first_name'] ?? null;
-            $middle_name = $data['middle_name'] ?? null;
-            $last_name = $data['last_name'] ?? null;
-            $contact_no = $data['contact_no'] ?? null;
-            $email = $data['email'] ?? null;
-            $role_id = $data['role_id'] ?? null; 
-
+        
+            $username    = isset($data['username']) ? trim($data['username']) : null;
+            $password    = isset($data['password']) ? trim($data['password']) : null;
+            $first_name  = isset($data['first_name']) ? trim($data['first_name']) : null;
+            $middle_name = isset($data['middle_name']) ? trim($data['middle_name']) : null;
+            $last_name   = isset($data['last_name']) ? trim($data['last_name']) : null;
+            $contact_no  = isset($data['contact_no']) ? trim($data['contact_no']) : null;
+            $email       = isset($data['email']) ? trim($data['email']) : null;
+            $role_id     = $data['role_id'] ?? null; 
+            
             if (!$username || !$password || !$first_name || !$last_name || !$contact_no || !$email || !$role_id) {
                 http_response_code(400);
                 echo json_encode(["error" => "Missing required fields"]);

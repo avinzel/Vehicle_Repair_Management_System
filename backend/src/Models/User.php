@@ -50,7 +50,7 @@
         }
 
         public static function createUser(
-           String $username,
+            String $username,
             String $password_hash,
             String $first_name,
             String $middle_name,
