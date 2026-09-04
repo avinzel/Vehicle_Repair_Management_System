@@ -62,8 +62,6 @@
         case "test-auth":{
             if($auth->isAuthenticated()){
                 echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated.", "users"=> User::getAllUsers()]);
-
-                
             } else {
                 http_response_code(401);
                 echo json_encode(["error" => "Unauthorized access"]);
