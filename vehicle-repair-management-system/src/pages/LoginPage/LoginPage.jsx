@@ -1,8 +1,8 @@
 import { LoginForm } from "./LoginForm"
-export function LoginPage() {
+export function LoginPage({authenticateUser}) {
     return (
         <>
-            <LoginForm/>
+            <LoginForm authenticateUser = {authenticateUser}/>
         </>
     )
 }
