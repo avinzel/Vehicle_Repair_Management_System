@@ -5,7 +5,7 @@
     class Database{
         private $host = "localhost"; 
         private $user = "root";
-        private $pass = ""; 
+        private $pass = "mercadal123"; 
         private $db = "VehicleRepair";
 
         private $conn; 
