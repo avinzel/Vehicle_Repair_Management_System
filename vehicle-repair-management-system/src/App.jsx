@@ -1,14 +1,13 @@
 import './App.css'
 import { useEffect, useState } from "react";
-import { Routes, Route, useNavigate, Navigate } from "react-router"
+import { Routes, Route, Navigate } from "react-router"
 import { LoginPage } from "./pages/LoginPage/LoginPage";
-import { ServiceProviderPage } from './pages/ServiceProviderPage/ServiceProviderPage';
+import { ServiceAdvisorPage } from './pages/ServiceAdvisorPage/ServiceAdvisorPage';
 import { NotFoundPage } from './pages/NotFoundPage/NotFoundPage';
 import {Loading} from "./components/Loading"
 function App() {
   const [user, setUser] = useState([])
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
   async function authenticateUser() {
     const response = await fetch("http://localhost:8000/api.php?action=check-auth&", {
       credentials: "include"
@@ -58,11 +57,11 @@ function App() {
           path="/service-advisor"
           element={
             user && Number(user.role_id) === 3 ? (
-              <ServiceProviderPage user={user} />
+              <ServiceAdvisorPage user={user} />
             ) : (
               <Navigate to="/" replace />
             )
-          }
+          } 
         />
 
         <Route path="*" element={<NotFoundPage />} />
