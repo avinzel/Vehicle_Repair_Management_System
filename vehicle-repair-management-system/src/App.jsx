@@ -5,9 +5,7 @@ import { LoginPage } from "./pages/LoginPage/LoginPage";
 import { ServiceAdvisorPage } from './pages/ServiceAdvisorPage/ServiceAdvisorPage';
 import { NotFoundPage } from './pages/NotFoundPage/NotFoundPage';
 import { RegisterPage } from './pages/RegisterPage/RegisterPage';
-import { ManagerPage } from './pages/ManagerPage/ManagerPage';
 import {MechanicPage} from "./pages/MechanicPage/MechanicPage"
-import { CashierPage } from './pages/CashierPage/CashierPage';
 import {Loading} from "./components/Loading"
 import { AdminPage } from './pages/AdminPage/AdminPage';
 function App() {
@@ -73,20 +71,9 @@ function App() {
         />
 
         <Route
-          path="/manager"
-          element={
-            user && Number(user.role_id) === 2 ? (
-              <ManagerPage user={user} />
-            ) : (
-              <Navigate to="*" replace />
-            )
-          } 
-        />
-
-        <Route
           path="/service-advisor"
           element={
-            user && Number(user.role_id) === 3 ? (
+            user && Number(user.role_id) === 2 ? (
               <ServiceAdvisorPage user={user} />
             ) : (
               <Navigate to="*" replace />
@@ -97,19 +84,8 @@ function App() {
         <Route
           path="/mechanic"
           element={
-            user && Number(user.role_id) === 4 ? (
+            user && Number(user.role_id) === 3? (
               <MechanicPage user={user} />
-            ) : (
-              <Navigate to="*" replace />
-            )
-          } 
-        />
-
-        <Route
-          path="/cashier"
-          element={
-            user && Number(user.role_id) === 5 ? (
-              <CashierPage user={user} />
             ) : (
               <Navigate to="*" replace />
             )

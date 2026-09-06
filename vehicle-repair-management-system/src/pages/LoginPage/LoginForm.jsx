@@ -24,10 +24,8 @@ export function LoginForm({ authenticateUser }) {
 
         const roleRoutes = {
             1: "/admin",
-            2: "/manager",
-            3: "/service-advisor",
-            4: "/mechanic",
-            5: "/cashier"
+            2: "/service-advisor",
+            3: "mechanic"
         };
 
         navigate(roleRoutes[data.role_id] ?? "/", { replace: true });
