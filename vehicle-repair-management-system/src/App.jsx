@@ -24,22 +24,6 @@ function App() {
     }
     setLoading(false);
   }
-  async function logout() {
-    const response = await fetch("http://localhost:8000/api.php?action=logout&", {
-      credentials: "include"
-    });
-    const data = await response.json();
-
-    if (!response.ok) {
-      alert(data.error);//taost notification
-    } else {
-      setUser(null)
-      navigate("/")
-    }
-    setLoading(false);
-  }
-
-
   useEffect(() => {
     // login()
     // logout();
@@ -65,7 +49,7 @@ function App() {
             user && Number(user.role_id) === 1 ? (
               <AdminPage user={user} />
             ) : (
-              <Navigate to="*" replace />
+              <Navigate to="/" replace />
             )
           } 
         />
@@ -74,9 +58,9 @@ function App() {
           path="/service-advisor"
           element={
             user && Number(user.role_id) === 2 ? (
-              <ServiceAdvisorPage user={user} />
+              <ServiceAdvisorPage user={user} setUser ={setUser} />
             ) : (
-              <Navigate to="*" replace />
+              <Navigate to="/" replace />
             )
           } 
         />
@@ -87,7 +71,7 @@ function App() {
             user && Number(user.role_id) === 3? (
               <MechanicPage user={user} />
             ) : (
-              <Navigate to="*" replace />
+              <Navigate to="/" replace />
             )
           } 
         />

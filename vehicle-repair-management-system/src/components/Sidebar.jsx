@@ -32,6 +32,7 @@ import {
     SidebarInset,
     SidebarTrigger,
 } from '@/components/ui/sidebar';
+import { useNavigate } from 'react-router';
 
 // Nav links per role. Add/remove items here as the system's role-based
 // access rules change, rather than editing the render logic below.
@@ -59,31 +60,19 @@ const ROLE_LINKS = {
         { name: 'Parts Logger', icon: Cog, href: '#parts-logger' },
     ],
 };
-async function logout() {
-    const response = await fetch("http://localhost:8000/api.php?action=logout&", {
-        credentials: "include"
-    });
-    const data = await response.json();
 
-    if (!response.ok) {
-        alert(data.error);//taost notification
-    } else {
-        setUser(null)
-        navigate("/")
-    }
-}
 
 export function AppSidebar({
     role = 'Service Advisor',
     userName = 'Juan Dela Cruz',//name should be dynamic 
     activeHref = '#dashboard',
     badges = { activeOrders: 6, lowStock: 2, assignedOrders: 3 },
-    onNavigate,
-    onLogout,
+    setUser
 }) {
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [showMenuDropdown, setShowMenuDropdown] = useState(false);
     const menuRef = useRef(null);
+    const navigate = useNavigate();
 
     const links = ROLE_LINKS[role] ?? ROLE_LINKS['Service Advisor'];
     const initials = userName
@@ -102,6 +91,20 @@ export function AppSidebar({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+      async function logout() {
+        const response = await fetch("http://localhost:8000/api.php?action=logout", {
+          credentials: "include"
+        });
+        const data = await response.json();
+    
+        if (!response.ok) {
+          alert(data.error);//taost notification
+        } else {
+          setUser(null)
+             navigate("/", { replace: true });
+        }
+      }
 
     return (
         <>
@@ -215,7 +218,7 @@ export function AppSidebar({
                         <div className="flex justify-between items-center">
                             <h3 className="font-bold text-lg text-foreground">Confirm logout</h3>
                             <button
-                                onClick={() => setShowLogoutModal(false)}
+                                onClick={() => logout()}
                                 className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-secondary transition-colors"
                                 aria-label="Close"
                             >
@@ -235,7 +238,7 @@ export function AppSidebar({
                             <button
                                 onClick={() => {
                                     setShowLogoutModal(false);
-                                    if (onLogout) logout();
+                                    logout();
                                 }}
                                 className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 shadow-sm transition-colors"
                             >

@@ -2,12 +2,12 @@ import { Menu } from 'lucide-react';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/Sidebar';
 
-export function ServiceAdvisorPage({ user }) {
+export function ServiceAdvisorPage({ user ,setUser }) {
   const displayName = user?.name ?? `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
 
   return (
     <SidebarProvider>
-      <AppSidebar role="Service Advisor" userName={displayName} />
+      <AppSidebar role="Service Advisor" userName={displayName} setUser = {setUser} />
       <SidebarInset>
         <header className="flex items-center gap-3 border-b border-border px-4 py-3">
           <SidebarTrigger>
