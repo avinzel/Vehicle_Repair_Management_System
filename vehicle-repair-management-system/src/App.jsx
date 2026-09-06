@@ -1,6 +1,6 @@
 import './App.css'
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router"
+import { Routes, Route, Navigate , useNavigate} from "react-router"
 import { LoginPage } from "./pages/LoginPage/LoginPage";
 import { ServiceAdvisorPage } from './pages/ServiceAdvisorPage/ServiceAdvisorPage';
 import { NotFoundPage } from './pages/NotFoundPage/NotFoundPage';
@@ -8,8 +8,9 @@ import {Loading} from "./components/Loading"
 function App() {
   const [user, setUser] = useState([])
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate(); 
   async function authenticateUser() {
-    const response = await fetch("http://localhost:8000/api.php?action=check-auth&", {
+    const response = await fetch("http://localhost:8000/api.php?action=check-auth", {
       credentials: "include"
     });
     const data = await response.json();
@@ -21,25 +22,25 @@ function App() {
     setLoading(false);
   }
 
-  // async function logout() {
-  //   const response = await fetch("http://localhost:8000/api.php?action=logout&", {
-  //     credentials: "include"
-  //   });
-  //   const data = await response.json();
+  async function logout() {
+    const response = await fetch("http://localhost:8000/api.php?action=logout&", {
+      credentials: "include"
+    });
+    const data = await response.json();
 
-  //   if (!response.ok) {
-  //     alert(data.error);//taost notification
-  //   } else {
-  //     setUser(null)
-  //     navigate("/")
-  //   }
-  //   setLoading(false);
-  // }
+    if (!response.ok) {
+      alert(data.error);//taost notification
+    } else {
+      setUser(null)
+      navigate("/")
+    }
+    setLoading(false);
+  }
 
 
   useEffect(() => {
     // login()
-    // // logout();
+    // logout();
     authenticateUser();
   }, []);
   if (loading) {

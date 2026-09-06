@@ -29,6 +29,8 @@
     use App\Models\User;
     use App\Controllers\RegisterUserController;
     use App\Controllers\LoginController;
+    use App\Controllers\RoleController;
+    use App\Models\Role;
     use App\Auth\Auth;
 
     $db = new Database();
@@ -36,12 +38,36 @@
     $userModel = new User($db);
     $registerUserController = new RegisterUserController($userModel); 
     $loginController = new LoginController($userModel);
+    $roleController = new RoleController(new Role($db));
     $auth = new Auth();
 
     $action = $_GET['action'] ?? null;
 
+    // Define actions that do not require authentication
+    $publicActions = ['register', 'login', 'check-auth'];
+
+    // 1. Guard Clause: Block unauthenticated access to protected routes
+    if (!in_array($action, $publicActions) && !$auth->isAuthenticated()) {
+        http_response_code(401);
+        echo json_encode(["error" => "Unauthorized access. Please log in."]);
+        exit();
+    }
+    
+    $rolePermissions = [
+        "create-repair-order"=>[1,2,3]
+    ];
+
+    if (isset($rolePermissions[$action])) {
+        $userRoleId = $auth->getRoleId(); // Retrieve role_id stored in $_SESSION
+        if (!in_array($userRoleId, $rolePermissions[$action])) {
+            http_response_code(403); // 403 Forbidden
+            echo json_encode(["error" => "Access denied. Insufficient permissions for this action."]);
+            exit();
+        }
+    }
     //routes
     switch ($action){
+        //public routes
         case "register": {
             $registerUserController->registerUser(); 
             break;
@@ -50,22 +76,21 @@
             $loginController->loginUser();
             break;
         }
-        case "logout":{
-            $loginController->logoutUser();
-            break;
-        }
         case "check-auth": {
             $auth->checkAuthentication();
             break;
         }
-
+        //protected routes
+        case "logout":{
+            $loginController->logoutUser();
+            break;
+        }
         case "test-auth":{
-            if($auth->isAuthenticated()){
-                echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated.", "users"=> User::getAllUsers()]);
-            } else {
-                http_response_code(401);
-                echo json_encode(["error" => "Unauthorized access"]);
-            }
+            echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated." ]);
+        }
+
+        case "create-repair-order":{
+            echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated and have permission to create a repair order." ]);
         }
     }
 

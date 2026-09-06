@@ -5,17 +5,16 @@
     class Database{
         private $host = "localhost"; 
         private $user = "root";
-        private $pass = "mercadal123"; 
+        private $pass = ""; 
         private $db = "VehicleRepair";
 
-        private $conn; 
+        private static $conn; 
 
         public function __construct(){
             try {
-                $this->conn = new mysqli($this->host,$this->user, $this->pass, $this->db ); 
-
-                if ($this->conn->connect_error) {
-                    throw new Exception("Connection Error: " . $this->conn->connect_error );
+                self::$conn = new mysqli($this->host,$this->user, $this->pass, $this->db ); 
+                if (self::$conn->connect_error) {
+                    throw new Exception("Connection Error: " . self::$conn->connect_error );
                 }
             } catch (Exception $e) {
                 http_response_code(500);
@@ -24,8 +23,8 @@
             }
         }
 
-        public function getConnection(){
-            return $this->conn;
+        public static function getConnection(){
+            return self::$conn;
         }
         
     }

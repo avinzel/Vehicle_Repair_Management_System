@@ -5,7 +5,7 @@
         public static function isAuthenticated() {
             return isset($_SESSION['user_id']);
         }
-
+        
         public static function checkAuthentication(){
             if (isset($_SESSION['user_id'])) {
                 $userData = User::getUserById($_SESSION['user_id']);
@@ -18,7 +18,7 @@
                 echo json_encode(["error" => "Unauthorized access"]);
                 exit;
             }
-        }
+        }   
 
         public static function getUserId() {
             return $_SESSION['user_id'] ?? null;
