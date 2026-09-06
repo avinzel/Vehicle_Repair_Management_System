@@ -1,3 +1,5 @@
+
+
 CREATE DATABASE IF NOT EXISTS VehicleRepair;
 USE VehicleRepair;
 
@@ -260,3 +262,118 @@ INSERT INTO mechanic_positions (position_name, description) VALUES
 ('Lead Mechanic', 'Leads the repair job, can mark job complete'),
 ('Assistant', 'Supports the lead mechanic on the job'),
 ('Electrical Specialist', 'Handles electrical system repairs');
+
+-- =====================================================================
+-- USERS
+-- role_id: 1=Admin, 2=Manager, 3=Service Advisor, 4=Mechanic, 5=Cashier
+-- all PASSWORD are : 123
+-- =====================================================================
+INSERT INTO users (user_id, username, password_hash, first_name, middle_name, last_name, contact_no, email, role_id, status, created_at) VALUES
+-- Service Advisor
+(1, 'vinzel',       '$2y$12$HAw./A6cusUN2DreFRvTKeWLTzoowIQADPRg1Iwt9qsTHNqm.wVfW', 'Vincent',    'Tubice',   'Mandap',   '09423456781', 'vinzel@gmail.com',     3, 'ACTIVE', '2026-09-06 15:52:16'),
+-- Admin
+(2, 'bananabeam',   '$2y$12$Tu4T3taD14qPLjdlVUe40.E3xb.vE66opjqKzjOkLTkPOGH/Rt7Ce', 'Noel',       'Enseymada','Mercadal', '09423456781', 'bananabeam@gmail.com', 1, 'ACTIVE', '2026-09-06 15:53:07'),
+-- Manager 
+(3, 'lean_janelle', '$2y$12$hkPsfS4urNzX2kkf7kPkJ.KbqgN6IVh0Kw1l3XzbKnzKsGWYVs7ny', 'Leann Jae',  'Marie',    'Naenyeos', '09423156781', 'janelle@gmail.com',    2, 'ACTIVE', '2026-09-06 15:55:37'),
+-- Mechanic
+(4, 'joleks',       '$2y$12$rQUt/5Asy2zEUIF13jcDI.NLTzeyOSnAc890RV/E030FIIHTVq8yS', 'John Aleks', 'Wasuo',    'Lumpay',   '09423156781', 'janelle@gmail.com',    4, 'ACTIVE', '2026-09-06 15:56:46'),
+-- Cashier
+(5, 'kruu',         '$2y$12$9pr6.VdX/NE6A.0ml.rmlu4bok6xEeqAwerD/k8WmHBtWLWikByxy', 'Patrick Kru','Merona',   'Malana',   '09493156781', 'kruu@gmail.com',       5, 'ACTIVE', '2026-09-06 15:57:31');
+
+-- =====================================================================
+-- MECHANICS
+-- Only user_id 4 (joleks / John Aleks Lumpay) has role_id 4 (Mechanic),
+-- so this is the only mechanic profile that can exist right now.
+-- =====================================================================
+INSERT INTO mechanics (mechanic_id, user_id, specialization, date_hired, status) VALUES
+(1, 4, 'General Repair', '2025-01-15', 'ACTIVE');
+ 
+-- =====================================================================
+-- CUSTOMERS
+-- =====================================================================
+INSERT INTO customers (customer_id, first_name, middle_name, last_name, contact_no, email, address, created_at) VALUES
+(1, 'Liam',  NULL, 'Johnson',  '0917-123-4567', 'liam.j@email.com',  'Blk 4 Lot 12, Cabuyao, Laguna',   '2026-08-27 09:00:00'),
+(2, 'Olivia',NULL, 'Smith',    '0918-234-5678', 'olivia.s@email.com','Purok 3, Sta. Rosa, Laguna',      '2026-08-26 10:15:00'),
+(3, 'Noah',  NULL, 'Williams', '0919-345-6789', 'noah.w@email.com',  'Brgy. Banay-banay, Cabuyao',      '2026-08-25 11:30:00'),
+(4, 'Emma',  NULL, 'Brown',    '0920-456-7890', 'emma.b@email.com',  'Km 21, National Hwy, Cabuyao',    '2026-08-24 13:45:00'),
+(5, 'James', NULL, 'Davis',    '0921-567-8901', 'james.d@email.com', 'Brgy. Mamatid, Cabuyao, Laguna',  '2026-08-23 08:20:00');
+ 
+-- =====================================================================
+-- VEHICLES
+-- vehicle_type now CAR/MOTORCYCLE/TRICYCLE, column is `manufacturer`
+-- (not `make`)
+-- =====================================================================
+INSERT INTO vehicles (vehicle_id, customer_id, plate_number, vehicle_type, manufacturer, model, year_model, color, vin_number, current_mileage, date_registered) VALUES
+(1, 1, 'ABC-1234', 'CAR',        'Toyota',    'Vios',        2021, 'Silver', 'VIN-ABC1234XX', 32000, '2026-08-27 09:05:00'),
+(2, 2, 'XYZ-5678', 'MOTORCYCLE', 'Honda',     'Click 125i',  2022, 'Red',    'VIN-XYZ5678XX', 8500,  '2026-08-26 10:20:00'),
+(3, 3, 'DEF-9012', 'MOTORCYCLE', 'Yamaha',    'Mio i125',    2020, 'Blue',   'VIN-DEF9012XX', 12100, '2026-08-25 11:35:00'),
+(4, 4, 'GHI-3456', 'CAR',        'Toyota',    'Vios',        2019, 'White',  'VIN-GHI3456XX', 51200, '2026-08-24 13:50:00'),
+(5, 5, 'JKL-7890', 'MOTORCYCLE', 'Kawasaki',  'Barako 175',  2021, 'Black',  'VIN-JKL7890XX', 15300, '2026-08-23 08:25:00');
+ 
+-- =====================================================================
+-- PARTS INVENTORY
+-- =====================================================================
+INSERT INTO parts_inventory (part_id, part_code, part_name, category, unit, unit_price, quantity_on_hand, reorder_level, batch_number, date_added, status) VALUES
+(1, 'PRT-001', 'Engine Oil (1L)',       'Engine',     'liter', 380.00,  48, 10, 'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
+(2, 'PRT-002', 'Brake Pads (set)',      'Brake',      'set',   1200.00, 12, 5,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
+(3, 'PRT-003', 'Air Filter',            'Engine',     'pc',    380.00,  20, 8,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
+(4, 'PRT-004', 'Spark Plugs (set of 4)','Engine',     'set',   950.00,  18, 6,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
+(5, 'PRT-005', 'Car Battery (12V)',     'Electrical', 'pc',    3800.00, 8,  5,  'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE'),
+(6, 'PRT-006', 'Wiper Blade (pair)',    'Body',       'pair',  650.00,  22, 8,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
+(7, 'PRT-007', 'Coolant (1L)',          'Engine',     'liter', 280.00,  30, 10, 'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE'),
+(8, 'PRT-008', 'Timing Belt',           'Engine',     'pc',    1850.00, 6,  5,  'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE');
+ 
+-- =====================================================================
+-- REPAIR ORDERS
+-- created_by = 1 (vinzel, Service Advisor)
+-- priority column now populated per order
+-- =====================================================================
+INSERT INTO repair_orders (order_id, vehicle_id, date_received, date_completed, mileage_at_service, complaint, status, diagnosis_notes, diagnosis_completed_at, priority, created_by) VALUES
+(1, 1, '2026-08-27 09:10:00', NULL, 32000, 'Engine makes knocking noise when accelerating.', 'PENDING_DIAGNOSIS', NULL, NULL, 'STANDARD', 1),
+(2, 2, '2026-08-26 10:25:00', NULL, 8500,  'Brake lever feels spongy, brake fade during test ride.', 'AWAITING_DIAGNOSIS', NULL, NULL, 'URGENT', 1),
+(3, 3, '2026-08-25 11:40:00', NULL, 12100, 'Customer reports difficulty starting in the morning.', 'PENDING_MECHANICS', 'Weak battery output and corroded terminals found. Recommend battery cleaning/replacement.', '2026-08-25 14:00:00', 'STANDARD', 1),
+(4, 4, '2026-08-24 13:55:00', NULL, 51200, 'Vehicle will not start. Battery voltage reads 9.2V (dead).', 'IN_PROGRESS', 'Battery voltage reads 9.2V (dead). Starter motor draws excessive current — likely worn brushes. Recommend battery replacement and starter motor overhaul.', '2026-08-24 16:10:00', 'RUSH', 1),
+(5, 5, '2026-08-23 08:30:00', '2026-08-23 17:00:00', 15300, 'Routine 10,000km service.', 'FULFILLED', 'Routine 10,000km service. Oil change, filter replacement, chain adjustment, and general inspection completed. All systems nominal.', '2026-08-23 09:00:00', 'STANDARD', 1);
+ 
+-- =====================================================================
+-- REPAIR ORDER SERVICES (labor line items)
+-- =====================================================================
+INSERT INTO repair_order_services (order_service_id, order_id, service_name, service_description, labor_cost) VALUES
+(1, 4, 'Starter Motor Overhaul', 'Disassemble, inspect, and rebuild starter motor',     1920.00),
+(2, 5, 'Routine Service (10,000km)', 'Oil change, filter replacement, chain adjustment', 1380.00);
+ 
+-- =====================================================================
+-- REPAIR ORDER MECHANICS
+-- Same mechanic (mechanic_id 1), different position depending on the
+-- order — demonstrates why position_id lives on this junction table
+-- and not on the mechanics table itself.
+-- =====================================================================
+INSERT INTO repair_order_mechanics (assignment_id, order_id, mechanic_id, position_id, date_assigned) VALUES
+(1, 3, 1, 1, '2026-08-25 13:50:00'), -- Diagnostician on RO-3
+(2, 4, 1, 1, '2026-08-24 15:00:00'), -- Diagnostician on RO-4
+(3, 4, 1, 2, '2026-08-24 16:15:00'), -- also Lead Mechanic on RO-4 once repair began
+(4, 5, 1, 2, '2026-08-23 09:05:00'); -- Lead Mechanic on RO-5
+ 
+-- =====================================================================
+-- REPAIR ORDER PARTS (deducted from parts_inventory)
+-- NOTE: subtotal is no longer a generated column in this schema version
+-- — calculate quantity_used * unit_price in your app/queries as needed.
+-- =====================================================================
+INSERT INTO repair_order_parts (order_part_id, order_id, part_id, batch_number, quantity_used, unit_price) VALUES
+(1, 4, 5, 'BATCH-2026-02', 1, 3800.00), -- Car Battery on RO-4
+(2, 5, 1, 'BATCH-2026-01', 3, 380.00),  -- Engine Oil on RO-5
+(3, 5, 3, 'BATCH-2026-01', 1, 380.00);  -- Air Filter on RO-5
+ 
+-- =====================================================================
+-- MAINTENANCE HISTORY (only for completed orders)
+-- =====================================================================
+INSERT INTO maintenance_history (history_id, order_id, service_date, service_summary, next_service_due_date, next_service_due_mileage) VALUES
+(1, 5, '2026-08-23 17:00:00', 'Routine 10,000km service completed — oil change, filter, chain adjustment.', '2026-11-23', 25300);
+ 
+-- =====================================================================
+-- INVOICES
+-- issued_by = 1 (Service Advisor), received_by = 5 (Cashier)
+-- =====================================================================
+INSERT INTO invoices (invoice_id, order_id, invoice_date, labor_total, parts_total, discount, tax_amount, total_amount, payment_method, payment_reference, payment_date, status, issued_by, received_by) VALUES
+(1, 5, '2026-08-23 17:05:00', 1380.00, 920.00, 0.00, 0.00, 2300.00, 'CASH', NULL, '2026-08-23 17:10:00', 'PAID', 1, 5);
+ 
