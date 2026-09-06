@@ -17,7 +17,6 @@ import { Billing } from './pages/ServiceAdvisorPage/Billing';
 function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate(); 
   async function authenticateUser() {
     const response = await fetch("http://localhost:8000/api.php?action=check-auth", {
       credentials: "include"
@@ -30,6 +29,7 @@ function App() {
     }
     setLoading(false);
   }
+  
   useEffect(() => {
     // login()
     // logout();

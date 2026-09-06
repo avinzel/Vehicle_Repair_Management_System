@@ -1,25 +1,54 @@
-import { Menu } from 'lucide-react';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import {Outlet} from "react-router"
+
+
+import { useState } from 'react';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/Sidebar';
+import { Header } from '@/components/Header';
+import {Outlet, useLocation} from "react-router"
+
+// Static title/subtitle per tab. Dashboard is intentionally excluded here
+// since it needs a dynamic personalized greeting instead — handled below.
+const PAGE_META = {
+  '/service-advisor/intake': { title: 'New Vehicle Intake', subtitle: 'Register a customer, vehicle, and generate a repair order' },
+  '/service-advisor/orders': { title: 'Active Repair Orders', subtitle: 'Track, assign mechanics, and manage ongoing jobs' },
+  '/service-advisor/customers': { title: 'Customer & Vehicle Records', subtitle: 'Browse and search your customer directory' },
+  '/service-advisor/billing': { title: 'Billing & Invoicing', subtitle: 'Process payments and checkout' },
+  '/service-advisor/order-history': { title: 'Repair Order History', subtitle: 'Browse all completed and fulfilled repair orders' },
+};
 
 export function ServiceAdvisorPage({ user ,setUser }) {
+  const location = useLocation();
+
+const currentSegment = location.pathname;
+
   const displayName = user?.name ?? `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
+
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+
+const meta =
+  location.pathname === '/service-advisor'
+    ? { title: `Great to see you, ${user?.first_name ?? 'there'}!`, subtitle: today }
+    : PAGE_META[currentSegment] ?? { title: '', subtitle: '' };
 
   return (
     <SidebarProvider>
-      <AppSidebar role="Service Advisor" userName={displayName} setUser = {setUser}  user = {user} />
+      <AppSidebar role="Service Advisor" userName={displayName} user = {user } setUser = {setUser} />
       <SidebarInset>
-        <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <SidebarTrigger>
-            <button className="p-1.5 rounded-lg hover:bg-secondary" aria-label="Toggle sidebar">
-              <Menu className="w-4 h-4" />
-            </button>
-          </SidebarTrigger>
-          <p className="text-sm font-medium">Service advisor dashboard</p>
-        </header>
-        <main className="p-6"><Outlet /></main>
+       <Header title={meta.title} subtitle={meta.subtitle} />
+        <main className="p-6">
+        <Outlet />
+          {/* other tabs render here as they're built, keyed off activeHref */} 
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );
 }
+
+
+

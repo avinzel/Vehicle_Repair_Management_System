@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {Link} from "react-router";
+import {Link,  useLocation} from "react-router";
 import {
     Wrench,
     LayoutDashboard,
@@ -28,10 +28,7 @@ import {
     SidebarGroupContent,
     SidebarMenu,
     SidebarMenuItem,
-    SidebarMenuButton,
-    SidebarProvider,
-    SidebarInset,
-    SidebarTrigger,
+    SidebarMenuButton
 } from '@/components/ui/sidebar';
 import { useNavigate } from 'react-router';
 
@@ -49,11 +46,11 @@ const ROLE_LINKS = {
     ],
     'Service Advisor': [
         { name: 'Dashboard', icon: LayoutDashboard, href: '/service-advisor' },
-        { name: 'New Vehicle Intake', icon: FilePlus, href: 'intake' },
-        { name: 'Active Repair Orders', icon: ClipboardList, href: 'orders', badgeKey: 'activeOrders' },//dynamic number of order in the badge
-        { name: 'Customer Records', icon: Users, href: 'customers' },
-        { name: 'Billing & Invoicing', icon: CreditCard, href: 'billing' },
-        { name: 'Repair Order History', icon: History, href: 'order-history' },
+        { name: 'New Vehicle Intake', icon: FilePlus, href: '/service-advisor/intake' },
+        { name: 'Active Repair Orders', icon: ClipboardList, href: '/service-advisor/orders', badgeKey: 'activeOrders' },//dynamic number of order in the badge
+        { name: 'Customer Records', icon: Users, href: '/service-advisor/customers' },
+        { name: 'Billing & Invoicing', icon: CreditCard, href: '/service-advisor/billing' },
+        { name: 'Repair Order History', icon: History, href: '/service-advisor/order-history' },
     ],
     Mechanic: [
         { name: 'Assigned Repair Orders', icon: ClipboardList, href: '#assigned', badgeKey: 'assignedOrders' },//dynamic number of order in the badge
@@ -70,9 +67,14 @@ export function AppSidebar({
     setUser,
     user
 }) {
+    const location = useLocation();
 
+    console.log(location.pathname); // e.g. "/service-advisor/intake"
     let activeHref = '';
 
+    if(location.pathname === "/service-advisor/intake"){
+        console.log("Intake page is active");
+    }
     switch (user["role_id"]) {
         case 1: activeHref = "/admin"
             break;
@@ -121,7 +123,7 @@ export function AppSidebar({
     return (
         <>
             <Sidebar className="border-r border-border bg-background">
-                <SidebarHeader className="p-4">
+                <SidebarHeader className="p-2 border-b border-border">
                     <div className="flex items-center gap-3 px-2 py-2">
                         <div className="bg-primary text-primary-foreground p-2 rounded-xl flex items-center justify-center shadow-sm">
                             <Wrench className="w-5 h-5" />
@@ -136,10 +138,10 @@ export function AppSidebar({
                 <SidebarContent className="px-4 py-2">
                     <SidebarGroup>
                         <SidebarGroupContent>
-                            <SidebarMenu className="space-y-1">
+                            <SidebarMenu className="space-y-2">
                                 {links.map((link) => {
                                     const Icon = link.icon;
-                                    const isActive = link.href === activeHref;
+                                    const isActive = link.href === location.pathname;
                                     const badgeValue = link.badgeKey ? badges[link.badgeKey] : null;
                                     return (
                                         <SidebarMenuItem key={link.name}>
