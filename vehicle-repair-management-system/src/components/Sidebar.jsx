@@ -109,7 +109,7 @@ export function AppSidebar({
     return (
         <>
             <Sidebar className="border-r border-border bg-background">
-                <SidebarHeader className="p-4">
+                <SidebarHeader className="p-4 border-b border-border">
                     <div className="flex items-center gap-3 px-2 py-2">
                         <div className="bg-primary text-primary-foreground p-2 rounded-xl flex items-center justify-center shadow-sm">
                             <Wrench className="w-5 h-5" />
@@ -124,7 +124,7 @@ export function AppSidebar({
                 <SidebarContent className="px-4 py-2">
                     <SidebarGroup>
                         <SidebarGroupContent>
-                            <SidebarMenu className="space-y-1">
+                            <SidebarMenu className="space-y-2">
                                 {links.map((link) => {
                                     const Icon = link.icon;
                                     const isActive = link.href === activeHref;
