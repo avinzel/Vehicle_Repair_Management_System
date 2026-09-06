@@ -102,7 +102,6 @@ export function DashboardTab({ metrics, orders = [], onNavigate }) {
                 </CardContent>
             </Card>
 
-            
            {/* Quick Actions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card
