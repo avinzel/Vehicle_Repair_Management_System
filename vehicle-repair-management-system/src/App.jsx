@@ -4,7 +4,12 @@ import { Routes, Route, Navigate , useNavigate} from "react-router"
 import { LoginPage } from "./pages/LoginPage/LoginPage";
 import { ServiceAdvisorPage } from './pages/ServiceAdvisorPage/ServiceAdvisorPage';
 import { NotFoundPage } from './pages/NotFoundPage/NotFoundPage';
+import { RegisterPage } from './pages/RegisterPage/RegisterPage';
+import { ManagerPage } from './pages/ManagerPage/ManagerPage';
+import {MechanicPage} from "./pages/MechanicPage/MechanicPage"
+import { CashierPage } from './pages/CashierPage/CashierPage';
 import {Loading} from "./components/Loading"
+import { AdminPage } from './pages/AdminPage/AdminPage';
 function App() {
   const [user, setUser] = useState([])
   const [loading, setLoading] = useState(true);
@@ -21,7 +26,6 @@ function App() {
     }
     setLoading(false);
   }
-
   async function logout() {
     const response = await fetch("http://localhost:8000/api.php?action=logout&", {
       credentials: "include"
@@ -51,8 +55,33 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<LoginPage authenticateUser={authenticateUser}/>} />
-        <Route path="/register" element={<h1>Register</h1>} />
+        <Route path="/register" element={<RegisterPage/>} />
+
+        <Route path="/" element={
+          <LoginPage authenticateUser={authenticateUser}/>
+        }/>
+        
+        <Route
+          path="/admin"
+          element={
+            user && Number(user.role_id) === 1 ? (
+              <AdminPage user={user} />
+            ) : (
+              <Navigate to="*" replace />
+            )
+          } 
+        />
+
+        <Route
+          path="/manager"
+          element={
+            user && Number(user.role_id) === 2 ? (
+              <ManagerPage user={user} />
+            ) : (
+              <Navigate to="*" replace />
+            )
+          } 
+        />
 
         <Route
           path="/service-advisor"
@@ -60,7 +89,29 @@ function App() {
             user && Number(user.role_id) === 3 ? (
               <ServiceAdvisorPage user={user} />
             ) : (
-              <Navigate to="/" replace />
+              <Navigate to="*" replace />
+            )
+          } 
+        />
+
+        <Route
+          path="/mechanic"
+          element={
+            user && Number(user.role_id) === 4 ? (
+              <MechanicPage user={user} />
+            ) : (
+              <Navigate to="*" replace />
+            )
+          } 
+        />
+
+        <Route
+          path="/cashier"
+          element={
+            user && Number(user.role_id) === 5 ? (
+              <CashierPage user={user} />
+            ) : (
+              <Navigate to="*" replace />
             )
           } 
         />

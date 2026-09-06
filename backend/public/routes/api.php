@@ -52,7 +52,7 @@
         echo json_encode(["error" => "Unauthorized access. Please log in."]);
         exit();
     }
-    
+    //define role-based permissions for specific actions
     $rolePermissions = [
         "create-repair-order"=>[1,2,3]
     ];
@@ -60,7 +60,7 @@
     if (isset($rolePermissions[$action])) {
         $userRoleId = $auth->getRoleId(); // Retrieve role_id stored in $_SESSION
         if (!in_array($userRoleId, $rolePermissions[$action])) {
-            http_response_code(403); // 403 Forbidden
+            http_response_code(403); 
             echo json_encode(["error" => "Access denied. Insufficient permissions for this action."]);
             exit();
         }
@@ -93,8 +93,4 @@
             echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated and have permission to create a repair order." ]);
         }
     }
-
-
-
-
 ?>
