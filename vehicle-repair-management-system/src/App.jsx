@@ -8,8 +8,14 @@ import { RegisterPage } from './pages/RegisterPage/RegisterPage';
 import {MechanicPage} from "./pages/MechanicPage/MechanicPage"
 import {Loading} from "./components/Loading"
 import { AdminPage } from './pages/AdminPage/AdminPage';
+import { DashBoardTab } from './pages/ServiceAdvisorPage/DashBoardTab';
+import Intake from './pages/ServiceAdvisorPage/Intake';
+import { ActiveRepairOrder } from './pages/ServiceAdvisorPage/ActiveRepairOrder';
+import { CustomerRecords } from './pages/ServiceAdvisorPage/CustomerRecords';
+import { OrderHistory } from './pages/ServiceAdvisorPage/OrderHistory';
+import { Billing } from './pages/ServiceAdvisorPage/Billing';
 function App() {
-  const [user, setUser] = useState([])
+  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate(); 
   async function authenticateUser() {
@@ -47,7 +53,7 @@ function App() {
           path="/admin"
           element={
             user && Number(user.role_id) === 1 ? (
-              <AdminPage user={user} />
+              <AdminPage user={user} setUser={setUser}/>
             ) : (
               <Navigate to="/" replace />
             )
@@ -63,13 +69,20 @@ function App() {
               <Navigate to="/" replace />
             )
           } 
-        />
+        >
+          <Route index element={<DashBoardTab />} />
+          <Route path="intake" element={<Intake />} />
+          <Route path="orders" element={<ActiveRepairOrder />} />
+          <Route path = "customers" element={<CustomerRecords />} />
+          <Route path = "billing" element={<Billing />} />
+          <Route path = "order-history" element={<OrderHistory />} />
+        </Route>
 
         <Route
           path="/mechanic"
           element={
             user && Number(user.role_id) === 3? (
-              <MechanicPage user={user} />
+              <MechanicPage user={user} setUser={setUser}/>
             ) : (
               <Navigate to="/" replace />
             )

@@ -1,5 +1,6 @@
 import { Menu } from 'lucide-react';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
+import {Outlet} from "react-router"
 import { AppSidebar } from '@/components/Sidebar';
 
 export function ServiceAdvisorPage({ user ,setUser }) {
@@ -7,7 +8,7 @@ export function ServiceAdvisorPage({ user ,setUser }) {
 
   return (
     <SidebarProvider>
-      <AppSidebar role="Service Advisor" userName={displayName} setUser = {setUser} />
+      <AppSidebar role="Service Advisor" userName={displayName} setUser = {setUser}  user = {user} />
       <SidebarInset>
         <header className="flex items-center gap-3 border-b border-border px-4 py-3">
           <SidebarTrigger>
@@ -17,7 +18,7 @@ export function ServiceAdvisorPage({ user ,setUser }) {
           </SidebarTrigger>
           <p className="text-sm font-medium">Service advisor dashboard</p>
         </header>
-        <main className="p-6">{/* queue metrics, repair orders table, etc. go here */}</main>
+        <main className="p-6"><Outlet /></main>
       </SidebarInset>
     </SidebarProvider>
   );
