@@ -5,6 +5,7 @@ import { AppSidebar } from '@/components/Sidebar';
 export function AdminPage({ user }) {
   const displayName = user?.name ?? `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
 
+  // OLD VER, CHANGE TO A DYNAMIC HEADER
   return (
     <SidebarProvider>
       <AppSidebar role="Admin" userName={displayName} />

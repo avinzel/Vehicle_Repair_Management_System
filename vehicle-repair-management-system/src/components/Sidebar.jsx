@@ -136,7 +136,7 @@ export function AppSidebar({
                                                 isActive={isActive}
                                                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
                                                         ? '!bg-primary !text-primary-foreground shadow-sm hover:!bg-primary/90 hover:!text-primary-foreground'
-                                                        : 'text-foreground hover:bg-secondary hover:text-foreground'
+                                                        : 'text-tertiary hover:bg-secondary hover:text-foreground'
                                                     }`}
                                             >
                                                 <a
@@ -155,7 +155,7 @@ export function AppSidebar({
                                                     </div>
                                                     {badgeValue != null && (
                                                         <span
-                                                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-secondary text-foreground'
+                                                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-secondary text-tertiary'
                                                                 }`}
                                                         >
                                                             {badgeValue}
