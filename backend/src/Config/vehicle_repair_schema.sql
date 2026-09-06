@@ -1,12 +1,11 @@
 
-
 CREATE DATABASE IF NOT EXISTS VehicleRepair;
 USE VehicleRepair;
 
 -- =====================================================================
 -- ROLES
--- Defines system login roles (Admin, Manager, Service Advisor, Mechanic,
--- Cashier). Referenced by: users.role_id
+-- Admin, Service Advisor, Mechanic.
+-- seed data below).
 -- =====================================================================
 CREATE TABLE roles (
     role_id         INT PRIMARY KEY AUTO_INCREMENT,
@@ -16,10 +15,6 @@ CREATE TABLE roles (
 
 -- =====================================================================
 -- USERS
--- System accounts / login credentials for all staff.
--- References: roles (role_id)
--- Referenced by: mechanics.user_id, repair_orders.created_by,
---                invoices.issued_by, invoices.received_by
 -- =====================================================================
 CREATE TABLE users (
     user_id         INT PRIMARY KEY AUTO_INCREMENT,
@@ -38,9 +33,6 @@ CREATE TABLE users (
 
 -- =====================================================================
 -- MECHANIC_POSITIONS
--- Defines the job title a mechanic holds on a specific repair order
--- (Diagnostician, Lead Mechanic, Assistant, Electrical Specialist).
--- Referenced by: repair_order_mechanics.position_id
 -- =====================================================================
 CREATE TABLE mechanic_positions (
     position_id     INT PRIMARY KEY AUTO_INCREMENT,
@@ -50,9 +42,6 @@ CREATE TABLE mechanic_positions (
 
 -- =====================================================================
 -- MECHANICS
--- Employee profile for each mechanic.
--- References: users (user_id)
--- Referenced by: repair_order_mechanics.mechanic_id
 -- =====================================================================
 CREATE TABLE mechanics (
     mechanic_id     INT PRIMARY KEY AUTO_INCREMENT,
@@ -65,8 +54,6 @@ CREATE TABLE mechanics (
 
 -- =====================================================================
 -- CUSTOMERS
--- Customer contact and identity records.
--- Referenced by: vehicles.customer_id
 -- =====================================================================
 CREATE TABLE customers (
     customer_id     INT PRIMARY KEY AUTO_INCREMENT,
@@ -81,19 +68,16 @@ CREATE TABLE customers (
 
 -- =====================================================================
 -- VEHICLES
--- Vehicles owned by customers, brought in for service.
--- References: customers (customer_id)
--- Referenced by: repair_orders.vehicle_id
 -- =====================================================================
 CREATE TABLE vehicles (
     vehicle_id      INT PRIMARY KEY AUTO_INCREMENT,
     customer_id     INT NOT NULL,
     plate_number    VARCHAR(20) NOT NULL UNIQUE,
-	vehicle_type ENUM('CAR','MOTORCYCLE','TRICYCLE') NOT NULL DEFAULT 'CAR',
+    vehicle_type    ENUM('CAR','MOTORCYCLE','TRICYCLE') NOT NULL DEFAULT 'CAR',
     manufacturer    VARCHAR(50) NOT NULL,
     model           VARCHAR(50) NOT NULL,
     year_model      YEAR,
-    color           VARCHAR(30),		
+    color           VARCHAR(30),
     vin_number      VARCHAR(50) UNIQUE,
     current_mileage INT DEFAULT 0,
     date_registered DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -102,8 +86,6 @@ CREATE TABLE vehicles (
 
 -- =====================================================================
 -- PARTS_INVENTORY
--- Stock of parts available for use on repair orders.
--- Referenced by: repair_order_parts.part_id
 -- =====================================================================
 CREATE TABLE parts_inventory (
     part_id         INT PRIMARY KEY AUTO_INCREMENT,
@@ -121,14 +103,6 @@ CREATE TABLE parts_inventory (
 
 -- =====================================================================
 -- REPAIR_ORDERS
--- Central transaction table: one row per vehicle service job, tracked
--- through its full lifecycle via status.
--- References: vehicles (vehicle_id), users (created_by)
--- Referenced by: repair_order_services.order_id,
---                repair_order_mechanics.order_id,
---                repair_order_parts.order_id,
---                maintenance_history.order_id,
---                invoices.order_id
 -- =====================================================================
 CREATE TABLE repair_orders (
     order_id        INT PRIMARY KEY AUTO_INCREMENT,
@@ -150,7 +124,7 @@ CREATE TABLE repair_orders (
                     ) DEFAULT 'PENDING_DIAGNOSIS',
     diagnosis_notes TEXT NULL,
     diagnosis_completed_at DATETIME NULL,
-    priority ENUM('STANDARD','URGENT','RUSH') NOT NULL DEFAULT 'STANDARD',
+    priority        ENUM('STANDARD','URGENT','RUSH') NOT NULL DEFAULT 'STANDARD',
     created_by      INT NOT NULL,
     CONSTRAINT fk_order_vehicle  FOREIGN KEY (vehicle_id)  REFERENCES vehicles(vehicle_id),
     CONSTRAINT fk_order_user     FOREIGN KEY (created_by)  REFERENCES users(user_id)
@@ -158,8 +132,6 @@ CREATE TABLE repair_orders (
 
 -- =====================================================================
 -- REPAIR_ORDER_SERVICES
--- Labor / service line items billed on a repair order.
--- References: repair_orders (order_id)
 -- =====================================================================
 CREATE TABLE repair_order_services (
     order_service_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -172,10 +144,6 @@ CREATE TABLE repair_order_services (
 
 -- =====================================================================
 -- REPAIR_ORDER_MECHANICS
--- Junction table assigning mechanics to a repair order, each with a
--- position for that specific job.
--- References: repair_orders (order_id), mechanics (mechanic_id),
---             mechanic_positions (position_id)
 -- =====================================================================
 CREATE TABLE repair_order_mechanics (
     assignment_id   INT PRIMARY KEY AUTO_INCREMENT,
@@ -190,9 +158,6 @@ CREATE TABLE repair_order_mechanics (
 
 -- =====================================================================
 -- REPAIR_ORDER_PARTS
--- Parts consumed on a repair order, with unit_price captured at time
--- of use.
--- References: repair_orders (order_id), parts_inventory (part_id)
 -- =====================================================================
 CREATE TABLE repair_order_parts (
     order_part_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -207,9 +172,6 @@ CREATE TABLE repair_order_parts (
 
 -- =====================================================================
 -- MAINTENANCE_HISTORY
--- Service history record generated per completed repair order, used
--- for tracking a vehicle's next-due maintenance.
--- References: repair_orders (order_id)
 -- =====================================================================
 CREATE TABLE maintenance_history (
     history_id      INT PRIMARY KEY AUTO_INCREMENT,
@@ -223,9 +185,8 @@ CREATE TABLE maintenance_history (
 
 -- =====================================================================
 -- INVOICES
--- Billing record for a repair order, with labor/parts totals snapshot
--- at invoice time and payment tracking.
--- References: repair_orders (order_id), users (issued_by, received_by)
+-- received_by now points to a Service Advisor (Cashier role removed) —
+-- Service Advisor handles both issuing and receiving payment.
 -- =====================================================================
 CREATE TABLE invoices (
     invoice_id      INT PRIMARY KEY AUTO_INCREMENT,
@@ -248,46 +209,38 @@ CREATE TABLE invoices (
 );
 
 -- =====================================================================
--- SEED DATA (reference/lookup rows — insert once during setup)
+-- SEED DATA — ROLES (3 only)
 -- =====================================================================
-INSERT INTO roles (role_name, description) VALUES
-('Admin', 'Full system access, user & inventory management'),
-('Manager', 'Read access across all orders, mechanics, and reports'),
-('Service Advisor', 'Handles intake, order assignment, customer records'),
-('Mechanic', 'Handles diagnosis, repairs, and parts logging on assigned jobs'),
-('Cashier', 'Handles billing and payment processing');
+INSERT INTO roles (role_id, role_name, description) VALUES
+(1, 'Admin', 'Full system access, user & inventory management'),
+(2, 'Service Advisor', 'Handles intake, order assignment, customer records, and billing/payment'),
+(3, 'Mechanic', 'Handles diagnosis, repairs, and parts logging on assigned jobs');
 
 INSERT INTO mechanic_positions (position_name, description) VALUES
 ('Diagnostician', 'Performs initial inspection and logs diagnostic notes'),
 ('Lead Mechanic', 'Leads the repair job, can mark job complete'),
-('Assistant', 'Supports the lead mechanic on the job'),
 ('Electrical Specialist', 'Handles electrical system repairs');
 
 -- =====================================================================
 -- USERS
--- role_id: 1=Admin, 2=Manager, 3=Service Advisor, 4=Mechanic, 5=Cashier
--- all PASSWORD are : 123
+-- lean_janelle (Manager) and kruu (Cashier) removed entirely.
+-- role_id: 1=Admin, 2=Service Advisor, 3=Mechanic
+-- all passwords: 123
 -- =====================================================================
 INSERT INTO users (user_id, username, password_hash, first_name, middle_name, last_name, contact_no, email, role_id, status, created_at) VALUES
 -- Service Advisor
-(1, 'vinzel',       '$2y$12$HAw./A6cusUN2DreFRvTKeWLTzoowIQADPRg1Iwt9qsTHNqm.wVfW', 'Vincent',    'Tubice',   'Mandap',   '09423456781', 'vinzel@gmail.com',     3, 'ACTIVE', '2026-09-06 15:52:16'),
+(1, 'vinzel', '$2y$12$HAw./A6cusUN2DreFRvTKeWLTzoowIQADPRg1Iwt9qsTHNqm.wVfW', 'Vincent', 'Tubice', 'Mandap', '09423456781', 'vinzel@gmail.com', 2, 'ACTIVE', '2026-09-06 15:52:16'),
 -- Admin
-(2, 'bananabeam',   '$2y$12$Tu4T3taD14qPLjdlVUe40.E3xb.vE66opjqKzjOkLTkPOGH/Rt7Ce', 'Noel',       'Enseymada','Mercadal', '09423456781', 'bananabeam@gmail.com', 1, 'ACTIVE', '2026-09-06 15:53:07'),
--- Manager 
-(3, 'lean_janelle', '$2y$12$hkPsfS4urNzX2kkf7kPkJ.KbqgN6IVh0Kw1l3XzbKnzKsGWYVs7ny', 'Leann Jae',  'Marie',    'Naenyeos', '09423156781', 'janelle@gmail.com',    2, 'ACTIVE', '2026-09-06 15:55:37'),
+(2, 'bananabeam', '$2y$12$Tu4T3taD14qPLjdlVUe40.E3xb.vE66opjqKzjOkLTkPOGH/Rt7Ce', 'Noel', 'Enseymada', 'Mercadal', '09423456781', 'bananabeam@gmail.com', 1, 'ACTIVE', '2026-09-06 15:53:07'),
 -- Mechanic
-(4, 'joleks',       '$2y$12$rQUt/5Asy2zEUIF13jcDI.NLTzeyOSnAc890RV/E030FIIHTVq8yS', 'John Aleks', 'Wasuo',    'Lumpay',   '09423156781', 'janelle@gmail.com',    4, 'ACTIVE', '2026-09-06 15:56:46'),
--- Cashier
-(5, 'kruu',         '$2y$12$9pr6.VdX/NE6A.0ml.rmlu4bok6xEeqAwerD/k8WmHBtWLWikByxy', 'Patrick Kru','Merona',   'Malana',   '09493156781', 'kruu@gmail.com',       5, 'ACTIVE', '2026-09-06 15:57:31');
+(3, 'joleks', '$2y$12$rQUt/5Asy2zEUIF13jcDI.NLTzeyOSnAc890RV/E030FIIHTVq8yS', 'John Aleks', 'Wasuo', 'Lumpay', '09423156781', 'janelle@gmail.com', 3, 'ACTIVE', '2026-09-06 15:56:46');
 
 -- =====================================================================
 -- MECHANICS
--- Only user_id 4 (joleks / John Aleks Lumpay) has role_id 4 (Mechanic),
--- so this is the only mechanic profile that can exist right now.
 -- =====================================================================
 INSERT INTO mechanics (mechanic_id, user_id, specialization, date_hired, status) VALUES
-(1, 4, 'General Repair', '2025-01-15', 'ACTIVE');
- 
+(1, 3, 'General Repair', '2025-01-15', 'ACTIVE');
+
 -- =====================================================================
 -- CUSTOMERS
 -- =====================================================================
@@ -297,11 +250,9 @@ INSERT INTO customers (customer_id, first_name, middle_name, last_name, contact_
 (3, 'Noah',  NULL, 'Williams', '0919-345-6789', 'noah.w@email.com',  'Brgy. Banay-banay, Cabuyao',      '2026-08-25 11:30:00'),
 (4, 'Emma',  NULL, 'Brown',    '0920-456-7890', 'emma.b@email.com',  'Km 21, National Hwy, Cabuyao',    '2026-08-24 13:45:00'),
 (5, 'James', NULL, 'Davis',    '0921-567-8901', 'james.d@email.com', 'Brgy. Mamatid, Cabuyao, Laguna',  '2026-08-23 08:20:00');
- 
+
 -- =====================================================================
 -- VEHICLES
--- vehicle_type now CAR/MOTORCYCLE/TRICYCLE, column is `manufacturer`
--- (not `make`)
 -- =====================================================================
 INSERT INTO vehicles (vehicle_id, customer_id, plate_number, vehicle_type, manufacturer, model, year_model, color, vin_number, current_mileage, date_registered) VALUES
 (1, 1, 'ABC-1234', 'CAR',        'Toyota',    'Vios',        2021, 'Silver', 'VIN-ABC1234XX', 32000, '2026-08-27 09:05:00'),
@@ -309,7 +260,7 @@ INSERT INTO vehicles (vehicle_id, customer_id, plate_number, vehicle_type, manuf
 (3, 3, 'DEF-9012', 'MOTORCYCLE', 'Yamaha',    'Mio i125',    2020, 'Blue',   'VIN-DEF9012XX', 12100, '2026-08-25 11:35:00'),
 (4, 4, 'GHI-3456', 'CAR',        'Toyota',    'Vios',        2019, 'White',  'VIN-GHI3456XX', 51200, '2026-08-24 13:50:00'),
 (5, 5, 'JKL-7890', 'MOTORCYCLE', 'Kawasaki',  'Barako 175',  2021, 'Black',  'VIN-JKL7890XX', 15300, '2026-08-23 08:25:00');
- 
+
 -- =====================================================================
 -- PARTS INVENTORY
 -- =====================================================================
@@ -322,11 +273,9 @@ INSERT INTO parts_inventory (part_id, part_code, part_name, category, unit, unit
 (6, 'PRT-006', 'Wiper Blade (pair)',    'Body',       'pair',  650.00,  22, 8,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
 (7, 'PRT-007', 'Coolant (1L)',          'Engine',     'liter', 280.00,  30, 10, 'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE'),
 (8, 'PRT-008', 'Timing Belt',           'Engine',     'pc',    1850.00, 6,  5,  'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE');
- 
+
 -- =====================================================================
 -- REPAIR ORDERS
--- created_by = 1 (vinzel, Service Advisor)
--- priority column now populated per order
 -- =====================================================================
 INSERT INTO repair_orders (order_id, vehicle_id, date_received, date_completed, mileage_at_service, complaint, status, diagnosis_notes, diagnosis_completed_at, priority, created_by) VALUES
 (1, 1, '2026-08-27 09:10:00', NULL, 32000, 'Engine makes knocking noise when accelerating.', 'PENDING_DIAGNOSIS', NULL, NULL, 'STANDARD', 1),
@@ -334,46 +283,39 @@ INSERT INTO repair_orders (order_id, vehicle_id, date_received, date_completed, 
 (3, 3, '2026-08-25 11:40:00', NULL, 12100, 'Customer reports difficulty starting in the morning.', 'PENDING_MECHANICS', 'Weak battery output and corroded terminals found. Recommend battery cleaning/replacement.', '2026-08-25 14:00:00', 'STANDARD', 1),
 (4, 4, '2026-08-24 13:55:00', NULL, 51200, 'Vehicle will not start. Battery voltage reads 9.2V (dead).', 'IN_PROGRESS', 'Battery voltage reads 9.2V (dead). Starter motor draws excessive current — likely worn brushes. Recommend battery replacement and starter motor overhaul.', '2026-08-24 16:10:00', 'RUSH', 1),
 (5, 5, '2026-08-23 08:30:00', '2026-08-23 17:00:00', 15300, 'Routine 10,000km service.', 'FULFILLED', 'Routine 10,000km service. Oil change, filter replacement, chain adjustment, and general inspection completed. All systems nominal.', '2026-08-23 09:00:00', 'STANDARD', 1);
- 
+
 -- =====================================================================
--- REPAIR ORDER SERVICES (labor line items)
+-- REPAIR ORDER SERVICES
 -- =====================================================================
 INSERT INTO repair_order_services (order_service_id, order_id, service_name, service_description, labor_cost) VALUES
 (1, 4, 'Starter Motor Overhaul', 'Disassemble, inspect, and rebuild starter motor',     1920.00),
 (2, 5, 'Routine Service (10,000km)', 'Oil change, filter replacement, chain adjustment', 1380.00);
- 
+
 -- =====================================================================
 -- REPAIR ORDER MECHANICS
--- Same mechanic (mechanic_id 1), different position depending on the
--- order — demonstrates why position_id lives on this junction table
--- and not on the mechanics table itself.
 -- =====================================================================
 INSERT INTO repair_order_mechanics (assignment_id, order_id, mechanic_id, position_id, date_assigned) VALUES
 (1, 3, 1, 1, '2026-08-25 13:50:00'), -- Diagnostician on RO-3
 (2, 4, 1, 1, '2026-08-24 15:00:00'), -- Diagnostician on RO-4
 (3, 4, 1, 2, '2026-08-24 16:15:00'), -- also Lead Mechanic on RO-4 once repair began
 (4, 5, 1, 2, '2026-08-23 09:05:00'); -- Lead Mechanic on RO-5
- 
+
 -- =====================================================================
--- REPAIR ORDER PARTS (deducted from parts_inventory)
--- NOTE: subtotal is no longer a generated column in this schema version
--- — calculate quantity_used * unit_price in your app/queries as needed.
+-- REPAIR ORDER PARTS
 -- =====================================================================
 INSERT INTO repair_order_parts (order_part_id, order_id, part_id, batch_number, quantity_used, unit_price) VALUES
 (1, 4, 5, 'BATCH-2026-02', 1, 3800.00), -- Car Battery on RO-4
 (2, 5, 1, 'BATCH-2026-01', 3, 380.00),  -- Engine Oil on RO-5
 (3, 5, 3, 'BATCH-2026-01', 1, 380.00);  -- Air Filter on RO-5
- 
+
 -- =====================================================================
--- MAINTENANCE HISTORY (only for completed orders)
+-- MAINTENANCE HISTORY
 -- =====================================================================
 INSERT INTO maintenance_history (history_id, order_id, service_date, service_summary, next_service_due_date, next_service_due_mileage) VALUES
 (1, 5, '2026-08-23 17:00:00', 'Routine 10,000km service completed — oil change, filter, chain adjustment.', '2026-11-23', 25300);
- 
+
 -- =====================================================================
 -- INVOICES
--- issued_by = 1 (Service Advisor), received_by = 5 (Cashier)
 -- =====================================================================
 INSERT INTO invoices (invoice_id, order_id, invoice_date, labor_total, parts_total, discount, tax_amount, total_amount, payment_method, payment_reference, payment_date, status, issued_by, received_by) VALUES
-(1, 5, '2026-08-23 17:05:00', 1380.00, 920.00, 0.00, 0.00, 2300.00, 'CASH', NULL, '2026-08-23 17:10:00', 'PAID', 1, 5);
- 
+(1, 5, '2026-08-23 17:05:00', 1380.00, 920.00, 0.00, 0.00, 2300.00, 'CASH', NULL, '2026-08-23 17:10:00', 'PAID', 1, 1);
