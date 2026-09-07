@@ -23,7 +23,11 @@
 
             // Call the model to get the user by username
             $user = $this->userModel->getUserByUserName($username);
-
+            if ($user["status"] == "INACTIVE") {
+                http_response_code(403);
+                echo json_encode(["error" => "This user is already Inactive"]);
+                return; 
+            }
             if ($user && password_verify($password, $user['password_hash'])) {
                 // Password is correct, set session variables and cookies
                 session_regenerate_id(true);

@@ -1,37 +1,46 @@
-import { Search, ClipboardList, Wrench, FileText, Plus, PackageX } from 'lucide-react';
+import { Search, ClipboardList, Wrench, FileText, Plus, PackageX, CheckCircle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/StatusBadge';
+import { useOutletContext } from 'react-router';
+import console from 'node:console';
 
 // Advisor-specific: what action shows up next to each status. Badge colors
 // themselves live in StatusBadge.jsx and are shared across every role.
 const ORDER_ACTIONS = {
-    'Pending Diagnosis': { label: 'Assign Diagnostician', icon: Search, variant: 'default', className: 'bg-amber-500 hover:bg-amber-600 text-white' },
-    'Awaiting Diagnosis': { label: 'View Order', icon: null, variant: 'outline', className: 'border-amber-300 text-amber-800 hover:bg-amber-50' },
-    'Pending Mechanics': { label: 'Assign Mechanics', icon: Wrench, variant: 'outline', className: 'border-blue-300 text-blue-800 hover:bg-blue-50' },
-    'In Progress': { label: 'View Order', icon: null, variant: 'outline', className: 'border-blue-300 text-blue-800 hover:bg-blue-50' },
-    // Advisor's nav has no Parts Inventory access (Admin-only), so this is
-    // view-only here — resolved once Admin restocks the part elsewhere.
-    'Pending Parts': { label: 'View Order', icon: PackageX, variant: 'outline', className: 'border-red-300 text-red-800 hover:bg-red-50' },
-    'Awaiting Payment': { label: 'Collect Payment', icon: null, variant: 'default', className: 'bg-orange-600 hover:bg-orange-700 text-white' },
-    'Ready for Release': { label: 'Release Vehicle', icon: null, variant: 'outline', className: 'border-green-300 text-green-800 hover:bg-green-50' },
+    'PENDING_DIAGNOSIS': { label: 'Assign Diagnostician', icon: Search, variant: 'default', className: 'bg-amber-500 hover:bg-amber-600 text-white' },
+    'AWAITING_DIAGNOSIS': { label: 'View Order', icon: null, variant: 'outline', className: 'border-amber-300 text-amber-800 hover:bg-amber-50' },
+    'PENDING_MECHANICS': { label: 'Assign Mechanics', icon: Wrench, variant: 'outline', className: 'border-blue-300 text-blue-800 hover:bg-blue-50' },
+    'IN_PROGRESS': { label: 'View Order', icon: null, variant: 'outline', className: 'border-blue-300 text-blue-800 hover:bg-blue-50' },
+    'PENDING_PARTS': { label: 'View Order', icon: PackageX, variant: 'outline', className: 'border-red-300 text-red-800 hover:bg-red-50' },
+    'AWAITING_PAYMENT': { label: 'Collect Payment', icon: null, variant: 'default', className: 'bg-orange-600 hover:bg-orange-700 text-white' },
+    'READY_FOR_RELEASE': { label: 'Release Vehicle', icon: null, variant: 'outline', className: 'border-green-300 text-green-800 hover:bg-green-50' },
+    'FULFILLED': { label: 'View Details', icon: CheckCircle, variant: 'ghost', className: 'text-gray-500 hover:bg-gray-100' },
 };
 
-const METRICS = [
-    { key: 'needsDiagnostician', label: 'Needs Diagnostician', icon: Search, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { key: 'awaitingDiagnosis', label: 'Awaiting Diagnosis', icon: ClipboardList, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { key: 'needsMechanics', label: 'Needs Mechanics', icon: Wrench, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { key: 'pendingParts', label: 'Pending Parts', icon: PackageX, color: 'text-red-600', bg: 'bg-red-50' },
-    { key: 'readyToInvoice', label: 'Ready to Invoice', icon: FileText, color: 'text-purple-600', bg: 'bg-purple-50' },
-];
 
 function formatCurrency(amount) {
     if (amount == null) return '—';
-    return `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+    return `${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 }
 
 export function DashBoardTab({ metrics, orders = [], onNavigate }) {
+    const context = useOutletContext() || {};
+    const tableData = context.tableData || [];
+    const rawData = context.card
+    const cardData = Array.isArray(rawData) ? rawData[0] : rawData;
+
+
+    const METRICS = [
+        { key: 'needs_diagnostician', label: 'Needs Diagnostician', icon: Search, color: 'text-amber-600', bg: 'bg-amber-50' },
+        { key: 'awaiting_diagnosis', label: 'Awaiting Diagnosis', icon: ClipboardList, color: 'text-amber-600', bg: 'bg-amber-50' },
+        { key: 'needs_mechanics', label: 'Needs Mechanics', icon: Wrench, color: 'text-blue-600', bg: 'bg-blue-50' },
+        { key: 'awaiting_parts', label: 'Pending Parts', icon: PackageX, color: 'text-red-600', bg: 'bg-red-50' },
+        { key: 'ready_to_invoice', label: 'Ready to Invoice', icon: FileText, color: 'text-purple-600', bg: 'bg-purple-50' },
+    ];
+    // Destructure context safely with fallback defaults
+
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -42,7 +51,7 @@ export function DashBoardTab({ metrics, orders = [], onNavigate }) {
                                 <Icon className={`w-4 h-4 ${color}`} />
                             </div>
                             <p className="text-sm text-muted-foreground">{label}</p>
-                            <p className={`text-2xl font-bold ${color}`}>{metrics?.[key] ?? 0}</p>
+                            <p className={`text-2xl font-bold ${color}`}>{cardData?.[key] ?? 0}</p>
                         </CardContent>
                     </Card>
                 ))}
@@ -71,38 +80,40 @@ export function DashBoardTab({ metrics, orders = [], onNavigate }) {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {orders.map((order) => {
+                            {tableData.filter((order) => order.status !== "FULFILLED").map((order) => {
                                 const action = ORDER_ACTIONS[order.status];
                                 const ActionIcon = action?.icon;
-                                return (
-                                    <TableRow key={order.orderId}>
-                                        <TableCell className="font-medium">{order.orderId}</TableCell>
-                                        <TableCell>{order.customer}</TableCell>
-                                        <TableCell className="text-muted-foreground">{order.vehicle}</TableCell>
-                                        <TableCell>
-                                            <StatusBadge status={order.status} />
-                                        </TableCell>
-                                        <TableCell>{formatCurrency(order.amount)}</TableCell>
-                                        <TableCell className="text-right">
-                                            <Button
-                                                size="sm"
-                                                variant={action?.variant ?? 'outline'}
-                                                className={action?.className}
-                                                onClick={() => onNavigate?.(`#orders/${order.orderId}`)}
-                                            >
-                                                {ActionIcon && <ActionIcon className="w-3.5 h-3.5" />}
-                                                {action?.label ?? 'View Order'}
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                );
+                       
+                                    return (
+                                        <TableRow key={order.order_id}>
+                                            <TableCell className="font-medium">{order.order_id}</TableCell>
+                                            <TableCell>{order.customer}</TableCell>
+                                            <TableCell className="text-muted-foreground">{order.vehicle}</TableCell>
+                                            <TableCell>
+                                                <StatusBadge status={order.status} />
+                                            </TableCell>
+                                            <TableCell>{formatCurrency(order.amount)}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    size="sm"
+                                                    variant={action?.variant ?? 'outline'}
+                                                    className={action?.className}
+                                                    onClick={() => onNavigate?.(`#orders/${order.orderId}`)}
+                                                >
+                                                    {ActionIcon && <ActionIcon className="w-3.5 h-3.5" />}
+                                                    {action?.label ?? 'View Order'}
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                
                             })}
                         </TableBody>
                     </Table>
                 </CardContent>
             </Card>
 
-           {/* Quick Actions */}
+            {/* Quick Actions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card
                     className="h-full bg-primary text-primary-foreground border-0 cursor-pointer hover:bg-primary/90 transition-colors"

@@ -1,3 +1,4 @@
+DROP DATABASE IF EXISTS VehicleRepair;
 CREATE DATABASE IF NOT EXISTS VehicleRepair;
 USE VehicleRepair;
 
@@ -318,8 +319,9 @@ BEGIN
     FROM repair_orders;
 END //
 
-DROP PROCEDURE IF EXISTS sp_populate_dashboard_table
+DROP PROCEDURE sp_populate_dashboard_table;
 DELIMITER //
+
 CREATE PROCEDURE sp_populate_dashboard_table()
 BEGIN
     SELECT 
@@ -332,5 +334,27 @@ BEGIN
     JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
     JOIN customers c ON v.customer_id = c.customer_id
     LEFT JOIN invoices i ON ro.order_id = i.order_id
-    ORDER BY ro.order_id DESC;
+    ORDER BY ro.order_id ASC;
 END //
+
+DELIMITER ;
+
+DELIMITER //
+CREATE PROCEDURE get_all_mechanics()
+BEGIN
+	SELECT 
+		m.mechanic_id,
+		CONCAT(u.first_name, ' ', IFNULL(CONCAT(u.middle_name, ' '), ''), u.last_name) AS full_name,
+		u.username,
+		u.email,
+		u.contact_no,
+		r.role_name,
+		m.specialization,
+		m.date_hired,
+		m.status AS mechanic_status
+	FROM mechanics m
+	JOIN users u ON m.user_id = u.user_id
+	JOIN roles r ON u.role_id = r.role_id;
+END //
+
+DELIMITER ;

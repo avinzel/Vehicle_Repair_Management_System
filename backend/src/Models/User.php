@@ -2,7 +2,9 @@
     namespace App\Models;
 
     use App\Config\Database;
-    use \App\Resources\UserResource; 
+    use \App\Resources\UserResource;
+use Exception;
+
     class User{
         private static $conn;
         public function __construct(Database $db){
@@ -89,6 +91,82 @@
                 ];
             }
         }
+        public static function softDeleteUser($id) {
+            $query = "UPDATE users SET status = 'INACTIVE' WHERE user_id = ?";
+            
+            $stmt = self::$conn->prepare($query);
+            if (!$stmt) {
+                throw new Exception("Failed to prepare statement: " . self::$conn->error);
+            }
 
+            // Use "s" if user_id is a string/UUID, otherwise "i" for integer
+            $bindType = is_numeric($id) ? "i" : "s";
+            $stmt->bind_param($bindType, $id);
+            
+            $stmt->execute();
+            $affectedRows = $stmt->affected_rows;
+            $stmt->close();
+
+            return $affectedRows;
+
+        }
+        public static function updateUser(
+            int $user_id,
+            string $username,
+            string $first_name,
+            string $middle_name,
+            string $last_name,
+            string $contact_no,
+            string $email,
+            int $role_id,
+            string $status = 'ACTIVE'
+        ) {
+            $query = 'UPDATE users 
+                    SET username = ?, 
+                        first_name = ?, 
+                        middle_name = ?, 
+                        last_name = ?, 
+                        contact_no = ?, 
+                        email = ?, 
+                        role_id = ?, 
+                        status = ? 
+                    WHERE user_id = ?';
+
+            $stmt = self::$conn->prepare($query);
+            $stmt->bind_param(
+                "ssssssisi",
+                $username,
+                $first_name,
+                $middle_name,
+                $last_name,
+                $contact_no,
+                $email,
+                $role_id,
+                $status,
+                $user_id
+            );
+
+            try {
+                $stmt->execute();
+                return ["success" => true];
+            } catch (\mysqli_sql_exception $e) {
+                if ($e->getCode() === 1062) {
+                    return [
+                        "success" => false, 
+                        "error" => "duplicate"
+                    ];
+                }
+                return [
+                    "success" => false, 
+                    "error" => "Error updating user: " . $e->getMessage()
+                ];
+            } catch (\Exception $e) {
+                return [
+                    "success" => false, 
+                    "error" => "Error updating user: " . $e->getMessage()
+                ];
+            }
+        }
     }
+    
 ?>

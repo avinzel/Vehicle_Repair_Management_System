@@ -12,11 +12,11 @@
         }
 
         public function getServiceAdvisorTable(){
-        $query = "CALL sp_populate_dashboard_table()"; 
-        $stmt = self::$conn->prepare($query);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        return $result->fetch_all(MYSQLI_ASSOC);
+            $query = "CALL sp_populate_dashboard_table()"; 
+            $stmt = self::$conn->prepare($query);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            return $result->fetch_all(MYSQLI_ASSOC);
         }
     }
 ?>
