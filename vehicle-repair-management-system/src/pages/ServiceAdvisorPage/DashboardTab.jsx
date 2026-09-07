@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/StatusBadge';
+import { Link } from 'react-router';
 
 // Advisor-specific: what action shows up next to each status. Badge colors
 // themselves live in StatusBadge.jsx and are shared across every role.
@@ -31,7 +32,7 @@ function formatCurrency(amount) {
     return `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 }
 
-export function DashboardTab({ metrics, orders = [], onNavigate }) {
+export function DashBoardTab({ metrics, orders = [] }) {
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -54,9 +55,9 @@ export function DashboardTab({ metrics, orders = [], onNavigate }) {
                         <CardTitle className="font-bold pb-1">Repair Orders</CardTitle>
                         <CardDescription>Recent repair orders from your shop.</CardDescription>
                     </div>
-                    <Button variant="link" onClick={() => onNavigate?.('#orders')}>
-                        View all →
-                    </Button>
+                    <Link to="/service-advisor/orders">
+                        <Button variant="link">View all →</Button>
+                    </Link>
                 </CardHeader>
                 <CardContent>
                     <Table>
@@ -85,10 +86,10 @@ export function DashboardTab({ metrics, orders = [], onNavigate }) {
                                         <TableCell>{formatCurrency(order.amount)}</TableCell>
                                         <TableCell className="text-right">
                                             <Button
+                                                render={<Link to={`/service-advisor/orders/${order.orderId}`} />}
                                                 size="sm"
                                                 variant={action?.variant ?? 'outline'}
                                                 className={action?.className}
-                                                onClick={() => onNavigate?.(`#orders/${order.orderId}`)}
                                             >
                                                 {ActionIcon && <ActionIcon className="w-3.5 h-3.5" />}
                                                 {action?.label ?? 'View Order'}
@@ -102,46 +103,49 @@ export function DashboardTab({ metrics, orders = [], onNavigate }) {
                 </CardContent>
             </Card>
 
-           {/* Quick Actions */}
+            {/* Quick Actions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card
-                    className="h-full bg-primary text-primary-foreground border-0 cursor-pointer hover:bg-primary/90 transition-colors"
-                    onClick={() => onNavigate?.('#intake')}
-                >
-                    <CardContent className="h-full p-4 flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-primary-foreground/20 flex items-center justify-center shrink-0">
-                            <Plus className="w-4 h-4" />
-                        </div>
-                        <div>
-                            <p className="font-semibold">New Vehicle Intake</p>
-                            <p className="text-xs opacity-90">Register a customer &amp; create repair order</p>
-                        </div>
-                    </CardContent>
-                </Card>
+                <Link to="/service-advisor/intake" className="block h-full">
+                    <Card className="h-full bg-primary text-primary-foreground border-0 cursor-pointer hover:bg-primary/90 transition-colors">
+                        <CardContent className="h-full p-4 flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-primary-foreground/20 flex items-center justify-center shrink-0">
+                                <Plus className="w-4 h-4" />
+                            </div>
+                            <div>
+                                <p className="font-semibold">New Vehicle Intake</p>
+                                <p className="text-xs opacity-90">Register a customer &amp; create repair order</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </Link>
 
-                <Card className="h-full cursor-pointer hover:bg-secondary transition-colors" onClick={() => onNavigate?.('#orders')}>
-                    <CardContent className="h-full p-4 flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <ClipboardList className="w-4 h-4 text-amber-600" />
-                        </div>
-                        <div>
-                            <p className="font-semibold text-foreground">Active Orders</p>
-                            <p className="text-xs text-muted-foreground">Manage ongoing repair jobs</p>
-                        </div>
-                    </CardContent>
-                </Card>
+                <Link to="/service-advisor/orders" className="block h-full">
+                    <Card className="h-full cursor-pointer hover:bg-secondary transition-colors">
+                        <CardContent className="h-full p-4 flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                <ClipboardList className="w-4 h-4 text-amber-600" />
+                            </div>
+                            <div>
+                                <p className="font-semibold text-foreground">Active Orders</p>
+                                <p className="text-xs text-muted-foreground">Manage ongoing repair jobs</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </Link>
 
-                <Card className="h-full cursor-pointer hover:bg-secondary transition-colors" onClick={() => onNavigate?.('#billing')}>
-                    <CardContent className="h-full p-4 flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <FileText className="w-4 h-4 text-orange-600" />
-                        </div>
-                        <div>
-                            <p className="font-semibold text-foreground">Billing &amp; Invoicing</p>
-                            <p className="text-xs text-muted-foreground">Process payments &amp; checkout</p>
-                        </div>
-                    </CardContent>
-                </Card>
+                <Link to="/service-advisor/billing" className="block h-full">
+                    <Card className="h-full cursor-pointer hover:bg-secondary transition-colors">
+                        <CardContent className="h-full p-4 flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                <FileText className="w-4 h-4 text-orange-600" />
+                            </div>
+                            <div>
+                                <p className="font-semibold text-foreground">Billing &amp; Invoicing</p>
+                                <p className="text-xs text-muted-foreground">Process payments &amp; checkout</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </Link>
             </div>
         </div>
     );

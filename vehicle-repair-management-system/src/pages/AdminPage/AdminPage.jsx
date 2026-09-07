@@ -2,13 +2,13 @@ import { Menu } from 'lucide-react';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/Sidebar';
 
-export function AdminPage({ user }) {
+export function AdminPage({ user, setUser }) {
   const displayName = user?.name ?? `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
 
   // OLD VER, CHANGE TO A DYNAMIC HEADER
   return (
     <SidebarProvider>
-      <AppSidebar role="Admin" userName={displayName} />
+      <AppSidebar role="Admin" userName={displayName}  setUser={setUser}  user = {user}/>
       <SidebarInset>
         <header className="flex items-center gap-3 border-b border-border px-4 py-3">
           <SidebarTrigger>

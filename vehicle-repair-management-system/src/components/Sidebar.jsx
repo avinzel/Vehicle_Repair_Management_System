@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import {Link,  useLocation} from "react-router";
 import {
     Wrench,
     LayoutDashboard,
@@ -27,10 +28,7 @@ import {
     SidebarGroupContent,
     SidebarMenu,
     SidebarMenuItem,
-    SidebarMenuButton,
-    SidebarProvider,
-    SidebarInset,
-    SidebarTrigger,
+    SidebarMenuButton
 } from '@/components/ui/sidebar';
 import { useNavigate } from 'react-router';
 
@@ -47,12 +45,12 @@ const ROLE_LINKS = {
         { name: 'Reports', icon: BarChart3, href: '#reports' },
     ],
     'Service Advisor': [
-        { name: 'Dashboard', icon: LayoutDashboard, href: '#dashboard' },
-        { name: 'New Vehicle Intake', icon: FilePlus, href: '#intake' },
-        { name: 'Active Repair Orders', icon: ClipboardList, href: '#orders', badgeKey: 'activeOrders' },//dynamic number of order in the badge
-        { name: 'Customer Records', icon: Users, href: '#customers' },
-        { name: 'Billing & Invoicing', icon: CreditCard, href: '#billing' },
-        { name: 'Repair Order History', icon: History, href: '#order-history' },
+        { name: 'Dashboard', icon: LayoutDashboard, href: '/service-advisor' },
+        { name: 'New Vehicle Intake', icon: FilePlus, href: '/service-advisor/intake' },
+        { name: 'Active Repair Orders', icon: ClipboardList, href: '/service-advisor/orders', badgeKey: 'activeOrders' },//dynamic number of order in the badge
+        { name: 'Customer Records', icon: Users, href: '/service-advisor/customers' },
+        { name: 'Billing & Invoicing', icon: CreditCard, href: '/service-advisor/billing' },
+        { name: 'Repair Order History', icon: History, href: '/service-advisor/order-history' },
     ],
     Mechanic: [
         { name: 'Assigned Repair Orders', icon: ClipboardList, href: '#assigned', badgeKey: 'assignedOrders' },//dynamic number of order in the badge
@@ -65,10 +63,26 @@ const ROLE_LINKS = {
 export function AppSidebar({
     role = 'Service Advisor',
     userName = 'Juan Dela Cruz',//name should be dynamic 
-    activeHref = '#dashboard',
     badges = { activeOrders: 6, lowStock: 2, assignedOrders: 3 },
-    setUser
+    setUser,
+    user
 }) {
+    const location = useLocation();
+
+    console.log(location.pathname); // e.g. "/service-advisor/intake"
+    let activeHref = '';
+
+    if(location.pathname === "/service-advisor/intake"){
+        console.log("Intake page is active");
+    }
+    switch (user["role_id"]) {
+        case 1: activeHref = "/admin"
+            break;
+        case 2: activeHref = "/service-advisor"
+            break;
+        case 3: activeHref = "/mechanic"
+            break;
+    }
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [showMenuDropdown, setShowMenuDropdown] = useState(false);
     const menuRef = useRef(null);
@@ -92,19 +106,19 @@ export function AppSidebar({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-      async function logout() {
+    async function logout() {
         const response = await fetch("http://localhost:8000/api.php?action=logout", {
-          credentials: "include"
+            credentials: "include"
         });
         const data = await response.json();
-    
+
         if (!response.ok) {
-          alert(data.error);//taost notification
+            alert(data.error);//taost notification
         } else {
-          setUser(null)
-             navigate("/", { replace: true });
+            setUser(null)
+            navigate("/", { replace: true });
         }
-      }
+    }
 
     return (
         <>
@@ -127,7 +141,7 @@ export function AppSidebar({
                             <SidebarMenu className="space-y-2">
                                 {links.map((link) => {
                                     const Icon = link.icon;
-                                    const isActive = link.href === activeHref;
+                                    const isActive = link.href === location.pathname;
                                     const badgeValue = link.badgeKey ? badges[link.badgeKey] : null;
                                     return (
                                         <SidebarMenuItem key={link.name}>
@@ -135,18 +149,12 @@ export function AppSidebar({
                                                 asChild
                                                 isActive={isActive}
                                                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
-                                                        ? '!bg-primary !text-primary-foreground shadow-sm hover:!bg-primary/90 hover:!text-primary-foreground'
-                                                        : 'text-tertiary hover:bg-secondary hover:text-foreground'
+                                                    ? '!bg-primary !text-primary-foreground shadow-sm hover:!bg-primary/90 hover:!text-primary-foreground'
+                                                    : 'text-foreground hover:bg-secondary hover:text-foreground'
                                                     }`}
                                             >
-                                                <a
-                                                    href={link.href}
-                                                    onClick={(e) => {
-                                                        if (onNavigate) {
-                                                            e.preventDefault();
-                                                            onNavigate(link.href);
-                                                        }
-                                                    }}
+                                                <Link
+                                                    to={link.href}
                                                     className="flex items-center justify-between w-full"
                                                 >
                                                     <div className="flex items-center gap-3">
@@ -161,7 +169,7 @@ export function AppSidebar({
                                                             {badgeValue}
                                                         </span>
                                                     )}
-                                                </a>
+                                                </Link>
                                             </SidebarMenuButton>
                                         </SidebarMenuItem>
                                     );

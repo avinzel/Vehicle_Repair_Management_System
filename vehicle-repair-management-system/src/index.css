@@ -57,10 +57,10 @@
 
 :root {
     /* Mapped from Figma */
-    --background: #FCFCFC;
+    --background: #F5F5F4;
     --foreground: #111111; /* Figma Secondary */
     
-    --card: #FFFFFF; /* Figma Surface */
+    --card: #FCFCFC; /* Figma Surface */
     --card-foreground: #111111;
     --popover: #FFFFFF;
     --popover-foreground: #111111;
