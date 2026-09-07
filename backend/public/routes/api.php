@@ -32,6 +32,8 @@
     use App\Controllers\RoleController;
     use App\Models\Role;
     use App\Auth\Auth;
+    use App\Models\RepairOrder;
+    use App\Models\Reports;
 
     $db = new Database();
     
@@ -40,6 +42,7 @@
     $loginController = new LoginController($userModel);
     $roleController = new RoleController(new Role($db));
     $auth = new Auth();
+    $serviceAdvisorDashboard = new RepairOrder();
 
     $action = $_GET['action'] ?? null;
 
@@ -54,17 +57,34 @@
     }
     //define role-based permissions for specific actions
     $rolePermissions = [
-        "create-repair-order"=>[1,2,3]
+        "repair-orders"=>[
+            "GET" => [1,2,3],
+            "POST" => [1,2],
+            "DELETE" => [1,2],
+            "UPDATE" => [1,2,3]
+        ],
+        "reports"=>[
+            "GET" => [1,2],
+            "POST" => [1,2],
+            "DELETE" => [1,2],
+            "UPDATE" => [1,2,3]
+        ]
     ];
+
+    $method = $_SERVER["REQUEST_METHOD"]; 
 
     if (isset($rolePermissions[$action])) {
         $userRoleId = $auth->getRoleId(); // Retrieve role_id stored in $_SESSION
-        if (!in_array($userRoleId, $rolePermissions[$action])) {
-            http_response_code(403); 
-            echo json_encode(["error" => "Access denied. Insufficient permissions for this action."]);
-            exit();
+        if (isset( $rolePermissions[$action][$method])) {
+            if (!in_array($userRoleId, $rolePermissions[$action][$method])) {
+                http_response_code(403); 
+                echo json_encode(["error" => "Access denied. Insufficient permissions for this action."]);
+                exit();
+            }
         }
     }
+
+
     //routes
     switch ($action){
         //public routes
@@ -89,8 +109,25 @@
             echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated." ]);
         }
 
-        case "create-repair-order":{
-            echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated and have permission to create a repair order." ]);
+        case "repair-orders":{
+            if($_SERVER["REQUEST_METHOD"] === "GET"){
+                if ($auth->getRoleId() == 2 ) {
+                    $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
+                    http_response_code(200);
+                    echo json_encode(["data" => $dashboardData]);
+                    exit();
+                }
+            }
+        }
+        case "reports":{
+            if($_SERVER["REQUEST_METHOD"] === "GET"){
+                if ($auth->getRoleId() == 2 ) {
+                    $dashboardData = (new Reports())->getServiceAdvisorCards();
+                    http_response_code(200);
+                    echo json_encode(["data" => $dashboardData]);
+                    exit();
+                }
+            }
         }
     }
 ?>
