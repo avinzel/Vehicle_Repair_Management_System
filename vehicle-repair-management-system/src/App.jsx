@@ -8,7 +8,7 @@ import { RegisterPage } from './pages/RegisterPage/RegisterPage';
 import {MechanicPage} from "./pages/MechanicPage/MechanicPage"
 import {Loading} from "./components/Loading"
 import { AdminPage } from './pages/AdminPage/AdminPage';
-import { DashBoardTab } from './pages/ServiceAdvisorPage/DashBoardTab';
+import { DashBoardTab } from './pages/ServiceAdvisorPage/DashboardTab';
 import Intake from './pages/ServiceAdvisorPage/Intake';
 import { ActiveRepairOrder } from './pages/ServiceAdvisorPage/ActiveRepairOrder';
 import { CustomerRecords } from './pages/ServiceAdvisorPage/CustomerRecords';
