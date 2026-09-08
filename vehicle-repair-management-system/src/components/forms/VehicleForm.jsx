@@ -15,6 +15,7 @@ export const DEFAULT_VEHICLE_VALUES = {
   model: "",
   year: "",
   color: "",
+  vinNumber: "",
 };
 
 // Pure validation function so it's easy to unit test / reuse
@@ -49,7 +50,7 @@ function validateField(name, value) {
   }
 }
 
-const FIELD_NAMES = ["vehicleType", "plateNumber", "make", "model", "year", "color"];
+const FIELD_NAMES = ["vehicleType", "plateNumber", "make", "model", "year", "color", "vinNumber"];
 
 // `values` + `onFieldChange` come from the parent stepper so the data
 // survives switching between steps. This component only owns UI-only
@@ -189,6 +190,21 @@ export const VehicleForm = forwardRef(function VehicleForm(
           />
           {showError("color") && (
             <p className="text-sm text-destructive">{errors.color}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col col-span-2 gap-1.5">
+          <Label htmlFor="vinNumber">Vehicle Identification Number (optional)</Label>
+          <Input
+            id="vinNumber"
+            placeholder="e.g., 1HGCR2F8XHA000000"
+            value={values.vinNumber}
+            onChange={handleChange("vinNumber")}
+            aria-invalid={!!showError("vinNumber")}
+            maxlength="17" 
+          />
+          {showError("vinNumber") && (
+            <p className="text-sm text-destructive">{errors.vinNumber}</p>
           )}
         </div>
       </form>

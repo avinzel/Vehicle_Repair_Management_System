@@ -66,10 +66,10 @@ export function VehicleIntakeStepper() {
   };
 
   return (
-    <div className="w-full p-6">
+    <div className="w-full max-w-5xl mx-auto p-6">
       <Stepper value={current} onValueChange={setCurrent} className="w-full">
         {/* NAV: indicator + title sit side-by-side, connectors run through the middle */}
-        <StepperNav className="flex items-center w-full mb-6">
+        <StepperNav className="flex items-center w-full max-w-3xl mx-auto mb-6">
           {steps.map((step, i) => {
             const isLast = i === steps.length - 1;
             const isConnectorFilled = i + 1 < current;
@@ -81,22 +81,24 @@ export function VehicleIntakeStepper() {
               >
                 {/* Step block: row layout, no fixed width so text doesn't force wrapping */}
                 <StepperItem step={i + 1} className="flex items-center">
-                  <StepperTrigger className="flex items-center gap-3">
+                  <StepperTrigger className="flex items-center pointer-events-none gap-3" tabIndex={-1}>
                     <StepperIndicator
                       className="
-                        flex items-center justify-center shrink-0
+                        group flex items-center justify-center shrink-0
                         w-9 h-9 rounded-full border-2 border-border
                         bg-background text-foreground
                         data-[state=active]:bg-primary data-[state=active]:border-primary data-[state=active]:text-primary-foreground
                         data-[state=completed]:bg-primary data-[state=completed]:border-primary data-[state=completed]:text-primary-foreground
                       "
                     >
-                      <span className="font-semibold text-sm">{i + 1}</span>
+                      <span className="font-semibold text-sm text-muted-foreground
+                        group-data-[state=active]:text-primary-foreground
+                        group-data-[state=completed]:text-primary-foreground">{i + 1}</span>
                     </StepperIndicator>
 
                     <StepperTitle
                       className="
-                        font-medium text-sm whitespace-nowrap
+                        font-semibold text-sm whitespace-nowrap
                         data-[state=inactive]:text-muted-foreground
                         data-[state=active]:text-primary
                         data-[state=completed]:text-primary

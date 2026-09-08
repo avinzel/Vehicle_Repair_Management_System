@@ -1,4 +1,6 @@
 <?php
+    ini_set('display_errors', 0); 
+    error_reporting(E_ALL);
     session_set_cookie_params([
         'lifetime' => 86400,
         'path'     => '/',
@@ -32,19 +34,26 @@
     use App\Controllers\RoleController;
     use App\Models\Role;
     use App\Auth\Auth;
-
+    use App\Models\RepairOrder;
+    use App\Models\Reports;
+    use App\Controllers\UserController;
+    use App\Models\Mechanic;
+    use App\Controllers\MechanicController;
     $db = new Database();
     
     $userModel = new User($db);
+    $userController = new UserController($userModel);
     $registerUserController = new RegisterUserController($userModel); 
     $loginController = new LoginController($userModel);
     $roleController = new RoleController(new Role($db));
     $auth = new Auth();
+    $serviceAdvisorDashboard = new RepairOrder();
+    $mechanicsController = new MechanicController(new Mechanic); 
 
     $action = $_GET['action'] ?? null;
 
     // Define actions that do not require authentication
-    $publicActions = ['register', 'login', 'check-auth'];
+    $publicActions = ['register', 'login', 'check-auth',"logout"];
 
     // 1. Guard Clause: Block unauthenticated access to protected routes
     if (!in_array($action, $publicActions) && !$auth->isAuthenticated()) {
@@ -54,17 +63,46 @@
     }
     //define role-based permissions for specific actions
     $rolePermissions = [
-        "create-repair-order"=>[1,2,3]
+        "repair-orders"=>[
+            "GET" => [1,2,3],
+            "POST" => [1,2],
+            "DELETE" => [1,2],
+            "UPDATE" => [1,2,3]
+        ],
+        "reports"=>[
+            "GET" => [1,2],
+            "POST" => [1,2],
+            "DELETE" => [1,2],
+            "UPDATE" => [1,2,3]
+        ],
+        "users"=>[
+            "GET" => [1],
+            "POST" => [1],
+            "DELETE" => [1],
+            "UPDATE" => [1,2,3]
+        ],
+        "mechanics"=>[
+            "GET" => [1],
+            "POST" => [1],
+            "DELETE" => [1],
+            "UPDATE" => [1,3]
+        ]
     ];
+
+    $method = $_SERVER["REQUEST_METHOD"]; 
 
     if (isset($rolePermissions[$action])) {
         $userRoleId = $auth->getRoleId(); // Retrieve role_id stored in $_SESSION
-        if (!in_array($userRoleId, $rolePermissions[$action])) {
-            http_response_code(403); 
-            echo json_encode(["error" => "Access denied. Insufficient permissions for this action."]);
-            exit();
+        if (isset( $rolePermissions[$action][$method])) {
+            if (!in_array($userRoleId, $rolePermissions[$action][$method])) {
+                http_response_code(403); 
+                echo json_encode(["error" => "Access denied. Insufficient permissions for this action."]);
+                exit();
+            }
         }
     }
+
+
     //routes
     switch ($action){
         //public routes
@@ -80,17 +118,59 @@
             $auth->checkAuthentication();
             break;
         }
-        //protected routes
         case "logout":{
             $loginController->logoutUser();
             break;
         }
+        //protected routes
         case "test-auth":{
             echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated." ]);
         }
 
-        case "create-repair-order":{
-            echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated and have permission to create a repair order." ]);
+        case "repair-orders":{
+            if($_SERVER["REQUEST_METHOD"] === "GET"){
+                if ($auth->getRoleId() == 2 ) {
+                    $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
+                    http_response_code(200);
+                    echo json_encode(["data" => $dashboardData]);
+                    exit();
+                }
+            }
+        }
+        case "users": {
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+               echo json_encode(["users" => User::getAllUsers()]);
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               $userController->updateUser();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+               $userController->deleteUser();
+            }
+        }
+        case "reports":{
+            if($_SERVER["REQUEST_METHOD"] === "GET"){
+                if ($auth->getRoleId() == 2 ) {
+                    $dashboardData = (new Reports())->getServiceAdvisorCards();
+                    http_response_code(200);
+                    echo json_encode(["data" => $dashboardData]);
+                    exit();
+                }
+            }
+        }
+        case "mechanics":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+               echo json_encode(["mechanics" => Mechanic::getAllMechanics()]);
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               $mechanicsController->updateMechanics();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+               $mechanicsController->createMechanic();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+               $mechanicsController->deleteMechanic();
+            }
         }
     }
 ?>
