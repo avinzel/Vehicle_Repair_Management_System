@@ -32,7 +32,7 @@ export function ServiceAdvisorPage({ user, setUser }) {
     }
   }
 
-    async function getTableData() {
+  async function getTableData() {
     try {
       const response = await fetch('http://localhost:8000/api.php?action=repair-orders', {
         credentials: 'include'
@@ -73,7 +73,7 @@ export function ServiceAdvisorPage({ user, setUser }) {
       <SidebarInset>
         <Header title={meta.title} subtitle={meta.subtitle} />
         <main className="p-6">
-          <Outlet context={{ user, setUser, tableData,setTableData,card, setCard }} />
+          <Outlet context={{ user, setUser, tableData, setTableData, card, setCard }} />
           {/* other tabs render here as they're built, keyed off activeHref */}
         </main>
       </SidebarInset>

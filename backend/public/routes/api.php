@@ -10,6 +10,7 @@
     ]);
     session_start();
 
+   
     // CORS Headers
     header("Access-Control-Allow-Origin: http://localhost:5173");
     header("Access-Control-Allow-Credentials: true");
@@ -39,6 +40,7 @@
     use App\Controllers\UserController;
     use App\Models\Mechanic;
     use App\Controllers\MechanicController;
+    use App\Controllers\RepairOrderController;
     $db = new Database();
     
     $userModel = new User($db);
@@ -46,6 +48,7 @@
     $registerUserController = new RegisterUserController($userModel); 
     $loginController = new LoginController($userModel);
     $roleController = new RoleController(new Role($db));
+    $repairOrderController = new RepairOrderController();
     $auth = new Auth();
     $serviceAdvisorDashboard = new RepairOrder();
     $mechanicsController = new MechanicController(new Mechanic); 
@@ -126,7 +129,7 @@
         case "test-auth":{
             echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated." ]);
         }
-
+            break;
         case "repair-orders":{
             if($_SERVER["REQUEST_METHOD"] === "GET"){
                 if ($auth->getRoleId() == 2 ) {
@@ -136,7 +139,11 @@
                     exit();
                 }
             }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+                $repairOrderController->createVehicleIntake();
+            }
         }
+        break;
         case "users": {
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
                echo json_encode(["users" => User::getAllUsers()]);
@@ -148,6 +155,7 @@
                $userController->deleteUser();
             }
         }
+        break;
         case "reports":{
             if($_SERVER["REQUEST_METHOD"] === "GET"){
                 if ($auth->getRoleId() == 2 ) {
@@ -158,6 +166,7 @@
                 }
             }
         }
+        break;
         case "mechanics":{
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
                echo json_encode(["mechanics" => Mechanic::getAllMechanics()]);
@@ -172,5 +181,6 @@
                $mechanicsController->deleteMechanic();
             }
         }
+        break;
     }
 ?>

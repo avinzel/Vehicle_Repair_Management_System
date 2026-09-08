@@ -2,9 +2,13 @@ import { useNavigate } from "react-router";
 import { getFormKeys } from "../../utils/getFormKeys";
 export function LoginForm({ authenticateUser }) {
     const navigate = useNavigate();
+
+
     async function login(e) {
         e.preventDefault();
         const user = getFormKeys(e);
+
+
         const response = await fetch("http://localhost:8000/api.php?action=login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -14,7 +18,10 @@ export function LoginForm({ authenticateUser }) {
             }),
             credentials: "include"
         });
+        
         const data = await response.json();
+
+
 
         if (!response.ok) {
             alert(data.error);//toast notification and make the txt field on some
