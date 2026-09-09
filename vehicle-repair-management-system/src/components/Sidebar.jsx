@@ -163,7 +163,7 @@ export function AppSidebar({
                                                     </div>
                                                     {badgeValue != null && (
                                                         <span
-                                                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-secondary text-foreground'
+                                                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-secondary text-tertiary'
                                                                 }`}
                                                         >
                                                             {badgeValue}

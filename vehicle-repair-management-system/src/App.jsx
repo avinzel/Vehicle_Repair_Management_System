@@ -8,7 +8,7 @@ import { RegisterPage } from './pages/RegisterPage/RegisterPage';
 import {MechanicPage} from "./pages/MechanicPage/MechanicPage"
 import {Loading} from "./components/Loading"
 import { AdminPage } from './pages/AdminPage/AdminPage';
-import { DashBoardTab } from './pages/ServiceAdvisorPage/DashboardTab';
+import { DashBoardTab } from './pages/ServiceAdvisorPage/DashBoardTab';
 import Intake from './pages/ServiceAdvisorPage/Intake';
 import { ActiveRepairOrder } from './pages/ServiceAdvisorPage/ActiveRepairOrder';
 import { CustomerRecords } from './pages/ServiceAdvisorPage/CustomerRecords';
@@ -73,6 +73,10 @@ function App() {
           <Route index element={<DashBoardTab />} />
           <Route path="intake" element={<Intake />} />
           <Route path="orders" element={<ActiveRepairOrder />} />
+
+          {/* Add this dynamic route for specific orders */}
+          <Route path="orders/:orderId" element={<ActiveRepairOrder />} />
+
           <Route path = "customers" element={<CustomerRecords />} />
           <Route path = "billing" element={<Billing />} />
           <Route path = "order-history" element={<OrderHistory />} />

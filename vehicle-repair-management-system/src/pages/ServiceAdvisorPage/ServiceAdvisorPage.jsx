@@ -16,42 +16,8 @@ const PAGE_META = {
   '/service-advisor/order-history': { title: 'Repair Order History', subtitle: 'Browse all completed and fulfilled repair orders' },
 };
 
-export function ServiceAdvisorPage({ user, setUser }) {
-
-  const [tableData, setTableData] = useState([]);
-  const [card, setCard] = useState([])
-  async function getCardData() {
-    try {
-      const response = await fetch('http://localhost:8000/api.php?action=reports', {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      setCard(data.data || []);
-    } catch (err) {
-      console.error("Failed to fetch dashboard data", err);
-    }
-  }
-
-  async function getTableData() {
-    try {
-      const response = await fetch('http://localhost:8000/api.php?action=repair-orders', {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      setTableData(data.data || []);
-    } catch (err) {
-      console.error("Failed to fetch dashboard data", err);
-    }
-  }
-
-  useEffect(() => {
-    getCardData();
-    getTableData();
-  }, []);
-  const location = useLocation();
-
-  const currentSegment = location.pathname;
-
+export function ServiceAdvisorPage({ user }) {
+  const [activeHref, setActiveHref] = useState('#dashboard');
   const displayName = user?.name ?? `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
 
   const today = new Date().toLocaleDateString('en-US', {
@@ -71,15 +37,14 @@ export function ServiceAdvisorPage({ user, setUser }) {
     <SidebarProvider>
       <AppSidebar role="Service Advisor" userName={displayName} user={user} setUser={setUser} />
       <SidebarInset>
-        <Header title={meta.title} subtitle={meta.subtitle} />
+       <Header title={meta.title} subtitle={meta.subtitle} />
         <main className="p-6">
-          <Outlet context={{ user, setUser, tableData, setTableData, card, setCard }} />
+          {activeHref === '#dashboard' && (
+            <DashboardTab user={user} metrics={{}} orders={[]} onNavigate={setActiveHref} />
+          )}
           {/* other tabs render here as they're built, keyed off activeHref */}
         </main>
       </SidebarInset>
     </SidebarProvider>
   );
 }
-
-
-
