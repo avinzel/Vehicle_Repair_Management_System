@@ -62,7 +62,27 @@ export function VehicleIntakeStepper() {
   const handleSubmit = async () => {
     const valid = await orderRef.current?.validate();
     if (!valid) return;
-    console.log("Create Repair Order", formData);
+    // console.log("Create Repair Order", formData);
+
+    const response = await fetch ("http://localhost:8000/api.php?action=repair-orders",{
+      method : "POST",
+      headers:{"Content-Type" : "application/json"},
+      body: JSON.stringify(formData),
+      credentials: "include"
+    })
+
+    let data = await response.json();
+    if (!response.ok) {
+      alert(data["error"]);
+    }else{
+       alert(data["message"]);
+       setFormData({
+          customer: DEFAULT_CUSTOMER_VALUES,
+          vehicle: DEFAULT_VEHICLE_VALUES,
+          order: DEFAULT_REPAIR_ORDER_VALUES,
+       })
+       setCurrent(1);
+    }
   };
 
   return (

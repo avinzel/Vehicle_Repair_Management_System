@@ -63,10 +63,11 @@ const ROLE_LINKS = {
 export function AppSidebar({
     role = 'Service Advisor',
     userName = 'Juan Dela Cruz',//name should be dynamic 
-    badges = { activeOrders: 6, lowStock: 2, assignedOrders: 3 },
+    badges = { activeOrders: 0, lowStock: 0, assignedOrders: 0 },
     setUser,
-    user
+    user,
 }) {
+
     const location = useLocation();
 
     console.log(location.pathname); // e.g. "/service-advisor/intake"

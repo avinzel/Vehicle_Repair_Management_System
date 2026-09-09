@@ -358,3 +358,105 @@ BEGIN
 END //
 
 DELIMITER ;
+
+
+DELIMITER //
+
+CREATE PROCEDURE sp_create_vehicle_intake(
+    -- Customer Inputs (Step 1)
+    IN p_first_name VARCHAR(75),
+    IN p_middle_name VARCHAR(75),
+    IN p_last_name VARCHAR(75),
+    IN p_contact_no VARCHAR(20),
+    IN p_email VARCHAR(100),
+    IN p_address VARCHAR(255),
+    
+    -- Vehicle Inputs (Step 2)
+    IN p_plate_number VARCHAR(20),
+    IN p_vehicle_type ENUM('CAR','MOTORCYCLE','TRICYCLE'),
+    IN p_manufacturer VARCHAR(50),
+    IN p_model VARCHAR(50),
+    IN p_year_model YEAR,
+    IN p_color VARCHAR(30),
+    IN p_vin_number VARCHAR(50),
+    IN p_current_mileage INT,
+    
+    -- Repair Order Inputs (Step 3)
+    IN p_complaint VARCHAR(500),
+    IN p_priority ENUM('STANDARD','URGENT','RUSH'),
+    IN p_created_by INT,
+    
+    -- Output Parameters
+    OUT p_order_id INT,
+    OUT p_customer_id INT,
+    OUT p_vehicle_id INT
+)
+BEGIN
+    DECLARE existing_owner_id INT DEFAULT NULL;
+
+    -- Rollback automatically on any SQL error
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- 1. Check if vehicle already exists by plate number
+    SELECT vehicle_id, customer_id 
+    INTO p_vehicle_id, existing_owner_id 
+    FROM vehicles 
+    WHERE plate_number = p_plate_number 
+    LIMIT 1;
+
+    -- 2. Check if customer exists by contact_no or email
+    SELECT customer_id INTO p_customer_id 
+    FROM customers 
+    WHERE contact_no = p_contact_no 
+       OR (email IS NOT NULL AND email = p_email) 
+    LIMIT 1;
+
+    -- VALIDATION: Plate exists, but it belongs to a DIFFERENT customer
+    IF p_vehicle_id IS NOT NULL AND p_customer_id IS NOT NULL AND existing_owner_id != p_customer_id THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Vehicle plate number is already registered under a different customer.';
+    END IF;
+
+    -- 3. Insert customer if they don't exist yet
+    IF p_customer_id IS NULL THEN
+        -- If vehicle exists under someone else, don't create this new customer either
+        IF existing_owner_id IS NOT NULL THEN
+            SIGNAL SQLSTATE '45000' 
+            SET MESSAGE_TEXT = 'Vehicle plate number is already registered to another owner.';
+        END IF;
+
+        INSERT INTO customers (first_name, middle_name, last_name, contact_no, email, address)
+        VALUES (p_first_name, p_middle_name, p_last_name, p_contact_no, p_email, p_address);
+        
+        SET p_customer_id = LAST_INSERT_ID();
+    END IF;
+
+    -- 4. Insert vehicle if it doesn't exist
+    IF p_vehicle_id IS NULL THEN
+        INSERT INTO vehicles (customer_id, plate_number, vehicle_type, manufacturer, model, year_model, color, vin_number, current_mileage)
+        VALUES (p_customer_id, p_plate_number, p_vehicle_type, p_manufacturer, p_model, p_year_model, p_color, p_vin_number, p_current_mileage);
+        
+        SET p_vehicle_id = LAST_INSERT_ID();
+    ELSE
+        -- Update mileage for the existing vehicle
+        UPDATE vehicles 
+        SET current_mileage = p_current_mileage 
+        WHERE vehicle_id = p_vehicle_id;
+    END IF;
+
+    -- 5. Create Repair Order
+    INSERT INTO repair_orders (vehicle_id, mileage_at_service, complaint, status, priority, created_by)
+    VALUES (p_vehicle_id, p_current_mileage, p_complaint, 'PENDING_DIAGNOSIS', p_priority, p_created_by);
+
+    SET p_order_id = LAST_INSERT_ID();
+
+    COMMIT;
+END //
+
+DELIMITER ;
