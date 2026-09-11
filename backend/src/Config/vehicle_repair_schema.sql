@@ -450,13 +450,18 @@ END //
 
 DELIMITER ;
 
-
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS sp_get_active_repair_orders //
 
-CREATE PROCEDURE sp_get_active_repair_orders(IN p_status VARCHAR(100))
+CREATE PROCEDURE sp_get_active_repair_orders(
+    IN p_status VARCHAR(100),
+    IN p_search VARCHAR(255)
+)
 BEGIN
+    -- Prepare wildcard pattern for search
+    SET p_search = IF(p_search IS NULL OR TRIM(p_search) = '', NULL, CONCAT('%', TRIM(p_search), '%'));
+
     SELECT 
         CONCAT('RO-', ro.order_id) AS order_id,
         ro.order_id AS raw_order_id,
@@ -466,7 +471,6 @@ BEGIN
         ro.priority,
         DATE_FORMAT(ro.date_received, '%b %d, %Y') AS formatted_date,
         
-        -- Aggregate assigned mechanics
         IFNULL(
             GROUP_CONCAT(
                 DISTINCT CONCAT(u.first_name, ' ', u.last_name) 
@@ -475,7 +479,6 @@ BEGIN
             'Unassigned'
         ) AS assigned_mechanics,
         
-        -- Return invoice total
         i.total_amount AS invoice_amount
 
     FROM repair_orders ro
@@ -488,7 +491,20 @@ BEGIN
     LEFT JOIN invoices i ON ro.order_id = i.order_id
     
     WHERE ro.status NOT IN ('FULFILLED', 'CANCELLED')
+      -- Status Filter
       AND (p_status = 'ALL' OR p_status IS NULL OR ro.status = p_status)
+      -- Search Bar Filter
+      AND (
+            p_search IS NULL
+            OR CONCAT('RO-', ro.order_id) LIKE p_search
+            OR ro.order_id LIKE p_search
+            OR c.first_name LIKE p_search
+            OR c.last_name LIKE p_search
+            OR CONCAT(c.first_name, ' ', c.last_name) LIKE p_search
+            OR v.plate_number LIKE p_search
+            OR v.manufacturer LIKE p_search
+            OR v.model LIKE p_search
+      )
       
     GROUP BY ro.order_id
     ORDER BY ro.date_received DESC;

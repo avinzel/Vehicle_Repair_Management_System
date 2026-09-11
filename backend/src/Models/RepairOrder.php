@@ -99,10 +99,12 @@
                 return ["error" => "Intake processing failed: " . $e->getMessage()];
             }
         }
-        public function getActiveRepairOrders($status = 'ALL') {
+       public function getActiveRepairOrders($status = 'ALL', $search = '') {
             try {
                 $filterStatus = !empty($status) ? $status : 'ALL';
-                $query = "CALL sp_get_active_repair_orders(?)"; 
+                $searchQuery  = !empty($search) ? trim($search) : null;
+
+                $query = "CALL sp_get_active_repair_orders(?, ?)"; 
                 
                 $stmt = self::$conn->prepare($query);
 
@@ -110,7 +112,7 @@
                     throw new Exception("Prepare failed: " . self::$conn->error);
                 }
 
-                $stmt->bind_param("s", $filterStatus);
+                $stmt->bind_param("ss", $filterStatus, $searchQuery);
                 $stmt->execute();
                 
                 $result = $stmt->get_result();

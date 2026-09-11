@@ -104,12 +104,13 @@ class RepairOrderController {
             }
     }
 
-    // GET: Fetch active repair orders list filtered by tab status
     public function getActiveRepairOrders() {
+
         $status = $_GET['status'] ?? 'ALL';
+        $search = $_GET['search'] ?? '';
 
         try {
-            $response = $this->repairOrderModel->getActiveRepairOrders($status);
+            $response = $this->repairOrderModel->getActiveRepairOrders($status, $search);
 
             if (isset($response['success']) && $response['success']) {
                 http_response_code(200);
@@ -128,7 +129,6 @@ class RepairOrderController {
             echo json_encode(["error" => "Operation failed: " . $e->getMessage()]);
         }
     }
-
     // Helper method to parse input stream safely
     private function getInputData() {
         $input = json_decode(file_get_contents('php://input'), true);
