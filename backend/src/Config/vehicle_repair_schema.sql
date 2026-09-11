@@ -449,3 +449,49 @@ BEGIN
 END //
 
 DELIMITER ;
+
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_active_repair_orders //
+
+CREATE PROCEDURE sp_get_active_repair_orders(IN p_status VARCHAR(100))
+BEGIN
+    SELECT 
+        CONCAT('RO-', ro.order_id) AS order_id,
+        ro.order_id AS raw_order_id,
+        CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+        CONCAT(v.manufacturer, ' ', v.model, ' ', v.year_model, ' · ', v.plate_number, ' · ', v.vehicle_type) AS vehicle_info,
+        ro.status,
+        ro.priority,
+        DATE_FORMAT(ro.date_received, '%b %d, %Y') AS formatted_date,
+        
+        -- Aggregate assigned mechanics
+        IFNULL(
+            GROUP_CONCAT(
+                DISTINCT CONCAT(u.first_name, ' ', u.last_name) 
+                SEPARATOR ', '
+            ), 
+            'Unassigned'
+        ) AS assigned_mechanics,
+        
+        -- Return invoice total
+        i.total_amount AS invoice_amount
+
+    FROM repair_orders ro
+    JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
+    JOIN customers c ON v.customer_id = c.customer_id
+    
+    LEFT JOIN repair_order_mechanics rom ON ro.order_id = rom.order_id
+    LEFT JOIN mechanics m ON rom.mechanic_id = m.mechanic_id
+    LEFT JOIN users u ON m.user_id = u.user_id
+    LEFT JOIN invoices i ON ro.order_id = i.order_id
+    
+    WHERE ro.status NOT IN ('FULFILLED', 'CANCELLED')
+      AND (p_status = 'ALL' OR p_status IS NULL OR ro.status = p_status)
+      
+    GROUP BY ro.order_id
+    ORDER BY ro.date_received DESC;
+END //
+
+DELIMITER ;

@@ -103,6 +103,32 @@ class RepairOrderController {
                 echo json_encode(["error" => "Database operation failed: " . $e->getMessage()]);
             }
     }
+
+    // GET: Fetch active repair orders list filtered by tab status
+    public function getActiveRepairOrders() {
+        $status = $_GET['status'] ?? 'ALL';
+
+        try {
+            $response = $this->repairOrderModel->getActiveRepairOrders($status);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status" => "success",
+                    "count"  => count($response['data']),
+                    "data"   => $response['data']
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(["error" => $response['error'] ?? "Failed to fetch active repair orders"]);
+            }
+
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(["error" => "Operation failed: " . $e->getMessage()]);
+        }
+    }
+
     // Helper method to parse input stream safely
     private function getInputData() {
         $input = json_decode(file_get_contents('php://input'), true);

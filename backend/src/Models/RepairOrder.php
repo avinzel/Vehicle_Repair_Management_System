@@ -99,5 +99,39 @@
                 return ["error" => "Intake processing failed: " . $e->getMessage()];
             }
         }
+        public function getActiveRepairOrders($status = 'ALL') {
+            try {
+                $filterStatus = !empty($status) ? $status : 'ALL';
+                $query = "CALL sp_get_active_repair_orders(?)"; 
+                
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $stmt->bind_param("s", $filterStatus);
+                $stmt->execute();
+                
+                $result = $stmt->get_result();
+                $orders = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+                $stmt->close();
+
+                // Clear stored procedure result sets from MySQLi connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "data" => $orders
+                ];
+
+            } catch (Exception $e) {
+                return ["error" => "Database operation failed: " . $e->getMessage()];
+            }
+        }
     }
 ?>

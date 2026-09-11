@@ -133,10 +133,14 @@
         case "repair-orders":{
             if($_SERVER["REQUEST_METHOD"] === "GET"){
                 if ($auth->getRoleId() == 2 ) {
-                    $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
-                    http_response_code(200);
-                    echo json_encode(["data" => $dashboardData]);
-                    exit();
+                    if (isset($_GET["status"])) {
+                        $repairOrderController->getActiveRepairOrders();
+                    }else{
+                        $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
+                        http_response_code(200);
+                        echo json_encode(["data" => $dashboardData]);
+                        exit();
+                    }
                 }
             }
             if ($_SERVER["REQUEST_METHOD"] === "POST"){
