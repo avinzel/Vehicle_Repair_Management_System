@@ -135,6 +135,53 @@ class RepairOrderController {
             echo json_encode(["error" => "Operation failed: " . $e->getMessage()]);
         }
     }
+    public function getOrderHistory() {
+        header('Content-Type: application/json');
+
+        // 1. Check GET query param first, fallback to POST payload
+        $search = $_GET['search'] ?? null;
+
+        if ($search === null) {
+            $input = $this->getInputData();
+            $search = $input['search'] ?? null;
+        }
+
+        try {
+            // 2. Call the RepairOrder model method
+            $response = $this->repairOrderModel->getOrderHistory($search);
+
+            // 3. Formulate JSON response
+            if (isset($response['success']) && $response['success']) {
+                
+                // Compute total revenue KPI across returned completed orders
+                $totalRevenue = array_reduce($response['data'], function ($sum, $item) {
+                    return $sum + (float)($item['raw_total_paid'] ?? 0);
+                }, 0.00);
+
+                http_response_code(200);
+                echo json_encode([
+                    "status"        => "success",
+                    "count"         => count($response['data']),
+                    "total_revenue" => "₱" . number_format($totalRevenue, 2),
+                    "data"          => $response['data']
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Failed to fetch order history"
+                ]);
+            }
+
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
     // Helper method to parse input stream safely
     private function getInputData() {
         $input = json_decode(file_get_contents('php://input'), true);

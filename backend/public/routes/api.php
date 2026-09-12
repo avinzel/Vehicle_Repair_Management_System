@@ -160,6 +160,8 @@
                            $repairOrderController->getActiveRepairOrders();
                         }else if($_GET["category"] == "inactive"){
                             $invoiceController->getBillingAndInvoicingRecords(); 
+                        }else if($_GET["category"] == "history"){
+                            $repairOrderController->getOrderHistory();
                         }   
                     }else{
                         $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();

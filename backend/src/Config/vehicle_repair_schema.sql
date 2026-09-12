@@ -565,3 +565,147 @@ BEGIN
 END //
 
 DELIMITER ;
+
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_billing_and_invoicing //
+
+CREATE PROCEDURE sp_get_billing_and_invoicing(
+    IN p_search VARCHAR(255)
+)
+BEGIN
+    IF p_search IS NOT NULL THEN
+        SET p_search = TRIM(p_search);
+        IF p_search = '' THEN
+            SET p_search = NULL;
+        END IF;
+    END IF;
+
+    SELECT 
+        CONCAT('RO-', ro.order_id) AS order_id,
+        ro.order_id AS raw_order_id,
+        CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+        CONCAT(v.manufacturer, ' ', v.model, ' ', IFNULL(v.year_model, ''), ' · ', DATE_FORMAT(ro.date_received, '%b %d, %Y')) AS vehicle_summary,
+        ro.status,
+        
+        -- Currency formatted for UI
+        CONCAT('₱', FORMAT(
+            IFNULL(i.total_amount, 
+                (IFNULL(sc_sum.labor_cost, 0) + IFNULL(parts_sum.parts_cost, 0))
+            ), 0
+        )) AS formatted_total_amount,
+
+        -- Raw total for logic calculations
+        IFNULL(i.total_amount, 
+            (IFNULL(sc_sum.labor_cost, 0) + IFNULL(parts_sum.parts_cost, 0))
+        ) AS total_amount
+
+    FROM repair_orders ro
+    JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
+    JOIN customers c ON v.customer_id = c.customer_id
+    LEFT JOIN invoices i ON ro.order_id = i.order_id
+    
+    -- Subquery for services/labor total from catalog
+    LEFT JOIN (
+        SELECT ros.order_id, SUM(sc.standard_labor_cost) AS labor_cost
+        FROM repair_order_services ros
+        JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+        GROUP BY ros.order_id
+    ) sc_sum ON ro.order_id = sc_sum.order_id
+
+    -- Subquery for parts total using quantity_used
+    LEFT JOIN (
+        SELECT order_id, SUM(unit_price * quantity_used) AS parts_cost
+        FROM repair_order_parts
+        GROUP BY order_id
+    ) parts_sum ON ro.order_id = parts_sum.order_id
+
+    WHERE ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', 'FULFILLED')
+      AND (
+            p_search IS NULL
+            OR CONCAT('RO-', ro.order_id) LIKE CONCAT('%', p_search, '%')
+            OR ro.order_id LIKE CONCAT('%', p_search, '%')
+            OR CONCAT(c.first_name, ' ', c.last_name) LIKE CONCAT('%', p_search, '%')
+            OR c.first_name LIKE CONCAT('%', p_search, '%')
+            OR c.last_name LIKE CONCAT('%', p_search, '%')
+            OR v.manufacturer LIKE CONCAT('%', p_search, '%')
+            OR v.model LIKE CONCAT('%', p_search, '%')
+            OR v.plate_number LIKE CONCAT('%', p_search, '%')
+      )
+
+    ORDER BY ro.date_received DESC;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_order_history //
+
+CREATE PROCEDURE sp_get_order_history(
+    IN p_search VARCHAR(255)
+)
+BEGIN
+    IF p_search IS NOT NULL THEN
+        SET p_search = TRIM(p_search);
+        IF p_search = '' THEN
+            SET p_search = NULL;
+        END IF;
+    END IF;
+
+    SELECT 
+        CONCAT('RO-', ro.order_id) AS order_id,
+        ro.order_id AS raw_order_id,
+        CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+        v.manufacturer AS vehicle_brand,
+        v.model AS vehicle_model,
+        v.vehicle_type,
+        v.plate_number,
+        DATE_FORMAT(ro.date_completed, '%b %d, %Y') AS completed_date,
+        
+        -- COALESCE handles missing mechanics or converts multiple into comma-separated list
+        COALESCE(
+            GROUP_CONCAT(DISTINCT CONCAT(u.first_name, ' ', u.last_name) SEPARATOR ', '), 
+            'Unassigned'
+        ) AS mechanics_list,
+
+        -- COALESCE ensures financial totals never return NULL
+        COALESCE(i.total_amount, 0.00) AS raw_total_paid,
+        CONCAT('₱', FORMAT(COALESCE(i.total_amount, 0.00), 2)) AS formatted_total_paid
+
+    FROM repair_orders ro
+    JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
+    JOIN customers c ON v.customer_id = c.customer_id
+    LEFT JOIN invoices i ON ro.order_id = i.order_id
+    LEFT JOIN repair_order_mechanics rom ON ro.order_id = rom.order_id
+    LEFT JOIN mechanics m ON rom.mechanic_id = m.mechanic_id
+    LEFT JOIN users u ON m.user_id = u.user_id
+
+    WHERE ro.status = 'FULFILLED'
+      AND (
+            p_search IS NULL
+            OR CONCAT('RO-', ro.order_id) LIKE CONCAT('%', p_search, '%')
+            OR CONCAT(c.first_name, ' ', c.last_name) LIKE CONCAT('%', p_search, '%')
+            OR v.manufacturer LIKE CONCAT('%', p_search, '%')
+            OR v.model LIKE CONCAT('%', p_search, '%')
+            OR v.plate_number LIKE CONCAT('%', p_search, '%')
+            OR u.first_name LIKE CONCAT('%', p_search, '%')
+            OR u.last_name LIKE CONCAT('%', p_search, '%')
+      )
+
+    GROUP BY 
+        ro.order_id,
+        c.first_name,
+        c.last_name,
+        v.manufacturer,
+        v.model,
+        v.vehicle_type,
+        v.plate_number,
+        ro.date_completed,
+        i.total_amount
+
+    ORDER BY ro.date_completed DESC;
+END //
+
+DELIMITER ;
