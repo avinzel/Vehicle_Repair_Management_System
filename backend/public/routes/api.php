@@ -41,6 +41,7 @@
     use App\Models\Mechanic;
     use App\Controllers\MechanicController;
     use App\Controllers\RepairOrderController;
+    use App\Controllers\CustomerController; 
     $db = new Database();
     
     $userModel = new User($db);
@@ -51,6 +52,7 @@
     $repairOrderController = new RepairOrderController();
     $auth = new Auth();
     $serviceAdvisorDashboard = new RepairOrder();
+    $customerController = new CustomerController();
     $mechanicsController = new MechanicController(new Mechanic); 
 
     $action = $_GET['action'] ?? null;
@@ -89,6 +91,12 @@
             "POST" => [1],
             "DELETE" => [1],
             "UPDATE" => [1,3]
+        ],
+        "customers" => [
+            "GET" => [1,2,3],
+            "POST" => [1,2],
+            "DELETE" => [1],
+            "UPDATE" => [1,2,3]
         ]
     ];
 
@@ -168,6 +176,23 @@
                     echo json_encode(["data" => $dashboardData]);
                     exit();
                 }
+            }
+        }
+        break;
+        case "customers":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+               if ($auth->getRoleId() == 2 ) {
+                 $customerController->getCustomerRecordsByServiceProvider();
+               }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+               
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+              
             }
         }
         break;

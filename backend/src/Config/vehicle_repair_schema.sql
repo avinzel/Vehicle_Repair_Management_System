@@ -511,3 +511,57 @@ BEGIN
 END //
 
 DELIMITER ;
+
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_customer_directory //
+
+CREATE PROCEDURE sp_get_customer_directory(
+    IN p_search VARCHAR(255)
+)
+BEGIN
+    -- Standardize empty search strings to NULL for easier SQL checking
+    IF p_search IS NOT NULL THEN
+        SET p_search = TRIM(p_search);
+        IF p_search = '' THEN
+            SET p_search = NULL;
+        END IF;
+    END IF;
+
+    SELECT 
+        c.customer_id,
+        CONCAT('C-', LPAD(c.customer_id, 3, '0')) AS formatted_customer_id,
+        CONCAT(c.first_name, ' ', c.last_name) AS full_name, 
+        c.contact_no,
+        c.email,
+        COUNT(DISTINCT v.vehicle_id) AS vehicle_count,
+        DATE_FORMAT(MAX(r.date_received), '%b %d, %Y') AS last_visit
+
+    FROM customers c
+    LEFT JOIN vehicles v ON c.customer_id = v.customer_id
+    LEFT JOIN repair_orders r ON v.vehicle_id = r.vehicle_id
+
+    WHERE 
+        p_search IS NULL
+        OR CONCAT('C-', LPAD(c.customer_id, 3, '0')) LIKE CONCAT('%', p_search, '%')
+        OR CONCAT(c.first_name, ' ', c.last_name) LIKE CONCAT('%', p_search, '%')
+        OR c.first_name LIKE CONCAT('%', p_search, '%')
+        OR c.last_name LIKE CONCAT('%', p_search, '%')
+        OR c.contact_no LIKE CONCAT('%', p_search, '%')
+        OR c.email LIKE CONCAT('%', p_search, '%')
+        OR v.plate_number LIKE CONCAT('%', p_search, '%')
+        OR v.manufacturer LIKE CONCAT('%', p_search, '%')
+        OR v.model LIKE CONCAT('%', p_search, '%')
+
+    GROUP BY 
+        c.customer_id,
+        c.first_name,
+        c.last_name,
+        c.contact_no,
+        c.email
+
+    ORDER BY MAX(r.date_received) DESC;
+END //
+
+DELIMITER ;
