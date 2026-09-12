@@ -28,32 +28,40 @@
     require_once __DIR__ . '../../../vendor/autoload.php';
 
     //imports
-    use App\Config\Database;
-    use App\Models\User;
-    use App\Controllers\RegisterUserController;
-    use App\Controllers\LoginController;
-    use App\Controllers\RoleController;
-    use App\Models\Role;
-    use App\Auth\Auth;
+
+    //models
     use App\Models\RepairOrder;
     use App\Models\Reports;
-    use App\Controllers\UserController;
     use App\Models\Mechanic;
+    use App\Models\Role;
+    use App\Auth\Auth;
+    use App\Config\Database;
+    use App\Models\User;
+
+    //controllers
+    use App\Controllers\UserController;
     use App\Controllers\MechanicController;
     use App\Controllers\RepairOrderController;
     use App\Controllers\CustomerController; 
+    use App\Controllers\InvoiceController;
+    use App\Controllers\RegisterUserController;
+    use App\Controllers\LoginController;
+    use App\Controllers\RoleController;
+
+    //instance
     $db = new Database();
-    
     $userModel = new User($db);
+    $auth = new Auth();
+    $serviceAdvisorDashboard = new RepairOrder();
+
     $userController = new UserController($userModel);
     $registerUserController = new RegisterUserController($userModel); 
     $loginController = new LoginController($userModel);
     $roleController = new RoleController(new Role($db));
     $repairOrderController = new RepairOrderController();
-    $auth = new Auth();
-    $serviceAdvisorDashboard = new RepairOrder();
     $customerController = new CustomerController();
     $mechanicsController = new MechanicController(new Mechanic); 
+    $invoiceController = new InvoiceController();
 
     $action = $_GET['action'] ?? null;
 
@@ -93,6 +101,12 @@
             "UPDATE" => [1,3]
         ],
         "customers" => [
+            "GET" => [1,2,3],
+            "POST" => [1,2],
+            "DELETE" => [1],
+            "UPDATE" => [1,2,3]
+        ],
+        "invoices" =>[
             "GET" => [1,2,3],
             "POST" => [1,2],
             "DELETE" => [1],
@@ -141,8 +155,12 @@
         case "repair-orders":{
             if($_SERVER["REQUEST_METHOD"] === "GET"){
                 if ($auth->getRoleId() == 2 ) {
-                    if (isset($_GET["status"])) {
-                        $repairOrderController->getActiveRepairOrders();
+                    if (isset($_GET["category"])) {
+                        if ($_GET["category"] == "active") {
+                           $repairOrderController->getActiveRepairOrders();
+                        }else if($_GET["category"] == "inactive"){
+                            $invoiceController->getBillingAndInvoicingRecords(); 
+                        }   
                     }else{
                         $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
                         http_response_code(200);

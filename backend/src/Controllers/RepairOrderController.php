@@ -106,9 +106,15 @@ class RepairOrderController {
 
     public function getActiveRepairOrders() {
 
-        $status = $_GET['status'] ?? 'ALL';
-        $search = $_GET['search'] ?? '';
-
+        $status = $_GET['status'] ?? null;
+        $search = $_GET['search'] ?? null;
+        $input = $this->getInputData();
+        if ($search === null) {
+            $search = $input['search'] ?? "ALL";
+        }
+        if ($status === null) {
+            $status = $input['status'] ?? "";
+        }
         try {
             $response = $this->repairOrderModel->getActiveRepairOrders($status, $search);
 
