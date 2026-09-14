@@ -39,66 +39,88 @@
             }
         }
 
-        public function processIntake($data, $createdByUserId) {
-            try {
-                $query = "CALL sp_create_vehicle_intake(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, @order_id, @customer_id, @vehicle_id)";
-                $stmt = self::$conn->prepare($query);
+public function processIntake($data, $createdByUserId) {
+        try {
+            $query = "CALL sp_create_vehicle_intake(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, @order_id, @customer_id, @vehicle_id)";
+            $stmt = self::$conn->prepare($query);
 
-                if (!$stmt) {
-                    throw new Exception("Prepare failed: " . self::$conn->error);
-                }
-
-                // Handle optional values gracefully
-                $middleName = $data['middle_name'] ?? null;
-                $address    = $data['address'] ?? null;
-                $vin        = $data['vin_number'] ?? null;
-                $mileage    = (int)($data['current_mileage'] ?? 0);
-                $priority   = $data['priority'] ?? 'STANDARD';
-
-                $stmt->bind_param(
-                    "sssssssssiississi",
-                    $data['first_name'],
-                    $middleName,
-                    $data['last_name'],
-                    $data['phone_number'],
-                    $data['email_address'],
-                    $address,
-                    $data['plate_number'],
-                    $data['vehicle_type'], // 'CAR', 'MOTORCYCLE', or 'TRICYCLE'
-                    $data['make_brand'],
-                    $data['model'],
-                    $data['year'],
-                    $data['color'],
-                    $vin,
-                    $mileage,
-                    $data['complaint'],
-                    $priority,
-                    $createdByUserId
-                );
-
-                $stmt->execute();
-                $stmt->close();
-
-                // Clear stored procedure buffers
-                while (self::$conn->more_results() && self::$conn->next_result()) {
-                    if ($extra = self::$conn->use_result()) { $extra->free(); }
-                }
-
-                // Retrieve output IDs from MySQL variables
-                $res = self::$conn->query("SELECT @order_id AS order_id, @customer_id AS customer_id, @vehicle_id AS vehicle_id");
-                $output = $res->fetch_assoc();
-
-                return [
-                    "success" => true,
-                    "order_id" => $output['order_id'],
-                    "customer_id" => $output['customer_id'],
-                    "vehicle_id" => $output['vehicle_id']
-                ];
-
-            } catch (Exception $e) {
-                return ["error" => "Intake processing failed: " . $e->getMessage()];
+            if (!$stmt) {
+                throw new Exception("Prepare failed: " . self::$conn->error);
             }
+
+            // Extract & cast variables explicitly to prevent bind_param reference errors
+            $firstName   = $data['first_name'] ?? null;
+            $middleName  = $data['middle_name'] ?? null;
+            $lastName    = $data['last_name'] ?? null;
+            $phoneNumber = $data['phone_number'] ?? null;
+            $email       = $data['email_address'] ?? null;
+            $address     = $data['address'] ?? null;
+
+            $plateNumber = $data['plate_number'] ?? null;
+            $vehicleType = $data['vehicle_type'] ?? null;
+            $makeBrand   = $data['make_brand'] ?? null;
+            $model       = $data['model'] ?? null;
+            $year        = isset($data['year']) ? (int)$data['year'] : null;
+            $color       = $data['color'] ?? null;
+            $vin         = $data['vin_number'] ?? null;
+            $mileage     = (int)($data['current_mileage'] ?? 0);
+
+            $complaint   = $data['complaint'] ?? null;
+            $priority    = $data['priority'] ?? 'STANDARD';
+            $userId      = (int)$createdByUserId;
+
+            $stmt->bind_param(
+                "sssssssssiississi",
+                $firstName,
+                $middleName,
+                $lastName,
+                $phoneNumber,
+                $email,
+                $address,
+                $plateNumber,
+                $vehicleType,
+                $makeBrand,
+                $model,
+                $year,
+                $color,
+                $vin,
+                $mileage,
+                $complaint,
+                $priority,
+                $userId
+            );
+
+            if (!$stmt->execute()) {
+                throw new Exception($stmt->error);
+            }
+
+            $stmt->close();
+
+            // Clear stored procedure result sets/buffers
+            while (self::$conn->more_results() && self::$conn->next_result()) {
+                if ($extra = self::$conn->use_result()) { 
+                    $extra->free(); 
+                }
+            }
+
+            // Fetch output variables set by procedure
+            $res = self::$conn->query("SELECT @order_id AS order_id, @customer_id AS customer_id, @vehicle_id AS vehicle_id");
+            $output = $res->fetch_assoc();
+
+            return [
+                "success"     => true,
+                "order_id"    => $output['order_id'] ?? null,
+                "customer_id" => $output['customer_id'] ?? null,
+                "vehicle_id"  => $output['vehicle_id'] ?? null
+            ];
+
+        } catch (Exception $e) {
+            return [
+                "success" => false,
+                "error"   => "Intake processing failed: " . $e->getMessage()
+            ];
         }
+    }
        public function getActiveRepairOrders($status = 'ALL', $search = '') {
             try {
                 $filterStatus = !empty($status) ? $status : 'ALL';

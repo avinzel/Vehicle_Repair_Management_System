@@ -23,7 +23,7 @@ const steps = [
   { title: "Repair Order", component: RepairOrderForm },
 ];
 
-export function VehicleIntakeStepper() {
+export function VehicleIntakeStepper({getTableData, getCardData}) {
   const [current, setCurrent] = useState(1);
 
   // Single source of truth for all step data, lifted out of the
@@ -82,6 +82,8 @@ export function VehicleIntakeStepper() {
           order: DEFAULT_REPAIR_ORDER_VALUES,
        })
        setCurrent(1);
+        if (typeof getCardData === "function") await getCardData();
+        if (typeof getTableData === "function") await getTableData();
     }
   };
 
