@@ -95,7 +95,7 @@
             "UPDATE" => [1,2,3]
         ],
         "mechanics"=>[
-            "GET" => [1],
+            "GET" => [1,2],
             "POST" => [1],
             "DELETE" => [1],
             "UPDATE" => [1,3]
@@ -153,22 +153,46 @@
         }
             break;
         case "repair-orders":{
-            if($_SERVER["REQUEST_METHOD"] === "GET"){
-                if ($auth->getRoleId() == 2 ) {
-                    if (isset($_GET["category"])) {
-                        if ($_GET["category"] == "active") {
-                           $repairOrderController->getActiveRepairOrders();
-                        }else if($_GET["category"] == "inactive"){
-                            $invoiceController->getBillingAndInvoicingRecords(); 
-                        }else if($_GET["category"] == "history"){
-                            $repairOrderController->getOrderHistory();
-                        }   
-                    }else{
-                        $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
-                        http_response_code(200);
-                        echo json_encode(["data" => $dashboardData]);
+            if ($_SERVER["REQUEST_METHOD"] === "GET") {
+                // 1. Role Guard
+                if ($auth->getRoleId() != 2) {
+                    http_response_code(403);
+                    echo json_encode(["error" => "Forbidden: Unauthorized role"]);
+                    exit();
+                }
+
+                $category = $_GET["category"] ?? null;
+
+                // 2. Default Dashboard (No category param)
+                if (!$category) {
+                    $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
+                    http_response_code(200);
+                    echo json_encode(["data" => $dashboardData]);
+                    exit();
+                }
+
+                // 3. Category Router
+                switch ($category) {
+                    case "active":
+                        if (isset($_GET["order_id"])) {
+                            $repairOrderController->getRepairOrderDetails();
+                            exit();
+                        }
+                        $repairOrderController->getActiveRepairOrders();
+                        break;
+
+                    case "inactive":
+                        $invoiceController->getBillingAndInvoicingRecords();
+                        break;
+
+                    case "history":
+                        $repairOrderController->getOrderHistory();
+                        break;
+
+                    default:
+                        http_response_code(400);
+                        echo json_encode(["error" => "Invalid category parameter"]);
                         exit();
-                    }
                 }
             }
             if ($_SERVER["REQUEST_METHOD"] === "POST"){

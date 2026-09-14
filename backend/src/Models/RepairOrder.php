@@ -174,5 +174,75 @@
                 ];
             }
         }
+ /**
+     * Fetch complete repair order details, including diagnosis notes, mechanics, services, parts, and totals.
+     * 
+     * @param int $orderId
+     * @return array
+     */
+        public function getRepairOrderDetails($orderId) {
+            try {
+                $query = "CALL sp_get_repair_order_details(?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $stmt->bind_param("i", $orderId);
+                $stmt->execute();
+
+                $result = $stmt->get_result();
+                $data = $result ? $result->fetch_assoc() : null;
+                $stmt->close();
+
+                // Clear remaining stored procedure execution buffers
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                if (!$data) {
+                    return [
+                        "status"  => "error",
+                        "message" => "Repair Order not found"
+                    ];
+                }
+
+                // Handle optional diagnosis notes safely
+                $data['diagnosis_notes']          = $data['diagnosis_notes'] ?? null;
+                $data['formatted_diagnosis_date'] = $data['formatted_diagnosis_date'] ?? null;
+
+                // Decode JSON array strings into native PHP arrays with array fallbacks []
+                $data['assigned_mechanics'] = !empty($data['assigned_mechanics']) 
+                    ? json_decode($data['assigned_mechanics'], true) 
+                    : [];
+
+                $data['services'] = !empty($data['services']) 
+                    ? json_decode($data['services'], true) 
+                    : [];
+
+                $data['parts'] = !empty($data['parts']) 
+                    ? json_decode($data['parts'], true) 
+                    : [];
+
+                // Cast financial metrics to floating-point numbers
+                $data['total_labor_cost'] = (float)($data['total_labor_cost'] ?? 0.00);
+                $data['total_parts_cost'] = (float)($data['total_parts_cost'] ?? 0.00);
+                $data['grand_total']      = (float)($data['grand_total'] ?? 0.00);
+
+                return [
+                    "status" => "success",
+                    "data"   => $data
+                ];
+
+            } catch (Exception $e) {
+                return [
+                    "status"  => "error",
+                    "message" => "Database operation failed: " . $e->getMessage()
+                ];
+            }
+        }
     }
 ?>

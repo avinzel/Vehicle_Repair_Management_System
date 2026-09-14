@@ -182,9 +182,55 @@ class RepairOrderController {
         }
         exit();
     }
+    public function getRepairOrderDetails() {
+        header('Content-Type: application/json');
+
+        $orderId = $_GET['order_id'] ?? null;
+
+        if ($orderId === null) {
+            $input = $this->getInputData();
+            $orderId = $input['order_id'] ?? null;
+        }
+
+        if (empty($orderId)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing required order_id parameter."
+            ]);
+            exit();
+        }
+
+        try {
+            $response = $this->repairOrderModel->getRepairOrderDetails((int)$orderId);
+
+            if (isset($response['status']) && $response['status'] === 'success') {
+                http_response_code(200);
+                echo json_encode([
+                    "status" => "success",
+                    "data"   => $response['data']
+                ]);
+            } else {
+                http_response_code(404);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['message'] ?? $response['error'] ?? "Failed to fetch order details"
+                ]);
+            }
+
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
     // Helper method to parse input stream safely
     private function getInputData() {
         $input = json_decode(file_get_contents('php://input'), true);
         return $input ?? [];
     }
+
 }
