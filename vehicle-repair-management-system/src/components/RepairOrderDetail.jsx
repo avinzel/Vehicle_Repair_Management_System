@@ -19,7 +19,7 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
 
   const statusLabel = formatStatusLabel(order.status);
   const StageComponent = ORDER_STAGES[statusLabel];
-  const amountLabel = formatCurrency(order.amount);
+  //const amountLabel = formatCurrency(order.amount);
 
   return (
     <div className="flex flex-col h-full">
@@ -70,11 +70,15 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
             </div>
             <div className="bg-secondary/50 rounded-lg p-3">
               <p className="text-xs text-muted-foreground">Plate</p>
-              <p className="font-medium">{order.plate}</p>
+              <p className="font-medium">{order.plate_number}</p>
             </div>
             <div className="bg-secondary/50 rounded-lg p-3">
               <p className="text-xs text-muted-foreground">Type</p>
-              <p className="font-medium">{order.vehicleType}</p>
+              <p className="font-medium">{order.vehicleType ?? order.vehicle_type}</p>
+            </div>
+            <div className="col-span-2 bg-secondary/50 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground">VIN Number</p>
+              <p className="font-medium">{order.vinNumber ??  '—'}</p>
             </div>
           </div>
         </div>

@@ -46,7 +46,7 @@ export function OrderCard({ order, isSelected = false, onClick, onMenuClick }) {
                         <StatusBadge status={order.status} />
                     </div>
                     <div className="flex flex-col items-end text-xs">
-                        <span className="text-muted-foreground mt-0.5">{order.date}</span>
+                        <span className="text-muted-foreground mt-0.5">{order.formatted_date ?? order.date}</span>
                     </div>
                 </div>
 
