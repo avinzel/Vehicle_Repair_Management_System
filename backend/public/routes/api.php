@@ -10,6 +10,7 @@
     ]);
     session_start();
 
+   
     // CORS Headers
     header("Access-Control-Allow-Origin: http://localhost:5173");
     header("Access-Control-Allow-Credentials: true");
@@ -27,28 +28,40 @@
     require_once __DIR__ . '../../../vendor/autoload.php';
 
     //imports
+
+    //models
+    use App\Models\RepairOrder;
+    use App\Models\Reports;
+    use App\Models\Mechanic;
+    use App\Models\Role;
+    use App\Auth\Auth;
     use App\Config\Database;
     use App\Models\User;
+
+    //controllers
+    use App\Controllers\UserController;
+    use App\Controllers\MechanicController;
+    use App\Controllers\RepairOrderController;
+    use App\Controllers\CustomerController; 
+    use App\Controllers\InvoiceController;
     use App\Controllers\RegisterUserController;
     use App\Controllers\LoginController;
     use App\Controllers\RoleController;
-    use App\Models\Role;
-    use App\Auth\Auth;
-    use App\Models\RepairOrder;
-    use App\Models\Reports;
-    use App\Controllers\UserController;
-    use App\Models\Mechanic;
-    use App\Controllers\MechanicController;
+
+    //instance
     $db = new Database();
-    
     $userModel = new User($db);
+    $auth = new Auth();
+    $serviceAdvisorDashboard = new RepairOrder();
+
     $userController = new UserController($userModel);
     $registerUserController = new RegisterUserController($userModel); 
     $loginController = new LoginController($userModel);
     $roleController = new RoleController(new Role($db));
-    $auth = new Auth();
-    $serviceAdvisorDashboard = new RepairOrder();
+    $repairOrderController = new RepairOrderController();
+    $customerController = new CustomerController();
     $mechanicsController = new MechanicController(new Mechanic); 
+    $invoiceController = new InvoiceController();
 
     $action = $_GET['action'] ?? null;
 
@@ -82,10 +95,22 @@
             "UPDATE" => [1,2,3]
         ],
         "mechanics"=>[
-            "GET" => [1],
+            "GET" => [1,2],
             "POST" => [1],
             "DELETE" => [1],
             "UPDATE" => [1,3]
+        ],
+        "customers" => [
+            "GET" => [1,2,3],
+            "POST" => [1,2],
+            "DELETE" => [1],
+            "UPDATE" => [1,2,3]
+        ],
+        "invoices" =>[
+            "GET" => [1,2,3],
+            "POST" => [1,2],
+            "DELETE" => [1],
+            "UPDATE" => [1,2,3]
         ]
     ];
 
@@ -126,17 +151,55 @@
         case "test-auth":{
             echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated." ]);
         }
-
+            break;
         case "repair-orders":{
-            if($_SERVER["REQUEST_METHOD"] === "GET"){
-                if ($auth->getRoleId() == 2 ) {
+            if ($_SERVER["REQUEST_METHOD"] === "GET") {
+                // 1. Role Guard
+                if ($auth->getRoleId() != 2) {
+                    http_response_code(403);
+                    echo json_encode(["error" => "Forbidden: Unauthorized role"]);
+                    exit();
+                }
+
+                $category = $_GET["category"] ?? null;
+
+                // 2. Default Dashboard (No category param)
+                if (!$category) {
                     $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
                     http_response_code(200);
                     echo json_encode(["data" => $dashboardData]);
                     exit();
                 }
+
+                // 3. Category Router
+                switch ($category) {
+                    case "active":
+                        if (isset($_GET["order_id"])) {
+                            $repairOrderController->getRepairOrderDetails();
+                            exit();
+                        }
+                        $repairOrderController->getActiveRepairOrders();
+                        break;
+
+                    case "inactive":
+                        $invoiceController->getBillingAndInvoicingRecords();
+                        break;
+
+                    case "history":
+                        $repairOrderController->getOrderHistory();
+                        break;
+
+                    default:
+                        http_response_code(400);
+                        echo json_encode(["error" => "Invalid category parameter"]);
+                        exit();
+                }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+                $repairOrderController->createVehicleIntake();
             }
         }
+        break;
         case "users": {
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
                echo json_encode(["users" => User::getAllUsers()]);
@@ -148,6 +211,7 @@
                $userController->deleteUser();
             }
         }
+        break;
         case "reports":{
             if($_SERVER["REQUEST_METHOD"] === "GET"){
                 if ($auth->getRoleId() == 2 ) {
@@ -158,6 +222,24 @@
                 }
             }
         }
+        break;
+        case "customers":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+               if ($auth->getRoleId() == 2 ) {
+                 $customerController->getCustomerRecordsByServiceProvider();
+               }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+               
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+              
+            }
+        }
+        break;
         case "mechanics":{
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
                echo json_encode(["mechanics" => Mechanic::getAllMechanics()]);
@@ -172,5 +254,6 @@
                $mechanicsController->deleteMechanic();
             }
         }
+        break;
     }
 ?>
