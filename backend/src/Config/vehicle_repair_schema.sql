@@ -392,10 +392,10 @@ DELIMITER //
 			SUM(status = 'AWAITING_PARTS') AS awaiting_parts
 		FROM repair_orders;
 	END //
-
+DELIMITER ;
 	
 DELIMITER //
-	DROP PROCEDURE sp_populate_dashboard_table; //
+	
 	CREATE PROCEDURE sp_populate_dashboard_table()
 	BEGIN
 		SELECT 
