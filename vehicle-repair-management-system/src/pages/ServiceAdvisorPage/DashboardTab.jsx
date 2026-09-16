@@ -2,7 +2,7 @@ import { Search, ClipboardList, Wrench, FileText, Plus, PackageX, CheckCircle } 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { StatusBadge, formatStatusLabel } from '@/components/StatusBadge';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Link, useOutletContext } from 'react-router';
 
 // Supports both SCREAMING_SNAKE_CASE (standard DB) and Title Case formats
@@ -110,7 +110,7 @@ export function DashBoardTab() {
                                             <TableCell>{order.customer}</TableCell>
                                             <TableCell className="text-muted-foreground">{order.vehicle}</TableCell>
                                             <TableCell>
-                                                <StatusBadge status={formatStatusLabel(order.status)} />
+                                                <StatusBadge status={order.status} />
                                             </TableCell>
                                             <TableCell>{formatCurrency(order.amount)}</TableCell>
                                             <TableCell className="text-right">

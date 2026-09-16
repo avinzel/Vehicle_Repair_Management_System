@@ -1,4 +1,6 @@
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import { formatStatusLabel } from '@/utils/formatStatusLabel'
 
 // Visual styling only — every role sees the same colors for the same
 // status. Role-specific actions (which button shows up next to it) stay
@@ -16,18 +18,12 @@ export const STATUS_STYLES = {
     'Fulfilled': 'bg-green-100 text-green-800 hover:bg-green-100',
 };
 
-export function formatStatusLabel(status) {
-    if (!status) return 'Unknown';
-    return status
-        .split('_')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
-}
 
 export function StatusBadge({status, className = ''}){
+    const label = formatStatusLabel(status);
     return (
-        <Badge variant="secondary" className={`${STATUS_STYLES[status] ?? ''} ${className}`}>
-            {status}    
+        <Badge variant="secondary" className={cn(STATUS_STYLES[label] ?? 'bg-muted text-muted-foreground', className)}>
+            {label}    
         </Badge>
     );
 }

@@ -123,10 +123,10 @@ class RepairOrderController {
         $search = $_GET['search'] ?? null;
         $input = $this->getInputData();
         if ($search === null) {
-            $search = $input['search'] ?? "ALL";
+            $search = $input['search'] ?? null;
         }
         if ($status === null) {
-            $status = $input['status'] ?? "";
+            $status = $input['status'] ?? "ALL";
         }
         try {
             $response = $this->repairOrderModel->getActiveRepairOrders($status, $search);
