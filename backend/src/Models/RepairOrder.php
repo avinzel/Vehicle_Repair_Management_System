@@ -342,5 +342,51 @@ public function processIntake($data, $createdByUserId) {
                 ];
             }
         }
+        /**
+         * Assign a mechanic to a specific repair order.
+         * 
+         * @param int $orderId
+         * @param int $mechanicId
+         * @return array
+         */
+        public function assignMechanic($orderId, $mechanicId) {
+            try {
+                $query = "CALL sp_AssignMechanicToOrder(?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal    = (int)$orderId;
+                $mechanicIdVal = (int)$mechanicId;
+
+                $stmt->bind_param("ii", $orderIdVal, $mechanicIdVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                // Clear remaining stored procedure execution buffers
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extra = self::$conn->use_result()) { 
+                        $extra->free(); 
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "message" => "Mechanic assigned successfully."
+                ];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to assign mechanic: " . $e->getMessage()
+                ];
+            }
+        }
     }
 ?>

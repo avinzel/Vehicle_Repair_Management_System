@@ -201,7 +201,7 @@
                     exit();
                 }
                 $method = $_GET["post-method"]; 
-
+ 
                switch($method){
                     case "assign-diagnostician": {
                         $repairOrderController->assignDiagnostician(); 
@@ -210,6 +210,11 @@
                     case "submit-diagnosis":{
                         $repairOrderController->submitDiagnosis();
                     }
+                    break;
+                    case "assign-mechanic": {         
+                        $repairOrderController->assignMechanic();
+                    }
+                    break;
                }
             }
         }
