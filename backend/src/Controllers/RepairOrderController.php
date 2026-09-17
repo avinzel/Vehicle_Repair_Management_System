@@ -33,7 +33,6 @@ class RepairOrderController {
         $vehicleType = $vehicle['vehicleType'] ?? $vehicle['vehicle_type'] ?? null;
         $makeBrand   = $vehicle['make'] ?? $vehicle['make_brand'] ?? null;
         $model       = $vehicle['model'] ?? null;
-
         $complaint   = $order['complaint'] ?? null;
 
         // Validate required Step 1, 2, and 3 fields
@@ -236,6 +235,98 @@ class RepairOrderController {
             echo json_encode([
                 "status" => "error",
                 "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
+    // POST/PUT: Assign a diagnostician (mechanic) to a repair order
+    public function assignDiagnostician() {
+
+        $data = $this->getInputData();
+
+        // Support both camelCase and snake_case request parameters
+        $orderId    = $data['order_id'] ?? $data['orderId'] ?? null;
+        $mechanicId = $data['mechanic_id'] ?? $data['mechanicId'] ?? $data['diagnostician_id'] ?? $data['diagnosticianId'] ?? null;
+
+        if (empty($orderId) || empty($mechanicId)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing required fields: order_id and mechanic_id"
+            ]);
+            exit();
+        }
+
+        $createdByUserId = Auth::getUserId();
+        if (!$createdByUserId) {
+            http_response_code(401);
+            echo json_encode(["status" => "error", "error" => "User authentication required"]);
+            exit();
+        }
+
+        try {
+            $response = $this->repairOrderModel->assignDiagnostician($orderId, $mechanicId, $createdByUserId);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"  => "success",
+                    "message" => "Diagnostician assigned successfully"
+                ]);
+            } else {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Assignment failed"
+                ]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
+    public function submitDiagnosis() {
+
+
+        $data = $this->getInputData();
+
+        $orderId    = $data['order_id'] ?? $data['orderId'] ?? null;
+        $notes      = $data['diagnostic_notes'] ?? $data['diagnosis_notes'] ?? null;
+        $serviceIds = $data['required_services'] ?? $data['services'] ?? [];
+
+        if (empty($orderId) || empty($notes)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing required fields: order_id and diagnostic_notes"
+            ]);
+            exit();
+        }
+
+        $createdByUserId = Auth::getUserId();
+        if (!$createdByUserId) {
+            http_response_code(401);
+            echo json_encode(["status" => "error", "error" => "User authentication required"]);
+            exit();
+        }
+
+        $response = $this->repairOrderModel->submitDiagnosis($orderId, $notes, $serviceIds, $createdByUserId);
+
+        if ($response['success']) {
+            http_response_code(200);
+            echo json_encode([
+                "status"  => "success",
+                "message" => "Diagnosis submitted successfully. Status updated to Pending Mechanics."
+            ]);
+        } else {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => $response['error']
             ]);
         }
         exit();

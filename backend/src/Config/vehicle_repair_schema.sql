@@ -221,6 +221,85 @@ CREATE TABLE repair_order_mechanics (
 	);
     USE VehicleRepair;
 
+
+ 
+-- =====================================================================
+-- MYSQL DATABASE USERS & PRIVILEGES
+-- =====================================================================
+ 
+DROP USER IF EXISTS 'admin_user'@'localhost';
+DROP USER IF EXISTS 'service_advisor'@'localhost';
+DROP USER IF EXISTS 'mechanic'@'localhost';
+ 
+CREATE USER 'admin_user'@'localhost'      IDENTIFIED BY 'admin123';
+CREATE USER 'service_advisor'@'localhost' IDENTIFIED BY 'advisor123';
+CREATE USER 'mechanic'@'localhost'        IDENTIFIED BY 'mechanic123';
+ 
+ 
+-- ---------------------------------------------------------------------
+-- ADMIN: buong access
+-- ---------------------------------------------------------------------
+GRANT ALL PRIVILEGES ON VehicleRepair.* TO 'admin_user'@'localhost';
+ 
+ 
+-- ---------------------------------------------------------------------
+-- SERVICE ADVISOR
+-- Screens: Dashboard, New Vehicle Intake, Active Repair Orders,
+--          Customer Records, Billing & Invoicing, Order History
+--
+-- Read access sa lahat ng kailangan ipakita sa screen.
+-- Ang pagsulat (intake, invoice, payment) ay via stored procedure.
+-- ---------------------------------------------------------------------
+GRANT SELECT ON VehicleRepair.customers              TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.vehicles               TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_orders          TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_order_services  TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_order_parts     TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_order_mechanics TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.invoices               TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.maintenance_history    TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.parts_inventory        TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.mechanics              TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.mechanic_positions     TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.service_catalog        TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.users                  TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.roles                  TO 'service_advisor'@'localhost';
+ 
+GRANT EXECUTE ON VehicleRepair.* TO 'service_advisor'@'localhost';
+ 
+ 
+-- ---------------------------------------------------------------------
+-- MECHANIC
+-- Ginagawa: tingnan ang naka-assign na jobs, i-update ang order
+--           (diagnosis notes at status).
+--
+-- UPDATE sa repair_orders LANG ang direktang ibinibigay. Walang direktang
+-- write sa repair_order_parts, repair_order_services, parts_inventory,
+-- o maintenance_history — via stored procedure lahat iyon.
+-- ---------------------------------------------------------------------
+GRANT SELECT, UPDATE ON VehicleRepair.repair_orders TO 'mechanic'@'localhost';
+ 
+GRANT SELECT ON VehicleRepair.repair_order_mechanics TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_order_services  TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_order_parts     TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.parts_inventory        TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.vehicles               TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.customers              TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.maintenance_history    TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.service_catalog        TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.mechanics              TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.mechanic_positions     TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.users                  TO 'mechanic'@'localhost';
+ 
+GRANT EXECUTE ON VehicleRepair.* TO 'mechanic'@'localhost';
+ 
+-- Walang access ang Mechanic sa invoices at roles.
+ 
+FLUSH PRIVILEGES;
+ 
+SHOW GRANTS FOR 'admin_user'@'localhost';
+SHOW GRANTS FOR 'service_advisor'@'localhost';
+SHOW GRANTS FOR 'mechanic'@'localhost';
 -- =====================================================================
 -- ROLES & POSITIONS
 -- =====================================================================
@@ -392,10 +471,10 @@ DELIMITER //
 			SUM(status = 'AWAITING_PARTS') AS awaiting_parts
 		FROM repair_orders;
 	END //
-DELIMITER ;
+
 	
 DELIMITER //
-	
+	DROP PROCEDURE IF EXISTS sp_populate_dashboard_table; //
 	CREATE PROCEDURE sp_populate_dashboard_table()
 	BEGIN
 		SELECT 
@@ -901,3 +980,221 @@ BEGIN
 END //
  
 DELIMITER ;
+-- =====================================================================
+-- sp_correct_intake_details
+--
+-- Layunin: pinapayagan ang Service Advisor na ayusin ang mga maling
+-- na-type na detalye (pangalan, contact, plate number, complaint)
+-- MATAPOS magawa ang intake — nang hindi binibigyan ng direktang
+-- GRANT UPDATE sa customers/vehicles/repair_orders.
+--
+-- Bakit ganito: kung DEFINER=root ang procedure, ang procedure mismo
+-- ang gumagawa ng UPDATE — hindi ang tumatawag. Kaya kahit SELECT lang
+-- ang meron ang Service Advisor sa mga table, gumagana pa rin ito.
+--
+-- Sinadyang HINDI kasama: status, diagnosis_notes, mileage,
+-- vehicle_type — mga iyon ay dapat sa ibang proseso/role dumaan
+-- (diagnosis workflow, mechanic updates), hindi basta "typo fix."
+-- =====================================================================
+
+DROP PROCEDURE IF EXISTS sp_correct_intake_details;
+DELIMITER $$
+CREATE PROCEDURE sp_correct_intake_details(
+    IN p_order_id INT,
+    IN p_first_name VARCHAR(75),
+    IN p_middle_name VARCHAR(75),
+    IN p_last_name VARCHAR(75),
+    IN p_contact_no VARCHAR(20),
+    IN p_email VARCHAR(100),
+    IN p_plate_number VARCHAR(20),
+    IN p_complaint VARCHAR(500),
+    OUT p_result VARCHAR(150)
+)
+BEGIN
+    DECLARE v_customer_id INT;
+    DECLARE v_vehicle_id INT;
+    DECLARE v_status VARCHAR(30);
+
+    -- hanapin muna kung sino talaga ang customer/vehicle ng order na ito
+    SELECT ro.status, v.vehicle_id, v.customer_id
+    INTO v_status, v_vehicle_id, v_customer_id
+    FROM repair_orders ro
+    JOIN vehicles v ON v.vehicle_id = ro.vehicle_id
+    WHERE ro.order_id = p_order_id;
+
+    IF v_customer_id IS NULL THEN
+        SET p_result = 'FAILED: Order not found.';
+
+    ELSEIF v_status IN ('FULFILLED', 'CANCELLED') THEN
+        -- huwag nang payagang baguhin ang mga sarado nang order —
+        -- dapat manatiling accurate ang history
+        SET p_result = 'FAILED: Order is already closed, cannot edit.';
+
+    ELSE
+        UPDATE customers
+        SET first_name = p_first_name,
+            middle_name = p_middle_name,
+            last_name   = p_last_name,
+            contact_no  = p_contact_no,
+            email       = p_email
+        WHERE customer_id = v_customer_id;
+
+        UPDATE vehicles
+        SET plate_number = p_plate_number
+        WHERE vehicle_id = v_vehicle_id;
+
+        UPDATE repair_orders
+        SET complaint = p_complaint
+        WHERE order_id = p_order_id;
+
+        SET p_result = 'SUCCESS: Details corrected.';
+    END IF;
+END $$
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_assign_diagnostician //
+
+CREATE PROCEDURE sp_assign_diagnostician(
+    IN p_order_id INT,
+    IN p_mechanic_id INT,
+    IN p_created_by INT
+)
+BEGIN
+    DECLARE v_order_exists INT DEFAULT 0;
+    DECLARE v_mechanic_exists INT DEFAULT 0;
+    DECLARE v_is_diagnostician INT DEFAULT 0;
+
+    -- Automatic rollback handler on SQL errors
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- 1. Check if repair order exists
+    SELECT COUNT(*) INTO v_order_exists 
+    FROM repair_orders 
+    WHERE order_id = p_order_id;
+
+    IF v_order_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+    END IF;
+
+    -- 2. Check if mechanic exists and joined to their position role
+    SELECT COUNT(*), 
+           SUM(CASE WHEN LOWER(mp.position_name) LIKE '%diagnostician%' THEN 1 ELSE 0 END)
+    INTO v_mechanic_exists, v_is_diagnostician
+    FROM mechanics m
+    INNER JOIN mechanic_positions mp ON m.position_id = mp.position_id
+    WHERE m.mechanic_id = p_mechanic_id;
+
+    IF v_mechanic_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Mechanic not found.';
+    END IF;
+
+    -- 3. Validate that the mechanic is a Diagnostician
+    IF v_is_diagnostician = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Selected mechanic is not authorized as a diagnostician.';
+    END IF;
+
+    -- 4. Update Repair Order status
+    UPDATE repair_orders
+    SET status = 'AWAITING_DIAGNOSIS'
+    WHERE order_id = p_order_id;
+
+    -- 5. Record assignment in repair_order_mechanics
+    INSERT INTO repair_order_mechanics (order_id, mechanic_id, date_assigned)
+    VALUES (p_order_id, p_mechanic_id, NOW());
+
+    COMMIT;
+END //
+
+DELIMITER ;
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_submit_diagnosis //
+
+CREATE PROCEDURE sp_submit_diagnosis(
+    IN p_order_id INT,
+    IN p_diagnosis_notes TEXT,
+    IN p_services_json JSON,
+    IN p_created_by INT
+)
+BEGIN
+    DECLARE i INT DEFAULT 0;
+    DECLARE v_service_count INT DEFAULT 0;
+    DECLARE v_service_id INT;
+    DECLARE v_order_exists INT DEFAULT 0;
+    DECLARE v_service_exists INT DEFAULT 0;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- 1. Check if repair order exists
+    SELECT COUNT(*) INTO v_order_exists 
+    FROM repair_orders 
+    WHERE order_id = p_order_id;
+
+    IF v_order_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+    END IF;
+
+    -- 2. Validate all provided service IDs before inserting
+    IF p_services_json IS NOT NULL AND JSON_VALID(p_services_json) THEN
+        SET v_service_count = JSON_LENGTH(p_services_json);
+        
+        WHILE i < v_service_count DO
+            SET v_service_id = CAST(JSON_EXTRACT(p_services_json, CONCAT('$[', i, ']')) AS UNSIGNED);
+            
+            SELECT COUNT(*) INTO v_service_exists
+            FROM service_catalog
+            WHERE service_catalog_id = v_service_id;
+
+            IF v_service_exists = 0 THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'One or more selected services do not exist in the catalog.';
+            END IF;
+
+            SET i = i + 1;
+        END WHILE;
+    END IF;
+
+    -- 3. Update Repair Order details
+    UPDATE repair_orders
+    SET status = 'PENDING_MECHANICS',
+        diagnosis_notes = p_diagnosis_notes,
+        diagnosis_completed_at = NOW()
+    WHERE order_id = p_order_id;
+
+    -- 4. Insert valid services
+    SET i = 0;
+    IF p_services_json IS NOT NULL AND JSON_VALID(p_services_json) THEN
+        WHILE i < v_service_count DO
+            SET v_service_id = CAST(JSON_EXTRACT(p_services_json, CONCAT('$[', i, ']')) AS UNSIGNED);
+            
+            INSERT INTO repair_order_services (order_id, service_catalog_id)
+            VALUES (p_order_id, v_service_id);
+            
+            SET i = i + 1;
+        END WHILE;
+    END IF;
+
+    COMMIT;
+END //
+
+DELIMITER ;
+
+GRANT EXECUTE ON PROCEDURE VehicleRepair.sp_correct_intake_details TO 'service_advisor'@'localhost';

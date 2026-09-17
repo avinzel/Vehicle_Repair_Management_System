@@ -69,8 +69,9 @@ public function processIntake($data, $createdByUserId) {
             $priority    = $data['priority'] ?? 'STANDARD';
             $userId      = (int)$createdByUserId;
 
+
             $stmt->bind_param(
-                "sssssssssiississi",
+                "ssssssssssississi",
                 $firstName,
                 $middleName,
                 $lastName,
@@ -263,6 +264,81 @@ public function processIntake($data, $createdByUserId) {
                 return [
                     "status"  => "error",
                     "message" => "Database operation failed: " . $e->getMessage()
+                ];
+            }
+        }
+        public function assignDiagnostician($orderId, $mechanicId, $createdByUserId) {
+            try {
+                $query = "CALL sp_assign_diagnostician(?, ?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal    = (int)$orderId;
+                $mechanicIdVal = (int)$mechanicId;
+                $userIdVal     = (int)$createdByUserId;
+
+                $stmt->bind_param("iii", $orderIdVal, $mechanicIdVal, $userIdVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                // Clear stored procedure result sets/buffers
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extra = self::$conn->use_result()) { 
+                        $extra->free(); 
+                    }
+                }
+
+                return ["success" => true];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to assign diagnostician: " . $e->getMessage()
+                ];
+            }
+        }
+
+        public function submitDiagnosis($orderId, $notes, $serviceIds, $createdByUserId) {
+            try {
+                $query = "CALL sp_submit_diagnosis(?, ?, ?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal   = (int)$orderId;
+                $notesVal     = trim($notes);
+                $servicesJson = json_encode(array_map('intval', (array)$serviceIds));
+                $userIdVal    = (int)$createdByUserId;
+
+                $stmt->bind_param("issi", $orderIdVal, $notesVal, $servicesJson, $userIdVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extra = self::$conn->use_result()) {
+                        $extra->free();
+                    }
+                }
+
+                return ["success" => true];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to submit diagnosis: " . $e->getMessage()
                 ];
             }
         }
