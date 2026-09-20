@@ -47,7 +47,7 @@
     use App\Controllers\RegisterUserController;
     use App\Controllers\LoginController;
     use App\Controllers\RoleController;
-
+    use App\Controllers\PartController;
     //instance
     $db = new Database();
     $userModel = new User($db);
@@ -62,6 +62,7 @@
     $customerController = new CustomerController();
     $mechanicsController = new MechanicController(new Mechanic); 
     $invoiceController = new InvoiceController();
+    $partContorller = new PartController();  
 
     $action = $_GET['action'] ?? null;
 
@@ -214,11 +215,15 @@
                     case "assign-mechanic":{
                         $repairOrderController->assignMechanic();
                     }
+                    case "log-part":{
+                        $repairOrderController->logPart(); 
+                    }
                     break;
                     default:
                         http_response_code(400);
                         echo json_encode(["error" => "Invalid post-method parameter"]);
                         exit();
+                    break;
                }
             }
         }
@@ -281,6 +286,38 @@
                $mechanicsController->deleteMechanic();
             }
         }
+        case "part": {
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+                if (isset($_GET["post-method"])) {
+                    $postMethod = $_GET["post-method"]; 
+                    switch($postMethod){
+                        case "restock":{ 
+                            $partContorller->restockPart(); 
+                        }
+                        break;
+                        default:                                              
+                            http_response_code(404);
+                            echo json_encode(["error" => "404 not found"]);
+                            exit();
+                        break;
+                    }  
+                }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+
+            }
+        }
+        break;
+        default:
+            http_response_code(404);
+            echo json_encode(["error" => "404 not found"]);
+            exit();
         break;
     }
 ?>

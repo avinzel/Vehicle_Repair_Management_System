@@ -384,6 +384,53 @@ class RepairOrderController {
         }
         exit();
     }
+    // POST: Log part to repair order (handles ISSUED vs PENDING_PARTS)
+    public function logPart() {
+        header('Content-Type: application/json');
+
+        $data = $this->getInputData();
+
+        // Support both camelCase and snake_case request parameters
+        $orderId  = $data['order_id'] ?? $data['orderId'] ?? null;
+        $partId   = $data['part_id'] ?? $data['partId'] ?? null;
+        $quantity = $data['quantity'] ?? $data['qty'] ?? null;
+
+        // Validate required fields
+        if (empty($orderId) || empty($partId) || empty($quantity)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing required fields: order_id, part_id, and quantity"
+            ]);
+            exit();
+        }
+
+        try {
+            // Call RepairOrder model logPart method
+            $response = $this->repairOrderModel->logPart((int)$orderId, (int)$partId, (int)$quantity);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"  => "success",
+                    "message" => $response['message'] ?? "Part logged successfully"
+                ]);
+            } else {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Failed to log part"
+                ]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
     // Helper method to parse input stream safely
     private function getInputData() {
         $input = json_decode(file_get_contents('php://input'), true);
