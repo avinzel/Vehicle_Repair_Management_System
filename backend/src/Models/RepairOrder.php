@@ -417,5 +417,47 @@ public function processIntake($data, $createdByUserId) {
                 ];
             }
         }
+        /**
+         * Fetch all parts logged for a specific repair order
+         * 
+         * @param int $orderId
+         * @return array
+         */
+        public function getPartsByRepairOrder($orderId) {
+            try {
+                $query = "CALL sp_get_parts_by_repair_order(?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal = (int)$orderId;
+                $stmt->bind_param("i", $orderIdVal);
+                $stmt->execute();
+
+                $result = $stmt->get_result();
+                $parts = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+                $stmt->close();
+
+                // Clear stored procedure result sets from connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "data"    => $parts
+                ];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Database operation failed: " . $e->getMessage()
+                ];
+            }
+        }
     }
 ?>

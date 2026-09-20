@@ -65,5 +65,33 @@
                 ]);
             }
         }
+                /**
+         * Endpoint handler to retrieve all inventory parts.
+         * Accepts GET query parameters: ?status=ACTIVE&search=filter
+         */
+        public function getParts() {
+
+            // 2. Capture query parameters
+            $status = $_GET['status'] ?? 'ALL';
+            $search = $_GET['search'] ?? '';
+
+            // 3. Fetch data from model
+            $result = self::$model::getAllParts($status, $search);
+
+            // 4. Send response
+            if ($result['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status" => "success",
+                    "data"   => $result['data']
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $result['error']
+                ]);
+            }
+        }
     }
 ?>

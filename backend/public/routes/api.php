@@ -62,7 +62,7 @@
     $customerController = new CustomerController();
     $mechanicsController = new MechanicController(new Mechanic); 
     $invoiceController = new InvoiceController();
-    $partContorller = new PartController();  
+    $partController = new PartController();  
 
     $action = $_GET['action'] ?? null;
 
@@ -112,6 +112,12 @@
             "POST" => [1,2],
             "DELETE" => [1],
             "UPDATE" => [1,2,3]
+        ],
+        "parts" =>[
+            "GET" => [1,2,3],
+            "POST" => [1],
+            "DELETE" => [1],
+            "UPDATE" => [1]
         ]
     ];
 
@@ -187,6 +193,9 @@
 
                         case "history":
                             $repairOrderController->getOrderHistory();
+                            break;
+                        case "parts-by-order":
+                            $repairOrderController->getPartsByRepairOrder();
                             break;
 
                         default:
@@ -286,9 +295,9 @@
                $mechanicsController->deleteMechanic();
             }
         }
-        case "part": {
+        case "parts": {
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
-
+                $partController->getParts();
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
 
@@ -298,7 +307,7 @@
                     $postMethod = $_GET["post-method"]; 
                     switch($postMethod){
                         case "restock":{ 
-                            $partContorller->restockPart(); 
+                            $partController->restockPart(); 
                         }
                         break;
                         default:                                              
