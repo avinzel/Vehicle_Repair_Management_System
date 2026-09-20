@@ -2,6 +2,7 @@
     namespace App\Controllers;
 
     use App\Models\Invoice;
+    use App\Auth\Auth; 
     use Exception;
 
     class InvoiceController {
@@ -103,6 +104,85 @@
             exit();
         }
 
+  /**
+         * POST: Generate invoice and transition repair order to AWAITING_PAYMENT
+         */
+        public function generateInvoice() {
+
+            $data = $this->getInputData();
+
+            $orderId  = $data['order_id'] ?? $data['orderId'] ?? null;
+            $taxRate  = $data['tax_rate'] ?? $data['taxRate'] ?? 0.00;
+            $discount = $data['discount'] ?? 0.00;
+
+            if (empty($orderId) || !is_numeric($orderId)) {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Missing or invalid required parameter: order_id"
+                ]);
+                exit();
+            }
+
+            // Validate non-negative financial inputs
+            if (!is_numeric($taxRate) || (float)$taxRate < 0) {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Tax rate cannot be negative or non-numeric."
+                ]);
+                exit();
+            }
+
+            if (!is_numeric($discount) || (float)$discount < 0) {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Discount cannot be negative or non-numeric."
+                ]);
+                exit();
+            }
+
+            $createdByUserId = Auth::getUserId();
+            if (!$createdByUserId) {
+                http_response_code(401);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "User authentication required"
+                ]);
+                exit();
+            }
+
+            try {
+                $response = self::$model->createInvoice(
+                    (int)$orderId, 
+                    (int)$createdByUserId, 
+                    (float)$taxRate, 
+                    (float)$discount
+                );
+
+                if (isset($response['success']) && $response['success']) {
+                    http_response_code(201);
+                    echo json_encode([
+                        "status"  => "success",
+                        "message" => $response['message']
+                    ]);
+                } else {
+                    http_response_code(400);
+                    echo json_encode([
+                        "status" => "error",
+                        "error"  => $response['error'] ?? "Failed to generate invoice"
+                    ]);
+                }
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Controller operation failed: " . $e->getMessage()
+                ]);
+            }
+            exit();
+        }
         /**
          * Helper method to decode incoming JSON request body
          */
@@ -110,5 +190,6 @@
             $input = json_decode(file_get_contents('php://input'), true);
             return $input ?? [];
         }
+
     }
 ?>

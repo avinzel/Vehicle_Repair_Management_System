@@ -111,11 +111,11 @@
             "GET" => [1,2,3],
             "POST" => [1,2],
             "DELETE" => [1],
-            "UPDATE" => [1,2,3]
+            "UPDATE" => [1]
         ],
         "parts" =>[
             "GET" => [1,2,3],
-            "POST" => [1],
+            "POST" => [1,2],
             "DELETE" => [1],
             "UPDATE" => [1]
         ]
@@ -224,8 +224,13 @@
                     case "assign-mechanic":{
                         $repairOrderController->assignMechanic();
                     }
+                    break;
                     case "log-part":{
                         $repairOrderController->logPart(); 
+                    }
+                    break;
+                    case "mark-ready-to-invoice":{
+                        $repairOrderController->markReadyToInvoice(); 
                     }
                     break;
                     default:
@@ -323,6 +328,20 @@
             }
         }
         break;
+        case "invoices":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+                $invoiceController->generateInvoice(); 
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+              
+            }
+        }
         default:
             http_response_code(404);
             echo json_encode(["error" => "404 not found"]);

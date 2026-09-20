@@ -459,5 +459,51 @@ public function processIntake($data, $createdByUserId) {
                 ];
             }
         }
+            /**
+         * Mark a repair order as READY_TO_INVOICE (executed by Lead Mechanic)
+         * 
+         * @param int $orderId
+         * @param int $createdByUserId
+         * @return array
+         */
+        public function markReadyToInvoice($orderId, $createdByUserId) {
+            try {
+                $query = "CALL sp_mark_ready_to_invoice(?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal = (int)$orderId;
+                $userIdVal  = (int)$createdByUserId;
+
+                $stmt->bind_param("ii", $orderIdVal, $userIdVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                // Clear stored procedure result sets from connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "message" => "Repair order successfully marked as READY_TO_INVOICE."
+                ];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to mark ready to invoice: " . $e->getMessage()
+                ];
+            }
+        }
     }
 ?>

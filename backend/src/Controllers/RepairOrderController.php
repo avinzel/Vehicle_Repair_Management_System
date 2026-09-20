@@ -482,6 +482,63 @@ class RepairOrderController {
         }
         exit();
     }
+    /**
+     * POST/PUT: Mark a repair order as READY_TO_INVOICE (executed by Lead Mechanic)
+     */
+    public function markReadyToInvoice() {
+        header('Content-Type: application/json');
+
+        $data = $this->getInputData();
+
+        // Support both camelCase and snake_case request parameters
+        $orderId = $data['order_id'] ?? $data['orderId'] ?? null;
+
+        if (empty($orderId) || !is_numeric($orderId)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing or invalid required parameter: order_id"
+            ]);
+            exit();
+        }
+
+        // Verify authentication
+        $createdByUserId = Auth::getUserId();
+        if (!$createdByUserId) {
+            http_response_code(401);
+            echo json_encode([
+                "status" => "error", 
+                "error"  => "User authentication required"
+            ]);
+            exit();
+        }
+
+        try {
+            // Call model method
+            $response = $this->repairOrderModel->markReadyToInvoice((int)$orderId, (int)$createdByUserId);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"  => "success",
+                    "message" => $response['message'] ?? "Repair order marked as ready to invoice successfully"
+                ]);
+            } else {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Failed to mark order as ready to invoice"
+                ]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
     // Helper method to parse input stream safely
     private function getInputData() {
         $input = json_decode(file_get_contents('php://input'), true);

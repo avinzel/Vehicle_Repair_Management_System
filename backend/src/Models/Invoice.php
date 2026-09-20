@@ -55,5 +55,55 @@
                 ];
             }
         }
+        /**
+     * Create an invoice for a repair order and transition status to AWAITING_PAYMENT
+     * 
+     * @param int $orderId
+     * @param int $createdByUserId
+     * @param float $taxRate
+     * @param float $discount
+     * @return array
+     */
+        public function createInvoice($orderId, $createdByUserId, $taxRate = 0.00, $discount = 0.00) {
+            try {
+                $query = "CALL sp_mark_awaiting_payment(?, ?, ?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal = (int)$orderId;
+                $userIdVal  = (int)$createdByUserId;
+                $taxVal     = (float)$taxRate;
+                $discountVal = (float)$discount;
+
+                $stmt->bind_param("iidd", $orderIdVal, $userIdVal, $taxVal, $discountVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                // Clear stored procedure result sets from connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "message" => "Invoice generated successfully. Repair order status updated to AWAITING_PAYMENT."
+                ];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to generate invoice: " . $e->getMessage()
+                ];
+            }
+        }
     }
 ?>
