@@ -342,5 +342,43 @@ public function processIntake($data, $createdByUserId) {
                 ];
             }
         }
+        public function assignMechanic($orderId, $mechanicId, $positionId, $createdByUserId) {
+            try {
+                $query = "CALL sp_assign_mechanic(?, ?, ?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal    = (int)$orderId;
+                $mechanicIdVal = (int)$mechanicId;
+                $positionIdVal = (int)$positionId;
+                $userIdVal     = (int)$createdByUserId;
+
+                $stmt->bind_param("iiii", $orderIdVal, $mechanicIdVal, $positionIdVal, $userIdVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                // Clear stored procedure result sets/buffers from MySQLi connection
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extra = self::$conn->use_result()) {
+                        $extra->free();
+                    }
+                }
+
+                return ["success" => true];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to assign mechanic: " . $e->getMessage()
+                ];
+            }
+        }
     }
 ?>

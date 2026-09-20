@@ -43,16 +43,20 @@
 	-- =====================================================================
 
 
-CREATE TABLE mechanics (
-    mechanic_id     INT PRIMARY KEY AUTO_INCREMENT,
-    user_id         INT NOT NULL UNIQUE,
-    position_id     INT NOT NULL,
-    specialization  VARCHAR(100),
-    date_hired      DATE,
-    status          ENUM('ACTIVE','ON_LEAVE','INACTIVE') DEFAULT 'ACTIVE',
-    CONSTRAINT fk_mechanics_user     FOREIGN KEY (user_id)     REFERENCES users(user_id),
-    CONSTRAINT fk_mechanics_position FOREIGN KEY (position_id) REFERENCES mechanic_positions(position_id)
-);
+    -- =====================================================================
+    -- MECHANICS
+    -- position_id removed — position is no longer fixed to the mechanic,
+    -- it varies per assignment again (see repair_order_mechanics below).
+    -- =====================================================================
+    CREATE TABLE mechanics (
+        mechanic_id     INT PRIMARY KEY AUTO_INCREMENT,
+        user_id         INT NOT NULL UNIQUE,
+        specialization  VARCHAR(100),
+        date_hired      DATE,
+        status          ENUM('ACTIVE','ON_LEAVE','INACTIVE') DEFAULT 'ACTIVE',
+        CONSTRAINT fk_mechanics_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+    );
+
 
 	-- =====================================================================
 	-- CUSTOMERS
@@ -155,21 +159,21 @@ CREATE TABLE mechanics (
 	);
 
 
--- =====================================================================
--- REPAIR_ORDER_MECHANICS
--- Now just links WHICH mechanics worked WHICH order — position is no
--- longer stored here, since it's fixed on the mechanic. To see a
--- mechanic's position on an order, join through mechanics.position_id.
--- =====================================================================
-CREATE TABLE repair_order_mechanics (
-    assignment_id   INT PRIMARY KEY AUTO_INCREMENT,
-    order_id        INT NOT NULL,
-    mechanic_id     INT NOT NULL,
-    date_assigned   DATETIME DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_rom_order    FOREIGN KEY (order_id)    REFERENCES repair_orders(order_id),
-    CONSTRAINT fk_rom_mechanic FOREIGN KEY (mechanic_id) REFERENCES mechanics(mechanic_id)
-);
-
+    -- =====================================================================
+    -- REPAIR_ORDER_MECHANICS
+    -- position_id back here — same mechanic can hold different positions
+    -- on different orders.
+    -- =====================================================================
+    CREATE TABLE repair_order_mechanics (
+        assignment_id   INT PRIMARY KEY AUTO_INCREMENT,
+        order_id        INT NOT NULL,
+        mechanic_id     INT NOT NULL,
+        position_id     INT NOT NULL,
+        date_assigned   DATETIME DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_rom_order    FOREIGN KEY (order_id)    REFERENCES repair_orders(order_id),
+        CONSTRAINT fk_rom_mechanic FOREIGN KEY (mechanic_id) REFERENCES mechanics(mechanic_id),
+        CONSTRAINT fk_rom_position FOREIGN KEY (position_id) REFERENCES mechanic_positions(position_id)
+    );
 	-- =====================================================================
 	-- REPAIR_ORDER_PARTS
 	-- =====================================================================
@@ -219,7 +223,6 @@ CREATE TABLE repair_order_mechanics (
 		CONSTRAINT fk_invoice_issuer   FOREIGN KEY (issued_by)   REFERENCES users(user_id),
 		CONSTRAINT fk_invoice_receiver FOREIGN KEY (received_by) REFERENCES users(user_id)
 	);
-    USE VehicleRepair;
 
 
  
@@ -300,9 +303,6 @@ FLUSH PRIVILEGES;
 SHOW GRANTS FOR 'admin_user'@'localhost';
 SHOW GRANTS FOR 'service_advisor'@'localhost';
 SHOW GRANTS FOR 'mechanic'@'localhost';
--- =====================================================================
--- ROLES & POSITIONS
--- =====================================================================
 INSERT INTO roles (role_id, role_name, description) VALUES
 (1, 'Admin', 'Full system access, user & inventory management'),
 (2, 'Service Advisor', 'Handles intake, order assignment, customer records, and billing/payment'),
@@ -334,13 +334,16 @@ INSERT INTO users (user_id, username, password_hash, first_name, middle_name, la
 
 -- =====================================================================
 -- MECHANICS
--- position_id fixed per mechanic: 1=Diagnostician, 2=Lead Mechanic, 3=Electrical Specialist
+-- position_id REMOVED — position is no longer fixed to the mechanic,
+-- it's chosen per assignment again (see repair_order_mechanics below).
+-- specialization stays as advisory info for the Service Advisor's
+-- judgment call, not a hard restriction on what position they can hold.
 -- =====================================================================
-INSERT INTO mechanics (mechanic_id, user_id, position_id, specialization, date_hired, status) VALUES
-(1, 1, 1, 'Engine Diagnostics', '2025-02-01', 'ACTIVE'), -- mkay = Diagnostician
-(2, 4, 2, 'General Repair',     '2025-04-15', 'ACTIVE'), -- lean = Lead Mechanic
-(3, 5, 3, 'Electrical Systems', '2025-06-10', 'ACTIVE'), -- kruu = Electrical Specialist
-(4, 8, 2, 'General Repair',     '2025-01-15', 'ACTIVE'); -- joleks = Lead Mechanic
+INSERT INTO mechanics (mechanic_id, user_id, specialization, date_hired, status) VALUES
+(1, 1, 'Engine Diagnostics', '2025-02-01', 'ACTIVE'), -- mkay
+(2, 4, 'General Repair',     '2025-04-15', 'ACTIVE'), -- lean
+(3, 5, 'Electrical Systems', '2025-06-10', 'ACTIVE'), -- kruu
+(4, 8, 'General Repair',     '2025-01-15', 'ACTIVE'); -- joleks
 
 -- =====================================================================
 -- CUSTOMERS
@@ -401,17 +404,21 @@ INSERT INTO repair_order_services (order_service_id, order_id, service_catalog_i
 
 -- =====================================================================
 -- REPAIR ORDER MECHANICS
--- No position_id here anymore — position is derived via mechanics table.
--- mechanic_id: 1=mkay(Diagnostician), 2=lean(Lead), 3=kruu(Electrical), 4=joleks(Lead)
+-- position_id is BACK — chosen per assignment, not fixed to the mechanic.
+-- position_id: 1=Diagnostician, 2=Lead Mechanic, 3=Electrical Specialist
+-- mechanic_id: 1=mkay, 2=lean, 3=kruu, 4=joleks
+-- Note: mkay (mechanic 1) is Diagnostician on every order here, but
+-- nothing stops him from being assigned a different position on a
+-- future order — that's the whole point of this table shape.
 -- =====================================================================
-INSERT INTO repair_order_mechanics (assignment_id, order_id, mechanic_id, date_assigned) VALUES
-(1, 2, 1, '2026-08-26 10:30:00'), -- mkay diagnosing RO-2
-(2, 3, 1, '2026-08-25 13:50:00'), -- mkay diagnosed RO-3
-(3, 4, 1, '2026-08-24 15:00:00'), -- mkay diagnosed RO-4
-(4, 4, 2, '2026-08-24 16:15:00'), -- lean leading repair on RO-4
-(5, 4, 3, '2026-08-24 16:20:00'), -- kruu handling electrical on RO-4
-(6, 5, 1, '2026-08-23 08:35:00'), -- mkay diagnosed RO-5
-(7, 5, 4, '2026-08-23 09:05:00'); -- joleks led repair on RO-5
+INSERT INTO repair_order_mechanics (assignment_id, order_id, mechanic_id, position_id, date_assigned) VALUES
+(1, 2, 1, 1, '2026-08-26 10:30:00'), -- mkay as Diagnostician on RO-2
+(2, 3, 1, 1, '2026-08-25 13:50:00'), -- mkay as Diagnostician on RO-3
+(3, 4, 1, 1, '2026-08-24 15:00:00'), -- mkay as Diagnostician on RO-4
+(4, 4, 2, 2, '2026-08-24 16:15:00'), -- lean as Lead Mechanic on RO-4
+(5, 4, 3, 3, '2026-08-24 16:20:00'), -- kruu as Electrical Specialist on RO-4
+(6, 5, 1, 1, '2026-08-23 08:35:00'), -- mkay as Diagnostician on RO-5
+(7, 5, 4, 2, '2026-08-23 09:05:00'); -- joleks as Lead Mechanic on RO-5
 
 -- =====================================================================
 -- REPAIR ORDER PARTS
@@ -435,8 +442,9 @@ INSERT INTO invoices (invoice_id, order_id, invoice_date, labor_total, parts_tot
 (2, 5, '2026-08-23 17:05:00', 1000.00, 920.00, 0.00, 0.00, 1920.00, 'CASH', NULL, '2026-08-23 17:10:00', 'PAID', 6, 6);
 
 
-
 DELIMITER //
+
+DROP PROCEDURE IF EXISTS get_all_mechanics //
 
 CREATE PROCEDURE get_all_mechanics()
 BEGIN
@@ -447,17 +455,15 @@ BEGIN
         u.email,
         u.contact_no,
         r.role_name,
-        mp.position_name,
         m.specialization,
         m.date_hired,
         m.status AS mechanic_status
     FROM mechanics m
     JOIN users u ON m.user_id = u.user_id
     JOIN roles r ON u.role_id = r.role_id
-    JOIN mechanic_positions mp ON m.position_id = mp.position_id
     WHERE m.status = "ACTIVE";
 END //
- 
+
 DELIMITER ;
 
 DELIMITER //
@@ -842,9 +848,9 @@ DELIMITER ;
 
 
 DELIMITER //
- 
+
 DROP PROCEDURE IF EXISTS sp_get_repair_order_details //
- 
+
 CREATE PROCEDURE sp_get_repair_order_details(
     IN p_order_id INT
 )
@@ -861,10 +867,10 @@ BEGIN
         CONCAT(v.manufacturer, ' ', v.model, ' ', IFNULL(v.year_model, '')) AS vehicle_name,
         v.plate_number,
         v.vehicle_type,
- 
+
         -- 1. Assigned Mechanics Array
-        -- position now joined via mechanics.position_id (fixed per mechanic),
-        -- not rom.position_id (which no longer exists on this table)
+        -- position joined via rom.position_id — position is chosen per
+        -- assignment again, not fixed on the mechanic.
         CONCAT('[', 
             IFNULL(
                 (
@@ -882,13 +888,13 @@ BEGIN
                     FROM repair_order_mechanics rom
                     JOIN mechanics m ON rom.mechanic_id = m.mechanic_id
                     JOIN users u ON m.user_id = u.user_id
-                    JOIN mechanic_positions mp ON m.position_id = mp.position_id
+                    JOIN mechanic_positions mp ON rom.position_id = mp.position_id
                     WHERE rom.order_id = p_order_id
                 ), 
                 ''
             ), 
         ']') AS assigned_mechanics,
- 
+
         -- 2. Services Array
         CONCAT('[', 
             IFNULL(
@@ -910,7 +916,7 @@ BEGIN
                 ''
             ), 
         ']') AS services,
- 
+
         -- 3. Itemized Parts Array
         CONCAT('[', 
             IFNULL(
@@ -934,7 +940,7 @@ BEGIN
                 ''
             ), 
         ']') AS parts,
- 
+
         -- 4. Financial Calculations
         IFNULL(
             (
@@ -945,7 +951,7 @@ BEGIN
             ), 
             0.00
         ) AS total_labor_cost,
- 
+
         IFNULL(
             (
                 SELECT SUM(quantity_used * unit_price) 
@@ -954,7 +960,7 @@ BEGIN
             ), 
             0.00
         ) AS total_parts_cost,
- 
+
         (
             IFNULL(
                 (
@@ -972,13 +978,13 @@ BEGIN
                 ), 0.00
             )
         ) AS grand_total
- 
+
     FROM repair_orders ro
     JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
     JOIN customers c ON v.customer_id = c.customer_id
     WHERE ro.order_id = p_order_id;
 END //
- 
+
 DELIMITER ;
 -- =====================================================================
 -- sp_correct_intake_details
@@ -1051,7 +1057,6 @@ BEGIN
     END IF;
 END $$
 DELIMITER ;
-
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS sp_assign_diagnostician //
@@ -1064,9 +1069,8 @@ CREATE PROCEDURE sp_assign_diagnostician(
 BEGIN
     DECLARE v_order_exists INT DEFAULT 0;
     DECLARE v_mechanic_exists INT DEFAULT 0;
-    DECLARE v_is_diagnostician INT DEFAULT 0;
+    DECLARE v_diagnostician_position_id INT;
 
-    -- Automatic rollback handler on SQL errors
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -1075,43 +1079,25 @@ BEGIN
 
     START TRANSACTION;
 
-    -- 1. Check if repair order exists
-    SELECT COUNT(*) INTO v_order_exists 
-    FROM repair_orders 
-    WHERE order_id = p_order_id;
-
+    SELECT COUNT(*) INTO v_order_exists FROM repair_orders WHERE order_id = p_order_id;
     IF v_order_exists = 0 THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Repair order not found.';
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Repair order not found.';
     END IF;
 
-    -- 2. Check if mechanic exists and joined to their position role
-    SELECT COUNT(*), 
-           SUM(CASE WHEN LOWER(mp.position_name) LIKE '%diagnostician%' THEN 1 ELSE 0 END)
-    INTO v_mechanic_exists, v_is_diagnostician
-    FROM mechanics m
-    INNER JOIN mechanic_positions mp ON m.position_id = mp.position_id
-    WHERE m.mechanic_id = p_mechanic_id;
-
+    SELECT COUNT(*) INTO v_mechanic_exists FROM mechanics WHERE mechanic_id = p_mechanic_id AND status = 'ACTIVE';
     IF v_mechanic_exists = 0 THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Mechanic not found.';
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Mechanic not found or inactive.';
     END IF;
 
-    -- 3. Validate that the mechanic is a Diagnostician
-    IF v_is_diagnostician = 0 THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Selected mechanic is not authorized as a diagnostician.';
-    END IF;
+    SELECT position_id INTO v_diagnostician_position_id
+    FROM mechanic_positions WHERE position_name = 'Diagnostician';
 
-    -- 4. Update Repair Order status
     UPDATE repair_orders
     SET status = 'AWAITING_DIAGNOSIS'
     WHERE order_id = p_order_id;
 
-    -- 5. Record assignment in repair_order_mechanics
-    INSERT INTO repair_order_mechanics (order_id, mechanic_id, date_assigned)
-    VALUES (p_order_id, p_mechanic_id, NOW());
+    INSERT INTO repair_order_mechanics (order_id, mechanic_id, position_id, date_assigned)
+    VALUES (p_order_id, p_mechanic_id, v_diagnostician_position_id, NOW());
 
     COMMIT;
 END //

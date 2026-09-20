@@ -331,6 +331,59 @@ class RepairOrderController {
         }
         exit();
     }
+    // POST/PUT: Assign a mechanic and position to a repair order
+    public function assignMechanic() {
+
+        $data = $this->getInputData();
+
+        // Support both camelCase and snake_case request parameters
+        $orderId    = $data['order_id'] ?? $data['orderId'] ?? null;
+        $mechanicId = $data['mechanic_id'] ?? $data['mechanicId'] ?? null;
+        $positionId = $data['position_id'] ?? $data['positionId'] ?? $data['pos_id'] ?? $data['posId'] ?? null;
+
+        // Validate required fields
+        if (empty($orderId) || empty($mechanicId) || empty($positionId)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing required fields: order_id, mechanic_id, and position_id"
+            ]);
+            exit();
+        }
+
+        // Verify authentication
+        $createdByUserId = Auth::getUserId();
+        if (!$createdByUserId) {
+            http_response_code(401);
+            echo json_encode(["status" => "error", "error" => "User authentication required"]);
+            exit();
+        }
+
+        try {
+            $response = $this->repairOrderModel->assignMechanic($orderId, $mechanicId, $positionId, $createdByUserId);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"  => "success",
+                    "message" => "Mechanic assigned successfully"
+                ]);
+            } else {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Mechanic assignment failed"
+                ]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
     // Helper method to parse input stream safely
     private function getInputData() {
         $input = json_decode(file_get_contents('php://input'), true);

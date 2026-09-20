@@ -210,6 +210,15 @@
                     case "submit-diagnosis":{
                         $repairOrderController->submitDiagnosis();
                     }
+                    break;
+                    case "assign-mechanic":{
+                        $repairOrderController->assignMechanic();
+                    }
+                    break;
+                    default:
+                        http_response_code(400);
+                        echo json_encode(["error" => "Invalid post-method parameter"]);
+                        exit();
                }
             }
         }
@@ -256,6 +265,10 @@
         break;
         case "mechanics":{
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                if (isset($_GET["available"])) {
+                   $mechanicsController->getAvailableMechanics(); 
+                   exit();
+                }
                echo json_encode(["mechanics" => Mechanic::getAllMechanics()]);
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){

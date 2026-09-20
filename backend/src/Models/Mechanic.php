@@ -98,6 +98,51 @@
 
             return $affectedRows;
         }
+
+        // GET Available Mechanics (Not assigned to a specific repair order)
+        public static function getAvailableMechanics($orderId) {
+            $query = "CALL sp_get_available_mechanics(?)";
+
+            try {
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal = (int)$orderId;
+                $stmt->bind_param("i", $orderIdVal);
+                $stmt->execute();
+
+                $result = $stmt->get_result();
+                $mechanics = [];
+
+                if ($result) {
+                    while ($row = $result->fetch_assoc()) {
+                        $mechanics[] = $row;
+                    }
+                }
+
+                $stmt->close();
+
+                // Clear any stored procedure multi-result sets to prevent "Commands out of sync" errors
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "data" => $mechanics
+                ];
+            } catch (\Exception $e) {
+                return [
+                    "success" => false,
+                    "error" => "Error fetching available mechanics: " . $e->getMessage()
+                ];
+            }
+        }
     }
 
     
