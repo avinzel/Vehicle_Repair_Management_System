@@ -78,50 +78,7 @@
         exit();
     }
     //define role-based permissions for specific actions
-    $rolePermissions = [
-        "repair-orders"=>[
-            "GET" => [1,2,3],
-            "POST" => [1,2],
-            "DELETE" => [1,2],
-            "UPDATE" => [1,2,3]
-        ],
-        "reports"=>[
-            "GET" => [1,2],
-            "POST" => [1,2],
-            "DELETE" => [1,2],
-            "UPDATE" => [1,2,3]
-        ],
-        "users"=>[
-            "GET" => [1],
-            "POST" => [1],
-            "DELETE" => [1],
-            "UPDATE" => [1,2,3]
-        ],
-        "mechanics"=>[
-            "GET" => [1,2],
-            "POST" => [1],
-            "DELETE" => [1],
-            "UPDATE" => [1,3]
-        ],
-        "customers" => [
-            "GET" => [1,2,3],
-            "POST" => [1,2],
-            "DELETE" => [1],
-            "UPDATE" => [1,2,3]
-        ],
-        "invoices" =>[
-            "GET" => [1,2,3],
-            "POST" => [1,2],
-            "DELETE" => [1],
-            "UPDATE" => [1]
-        ],
-        "parts" =>[
-            "GET" => [1,2,3],
-            "POST" => [1,2],
-            "DELETE" => [1],
-            "UPDATE" => [1]
-        ]
-    ];
+    $rolePermissions = Auth::getRolePermissions(); 
 
     $method = $_SERVER["REQUEST_METHOD"]; 
 

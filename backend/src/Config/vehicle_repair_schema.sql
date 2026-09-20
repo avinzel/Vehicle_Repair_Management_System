@@ -177,17 +177,17 @@
 	-- =====================================================================
 	-- REPAIR_ORDER_PARTS
 	-- =====================================================================
-    CREATE TABLE repair_order_parts (
-        order_part_id INT PRIMARY KEY AUTO_INCREMENT,
-        order_id      INT NOT NULL,
-        part_id       INT NOT NULL,
-        batch_number  VARCHAR(50) NOT NULL,
-        quantity_used INT NOT NULL,
-        unit_price    DECIMAL(10,2) NOT NULL,
-        status ENUM('ISSUED', 'PENDING_PARTS', 'CANCELLED') DEFAULT 'ISSUED',
-        CONSTRAINT fk_rop_order FOREIGN KEY (order_id) REFERENCES repair_orders(order_id),
-        CONSTRAINT fk_rop_part  FOREIGN KEY (part_id)  REFERENCES parts_inventory(part_id)
-    );
+	CREATE TABLE repair_order_parts (
+		order_part_id INT PRIMARY KEY AUTO_INCREMENT,
+		order_id      INT NOT NULL,
+		part_id       INT NOT NULL,
+		batch_number  VARCHAR(50) NOT NULL,
+		quantity_used INT NOT NULL,
+		unit_price    DECIMAL(10,2) NOT NULL,
+		status ENUM('ISSUED', 'PENDING_PARTS', 'CANCELLED') DEFAULT 'ISSUED',
+		CONSTRAINT fk_rop_order FOREIGN KEY (order_id) REFERENCES repair_orders(order_id),
+		CONSTRAINT fk_rop_part  FOREIGN KEY (part_id)  REFERENCES parts_inventory(part_id)
+	);
 
 	-- =====================================================================
 	-- MAINTENANCE_HISTORY
@@ -1600,3 +1600,298 @@ BEGIN
 END //
 
 DELIMITER ;
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_get_parts_by_repair_order$$
+
+CREATE PROCEDURE sp_get_parts_by_repair_order(
+    IN p_order_id INT
+)
+BEGIN
+    SELECT 
+        rop.order_part_id,
+        rop.order_id,
+        rop.part_id,
+        pi.part_code,
+        pi.part_name,
+        pi.category,
+        pi.unit,
+        rop.batch_number,
+        rop.quantity_used,
+        rop.unit_price AS unit_price_at_use,
+        pi.unit_price AS current_unit_price,
+        (rop.quantity_used * rop.unit_price) AS subtotal,
+        rop.status AS part_status,
+        pi.status AS inventory_status
+    FROM repair_order_parts rop
+    INNER JOIN parts_inventory pi ON rop.part_id = pi.part_id
+    WHERE rop.order_id = p_order_id
+    ORDER BY rop.order_part_id ASC;
+END$$
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_mark_ready_to_invoice$$
+
+CREATE PROCEDURE sp_mark_ready_to_invoice(
+    IN p_order_id INT,
+    IN p_user_id INT
+)
+sp_lbl: BEGIN
+    DECLARE v_pending_parts_count INT DEFAULT 0;
+    DECLARE v_current_status VARCHAR(50);
+
+    -- 1. Check if repair order exists & fetch current status
+    SELECT status INTO v_current_status
+    FROM repair_orders
+    WHERE order_id = p_order_id;
+
+    IF v_current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 2. Validate current state transitions
+    IF v_current_status IN ('PENDING_DIAGNOSIS','AWAITING_DIAGNOSIS','READY_TO_INVOICE', 'AWAITING_PAYMENT', 'READY_FOR_RELEASE', 'FULFILLED', 'CANCELLED') THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order has already passed the work stage or is cancelled.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 3. Ensure no parts are still pending stock fulfillment
+    SELECT COUNT(*) INTO v_pending_parts_count
+    FROM repair_order_parts
+    WHERE order_id = p_order_id AND status = 'PENDING_PARTS';
+
+    IF v_pending_parts_count > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot mark as Ready to Invoice: There are still parts pending stock fulfillment.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 4. Update Repair Order status and set completion timestamp
+    UPDATE repair_orders
+    SET 
+        status = 'READY_TO_INVOICE',
+        date_completed = NOW()
+    WHERE order_id = p_order_id;
+
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+DROP PROCEDURE IF EXISTS sp_mark_awaiting_payment$$
+
+CREATE PROCEDURE sp_mark_awaiting_payment(
+    IN p_order_id INT,
+    IN p_user_id INT,
+    IN p_tax_rate DECIMAL(5,2),
+    IN p_discount DECIMAL(10,2)
+)
+sp_lbl: BEGIN
+    DECLARE v_current_status VARCHAR(50);
+    DECLARE v_parts_total DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_labor_total DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_subtotal DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_tax_amount DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_total_amount DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_existing_invoice_id INT DEFAULT NULL;
+
+    -- Standard error handling rollback
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    -- 1. Check if repair order exists & verify current status
+    SELECT status INTO v_current_status
+    FROM repair_orders
+    WHERE order_id = p_order_id;
+
+    IF v_current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- Ensure order is in READY_TO_INVOICE state before generating invoice
+    IF v_current_status != 'READY_TO_INVOICE' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot generate invoice: Repair order must be in READY_TO_INVOICE status.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- Check if an active invoice already exists for this order
+    SELECT invoice_id INTO v_existing_invoice_id
+    FROM invoices
+    WHERE order_id = p_order_id AND status != 'VOID'
+    LIMIT 1;
+
+    IF v_existing_invoice_id IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'An active invoice already exists for this repair order.';
+        LEAVE sp_lbl;
+    END IF;
+
+    START TRANSACTION;
+
+    -- 2. Calculate Total Parts Cost (using quantity_used)
+    SELECT IFNULL(SUM(quantity_used * unit_price), 0.00) INTO v_parts_total
+    FROM repair_order_parts
+    WHERE order_id = p_order_id AND status != 'CANCELLED';
+
+    -- 3. Calculate Total Labor Cost (joining repair_order_services with service_catalog)
+    SELECT IFNULL(SUM(sc.standard_labor_cost), 0.00) INTO v_labor_total
+    FROM repair_order_services ros
+    INNER JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+    WHERE ros.order_id = p_order_id;
+
+    -- 4. Compute Financial Totals
+    SET v_subtotal = v_parts_total + v_labor_total;
+    SET v_tax_amount = (v_subtotal - IFNULL(p_discount, 0.00)) * (IFNULL(p_tax_rate, 0.00) / 100);
+    SET v_total_amount = (v_subtotal - IFNULL(p_discount, 0.00)) + v_tax_amount;
+
+    -- 5. Insert record into `invoices` table
+    INSERT INTO invoices (
+        order_id,
+        invoice_date,
+        labor_total,
+        parts_total,
+        discount,
+        tax_amount,
+        total_amount,
+        status,
+        issued_by
+    ) VALUES (
+        p_order_id,
+        NOW(),
+        v_labor_total,
+        v_parts_total,
+        IFNULL(p_discount, 0.00),
+        v_tax_amount,
+        v_total_amount,
+        'UNPAID',
+        p_user_id
+    );
+
+    -- 6. Transition repair_orders status to AWAITING_PAYMENT
+    UPDATE repair_orders
+    SET status = 'AWAITING_PAYMENT'
+    WHERE order_id = p_order_id;
+
+    COMMIT;
+
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_process_invoice_payment$$
+
+CREATE PROCEDURE sp_process_invoice_payment(
+    IN p_order_id INT,
+    IN p_payment_method VARCHAR(20),
+    IN p_payment_reference VARCHAR(100),
+    IN p_received_by INT
+)
+sp_lbl: BEGIN
+    DECLARE v_current_status VARCHAR(50);
+    DECLARE v_invoice_id INT;	
+    DECLARE v_invoice_status VARCHAR(20);
+    DECLARE v_service_summary TEXT DEFAULT '';
+    DECLARE v_current_mileage INT DEFAULT 0;
+
+    -- Exit handler for atomic transaction rollback
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    -- 1. Validate Repair Order Existence & Status
+    SELECT status, IFNULL(mileage_at_service, 0)
+    INTO v_current_status, v_current_mileage
+    FROM repair_orders
+    WHERE order_id = p_order_id;
+
+    IF v_current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+        LEAVE sp_lbl;
+    END IF;
+
+    IF v_current_status != 'AWAITING_PAYMENT' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot process payment: Repair order must be in AWAITING_PAYMENT status.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 2. Validate Invoice Existence & Status
+    SELECT invoice_id, status INTO v_invoice_id, v_invoice_status
+    FROM invoices
+    WHERE order_id = p_order_id
+    LIMIT 1;
+
+    IF v_invoice_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Invoice not found for this repair order.';
+        LEAVE sp_lbl;
+    END IF;
+
+    IF v_invoice_status = 'PAID' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Invoice has already been paid.';
+        LEAVE sp_lbl;
+    END IF;
+
+    START TRANSACTION;
+
+    -- 3. Update Invoice record to PAID
+    UPDATE invoices
+    SET 
+        status = 'PAID',
+        payment_method = p_payment_method,
+        payment_reference = p_payment_reference,
+        payment_date = NOW(),
+        received_by = p_received_by
+    WHERE invoice_id = v_invoice_id;
+
+    -- 4. Transition Repair Order status to FULFILLED
+    UPDATE repair_orders
+    SET 
+        status = 'FULFILLED',
+        date_completed = NOW()
+    WHERE order_id = p_order_id;
+
+    -- 5. Build summary from services performed
+    SELECT IFNULL(GROUP_CONCAT(sc.service_name SEPARATOR ', '), 'General Repair & Maintenance')
+    INTO v_service_summary
+    FROM repair_order_services ros
+    INNER JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+    WHERE ros.order_id = p_order_id;
+
+    -- 6. Insert service record into MAINTENANCE_HISTORY
+    INSERT INTO maintenance_history (
+        order_id,
+        service_date,
+        service_summary,
+        next_service_due_date,
+        next_service_due_mileage
+    ) VALUES (
+        p_order_id,
+        NOW(),
+        v_service_summary,
+        DATE_ADD(NOW(), INTERVAL 6 MONTH),
+        v_current_mileage + 5000
+    );
+
+    COMMIT;
+
+END$$
+
+DELIMITER ;
+
