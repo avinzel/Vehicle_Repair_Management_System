@@ -48,6 +48,7 @@
     use App\Controllers\LoginController;
     use App\Controllers\RoleController;
     use App\Controllers\PartController;
+    use App\Controllers\ServiceController;
     //instance
     $db = new Database();
     $userModel = new User($db);
@@ -63,6 +64,7 @@
     $mechanicsController = new MechanicController(new Mechanic); 
     $invoiceController = new InvoiceController();
     $partController = new PartController();  
+    $serviceController = new ServiceController(); 
 
     $action = $_GET['action'] ?? null;
 
@@ -344,6 +346,21 @@
                     exit(); 
                 }
                 $invoiceController->generateInvoice(); 
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+              
+            }
+        }
+        break;
+        case "services":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                $serviceController->getServices();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+
             }
             if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
               
