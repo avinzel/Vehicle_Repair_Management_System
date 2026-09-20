@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {Link,  useLocation} from "react-router";
+import { Link, useLocation } from "react-router";
 import {
     Wrench,
     LayoutDashboard,
@@ -37,11 +37,9 @@ import { useNavigate } from 'react-router';
 const ROLE_LINKS = {
     Admin: [
         { name: 'Dashboard', icon: LayoutDashboard, href: '#dashboard' },
-        { name: 'Active Repair Orders', icon: ClipboardList, href: '#orders', badgeKey: 'activeOrders' }, //dynamic number of order in the badge
-        { name: 'Customer Records', icon: Users, href: '#customers' },
+        { name: 'Staff', icon: LayoutDashboard, href: '#staff' },
         { name: 'Mechanics', icon: MechanicIcon, href: '#mechanics' },
         { name: 'Parts Inventory', icon: Boxes, href: '#parts', badgeKey: 'lowStock' },
-        { name: 'Billing & Invoicing', icon: CreditCard, href: '#billing' },
         { name: 'Reports', icon: BarChart3, href: '#reports' },
     ],
     'Service Advisor': [
@@ -53,12 +51,16 @@ const ROLE_LINKS = {
         { name: 'Repair Order History', icon: History, href: '/service-advisor/order-history' },
     ],
     Mechanic: [
-        { name: 'Assigned Repair Orders', icon: ClipboardList, href: '#assigned', badgeKey: 'assignedOrders' },//dynamic number of order in the badge
-        { name: 'Diagnostic Log', icon: SquareText, href: '#diagnostic-log' },
-        { name: 'Parts Logger', icon: Cog, href: '#parts-logger' },
+        { name: 'Assigned Orders', icon: ClipboardList, href: '/mechanic', badgeKey: 'assignedOrders' },//dynamic number of order in the badge
+        { name: 'Diagnostic Log', icon: SquareText, href: '/mechanic/diagnostic-log' },
+        { name: 'Parts Logger', icon: Cog, href: '/mechanic/part-logger' },
     ],
 };
 
+// Roles that render a dark sidebar. The actual colors live in index.css
+// under [data-role="..."] as --sidebar-* overrides, so the JSX below can
+// stay role-agnostic and just reference sidebar tokens.
+const DARK_SIDEBAR_ROLES = ['Mechanic'];
 
 export function AppSidebar({
     role = 'Service Advisor',
@@ -73,7 +75,7 @@ export function AppSidebar({
     console.log(location.pathname); // e.g. "/service-advisor/intake"
     let activeHref = '';
 
-    if(location.pathname === "/service-advisor/intake"){
+    if (location.pathname === "/service-advisor/intake") {
         console.log("Intake page is active");
     }
     switch (user["role_id"]) {
@@ -90,6 +92,7 @@ export function AppSidebar({
     const navigate = useNavigate();
 
     const links = ROLE_LINKS[role] ?? ROLE_LINKS['Service Advisor'];
+    const isDarkRole = DARK_SIDEBAR_ROLES.includes(role);
     const initials = userName
         .split(' ')
         .map((part) => part[0])
@@ -123,15 +126,18 @@ export function AppSidebar({
 
     return (
         <>
-            <Sidebar className="border-r border-border bg-background">
-                <SidebarHeader className="p-2 border-b border-border">
+            <Sidebar
+                data-role={isDarkRole ? 'mechanic' : undefined}
+                className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
+            >
+                <SidebarHeader className="p-2 border-b border-sidebar-border">
                     <div className="flex items-center gap-3 px-2 py-2">
-                        <div className="bg-primary text-primary-foreground p-2 rounded-xl flex items-center justify-center shadow-sm">
+                        <div className="bg-sidebar-primary text-sidebar-primary-foreground p-2 rounded-xl flex items-center justify-center shadow-sm">
                             <Wrench className="w-5 h-5" />
                         </div>
                         <div>
-                            <h1 className="font-bold text-foreground text-base tracking-tight">Vehicle Repair MS</h1>
-                            <p className="text-xs text-muted-foreground">Internal Portal</p>
+                            <h1 className="font-bold text-sidebar-foreground text-base tracking-tight">Vehicle Repair MS</h1>
+                            <p className="text-xs text-sidebar-foreground/60">Internal Portal</p>
                         </div>
                     </div>
                 </SidebarHeader>
@@ -150,8 +156,8 @@ export function AppSidebar({
                                                 asChild
                                                 isActive={isActive}
                                                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
-                                                    ? '!bg-primary !text-primary-foreground shadow-sm hover:!bg-primary/90 hover:!text-primary-foreground'
-                                                    : 'text-foreground hover:bg-secondary hover:text-foreground'
+                                                    ? '!bg-sidebar-primary !text-sidebar-primary-foreground shadow-sm hover:!bg-sidebar-primary/90 hover:!text-sidebar-primary-foreground'
+                                                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                                                     }`}
                                             >
                                                 <Link
@@ -159,12 +165,12 @@ export function AppSidebar({
                                                     className="flex items-center justify-between w-full"
                                                 >
                                                     <div className="flex items-center gap-3">
-                                                        <Icon className={`w-4 h-4 ${isActive ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                                                        <Icon className={`w-4 h-4 ${isActive ? 'text-sidebar-primary-foreground' : 'text-sidebar-foreground/60'}`} />
                                                         <span>{link.name}</span>
                                                     </div>
                                                     {badgeValue != null && (
                                                         <span
-                                                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-secondary text-tertiary'
+                                                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground' : 'bg-sidebar-accent text-sidebar-accent-foreground'
                                                                 }`}
                                                         >
                                                             {badgeValue}
@@ -180,22 +186,22 @@ export function AppSidebar({
                     </SidebarGroup>
                 </SidebarContent>
 
-                <SidebarFooter className="p-4 border-t border-border">
+                <SidebarFooter className="p-4 border-t border-sidebar-border">
                     <div className="flex items-center justify-between px-2 relative">
                         <div className="flex items-center gap-3 overflow-hidden">
-                            <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
+                            <div className="w-9 h-9 rounded-full bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
                                 {initials}
                             </div>
                             <div className="overflow-hidden">
-                                <p className="text-sm font-semibold text-foreground truncate">{userName}</p>
-                                <p className="text-xs text-muted-foreground truncate">{role}</p>
+                                <p className="text-sm font-semibold text-sidebar-foreground truncate">{userName}</p>
+                                <p className="text-xs text-sidebar-foreground/60 truncate">{role}</p>
                             </div>
                         </div>
 
                         <div className="relative" ref={menuRef}>
                             <button
                                 onClick={() => setShowMenuDropdown((prev) => !prev)}
-                                className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                                className="p-1.5 rounded-lg hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
                                 aria-label="User options menu"
                                 aria-expanded={showMenuDropdown}
                             >
@@ -203,13 +209,19 @@ export function AppSidebar({
                             </button>
 
                             {showMenuDropdown && (
-                                <div className="absolute bottom-full right-0 mb-2 w-40 bg-card border border-border rounded-lg shadow-lg py-1 z-50">
+                                <div className={`absolute bottom-full right-0 mb-2 w-40 border rounded-lg shadow-lg py-1 z-50 ${isDarkRole
+                                    ? 'bg-sidebar-accent border-sidebar-border'
+                                    : 'bg-card border-border'
+                                    }`}>
                                     <button
                                         onClick={() => {
                                             setShowMenuDropdown(false);
                                             setShowLogoutModal(true);
                                         }}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 text-left transition-colors"
+                                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-left transition-colors ${isDarkRole
+                                            ? 'text-red-400 hover:bg-red-500/10'
+                                            : 'text-red-600 hover:bg-red-50'
+                                            }`}
                                     >
                                         <LogOut className="w-3.5 h-3.5" />
                                         <span>Logout</span>
@@ -227,7 +239,7 @@ export function AppSidebar({
                         <div className="flex justify-between items-center">
                             <h3 className="font-bold text-lg text-foreground">Confirm logout</h3>
                             <button
-                                onClick={() => logout()}
+                                onClick={() => setShowLogoutModal(false)}
                                 className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-secondary transition-colors"
                                 aria-label="Close"
                             >

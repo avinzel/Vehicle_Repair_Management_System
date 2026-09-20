@@ -1,5 +1,5 @@
 "use client"
- 
+
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,15 @@ export const ORDER_STATUSES = [
   "Pending Parts",
 ];
 
-export function OrderFilterBar({ search, onSearchChange, statusFilter, onStatusFilterChange }) {
-  const tabs = ["All", ...ORDER_STATUSES];
- 
+export function OrderFilterBar({
+  search,
+  onSearchChange,
+  statusFilter,
+  onStatusFilterChange,
+  placeholder = "Search by order ID, customer, or vehicle...",
+  tabs = ["All", ...ORDER_STATUSES],
+  showTabs = true,
+}) {
   return (
     <div className="py-6 px-6 space-y-3 ">
       <div className="relative">
@@ -26,28 +32,30 @@ export function OrderFilterBar({ search, onSearchChange, statusFilter, onStatusF
         <Input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search by order ID, customer, or vehicle..."
+          placeholder={placeholder}
           className="pl-9"
         />
       </div>
- 
-      <div className="flex flex-wrap gap-2">
-        {tabs.map((tab) => {
-          const isActive = statusFilter === tab;
-          return (
-            <Button
-              key={tab}
-              type="button"
-              size="sm"
-              variant={isActive ? "default" : "secondary"}
-              onClick={() => onStatusFilterChange(tab)}
-              className="rounded-full"
-            >
-              {tab}
-            </Button>
-          );
-        })}
-      </div>
+
+      {showTabs && (
+        <div className="flex flex-wrap gap-2">
+          {tabs.map((tab) => {
+            const isActive = statusFilter === tab;
+            return (
+              <Button
+                key={tab}
+                type="button"
+                size="sm"
+                variant={isActive ? "default" : "secondary"}
+                onClick={() => onStatusFilterChange(tab)}
+                className="rounded-full"
+              >
+                {tab}
+              </Button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
