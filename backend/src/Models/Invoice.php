@@ -105,5 +105,46 @@
                 ];
             }
         }
+        public function processInvoicePayment($orderId, $paymentMethod, $paymentReference, $receivedByUserId) {
+            try {
+                $query = "CALL sp_process_invoice_payment(?, ?, ?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal     = (int)$orderId;
+                $methodVal      = trim($paymentMethod);
+                $refVal         = !empty($paymentReference) ? trim($paymentReference) : null;
+                $receivedByVal  = (int)$receivedByUserId;
+
+                $stmt->bind_param("issi", $orderIdVal, $methodVal, $refVal, $receivedByVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                // Clear stored procedure result sets from connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "message" => "Payment processed, repair order fulfilled, and maintenance history logged successfully."
+                ];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Payment processing failed: " . $e->getMessage()
+                ];
+            }
+        }
     }
 ?>

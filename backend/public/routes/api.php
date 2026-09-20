@@ -336,6 +336,13 @@
                
             }
             if ($_SERVER["REQUEST_METHOD"] === "POST"){
+                if (isset($_GET["post-method"])) {
+                    $postMethod = $_GET["post-method"]; 
+                    if ($postMethod == "payment") {
+                        $invoiceController->processInvoicePayment(); 
+                    }
+                    exit(); 
+                }
                 $invoiceController->generateInvoice(); 
             }
             if ($_SERVER["REQUEST_METHOD"] === "DELETE"){

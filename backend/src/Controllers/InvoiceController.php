@@ -183,6 +183,76 @@
             }
             exit();
         }
+
+        /**
+         * POST: Process invoice payment and fulfill repair order
+         */
+      /**
+         * POST: Process invoice payment and fulfill repair order
+         */
+        public function processInvoicePayment() {
+            header('Content-Type: application/json');
+
+            // Get authenticated user ID dynamically from session/token
+            $receivedBy = Auth::getUserId();
+            if (!$receivedBy) {
+                http_response_code(401);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "User authentication required."
+                ]);
+                exit();
+            }
+
+            $input = $this->getInputData();
+
+            // Validate required payload fields
+            if (empty($input['order_id']) || empty($input['payment_method'])) {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Missing required payment details (order_id, payment_method)."
+                ]);
+                exit();
+            }
+
+            $orderId       = (int) $input['order_id'];
+            $paymentMethod = trim($input['payment_method']);
+
+            // Generate a random 12-character alphanumeric reference if not provided
+            if (!empty($input['payment_reference'])) {
+                $paymentReference = trim($input['payment_reference']);
+            } else {
+                $paymentReference = 'PAY-' . strtoupper(bin2hex(random_bytes(6)));
+            }
+
+            try {
+                $response = self::$model->processInvoicePayment($orderId, $paymentMethod, $paymentReference, (int)$receivedBy);
+
+                if (isset($response['success']) && $response['success']) {
+                    http_response_code(200);
+                    echo json_encode([
+                        "status"            => "success",
+                        "message"           => "Payment processed and repair order fulfilled successfully.",
+                        "payment_reference" => $paymentReference
+                    ]);
+                } else {
+                    http_response_code(500);
+                    echo json_encode([
+                        "status" => "error",
+                        "error"  => $response['error'] ?? "Payment processing failed"
+                    ]);
+                }
+
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Controller operation failed: " . $e->getMessage()
+                ]);
+            }
+            exit();
+        }
         /**
          * Helper method to decode incoming JSON request body
          */
