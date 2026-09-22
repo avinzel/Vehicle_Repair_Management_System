@@ -43,16 +43,20 @@
 	-- =====================================================================
 
 
-CREATE TABLE mechanics (
-    mechanic_id     INT PRIMARY KEY AUTO_INCREMENT,
-    user_id         INT NOT NULL UNIQUE,
-    position_id     INT NOT NULL,
-    specialization  VARCHAR(100),
-    date_hired      DATE,
-    status          ENUM('ACTIVE','ON_LEAVE','INACTIVE') DEFAULT 'ACTIVE',
-    CONSTRAINT fk_mechanics_user     FOREIGN KEY (user_id)     REFERENCES users(user_id),
-    CONSTRAINT fk_mechanics_position FOREIGN KEY (position_id) REFERENCES mechanic_positions(position_id)
-);
+    -- =====================================================================
+    -- MECHANICS
+    -- position_id removed — position is no longer fixed to the mechanic,
+    -- it varies per assignment again (see repair_order_mechanics below).
+    -- =====================================================================
+    CREATE TABLE mechanics (
+        mechanic_id     INT PRIMARY KEY AUTO_INCREMENT,
+        user_id         INT NOT NULL UNIQUE,
+        specialization  VARCHAR(100),
+        date_hired      DATE,
+        status          ENUM('ACTIVE','ON_LEAVE','INACTIVE') DEFAULT 'ACTIVE',
+        CONSTRAINT fk_mechanics_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+    );
+
 
 	-- =====================================================================
 	-- CUSTOMERS
@@ -155,21 +159,21 @@ CREATE TABLE mechanics (
 	);
 
 
--- =====================================================================
--- REPAIR_ORDER_MECHANICS
--- Now just links WHICH mechanics worked WHICH order — position is no
--- longer stored here, since it's fixed on the mechanic. To see a
--- mechanic's position on an order, join through mechanics.position_id.
--- =====================================================================
-CREATE TABLE repair_order_mechanics (
-    assignment_id   INT PRIMARY KEY AUTO_INCREMENT,
-    order_id        INT NOT NULL,
-    mechanic_id     INT NOT NULL,
-    date_assigned   DATETIME DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_rom_order    FOREIGN KEY (order_id)    REFERENCES repair_orders(order_id),
-    CONSTRAINT fk_rom_mechanic FOREIGN KEY (mechanic_id) REFERENCES mechanics(mechanic_id)
-);
-
+    -- =====================================================================
+    -- REPAIR_ORDER_MECHANICS
+    -- position_id back here — same mechanic can hold different positions
+    -- on different orders.
+    -- =====================================================================
+    CREATE TABLE repair_order_mechanics (
+        assignment_id   INT PRIMARY KEY AUTO_INCREMENT,
+        order_id        INT NOT NULL,
+        mechanic_id     INT NOT NULL,
+        position_id     INT NOT NULL,
+        date_assigned   DATETIME DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_rom_order    FOREIGN KEY (order_id)    REFERENCES repair_orders(order_id),
+        CONSTRAINT fk_rom_mechanic FOREIGN KEY (mechanic_id) REFERENCES mechanics(mechanic_id),
+        CONSTRAINT fk_rom_position FOREIGN KEY (position_id) REFERENCES mechanic_positions(position_id)
+    );
 	-- =====================================================================
 	-- REPAIR_ORDER_PARTS
 	-- =====================================================================
@@ -180,6 +184,7 @@ CREATE TABLE repair_order_mechanics (
 		batch_number  VARCHAR(50) NOT NULL,
 		quantity_used INT NOT NULL,
 		unit_price    DECIMAL(10,2) NOT NULL,
+		status ENUM('ISSUED', 'PENDING_PARTS', 'CANCELLED') DEFAULT 'ISSUED',
 		CONSTRAINT fk_rop_order FOREIGN KEY (order_id) REFERENCES repair_orders(order_id),
 		CONSTRAINT fk_rop_part  FOREIGN KEY (part_id)  REFERENCES parts_inventory(part_id)
 	);
@@ -219,11 +224,85 @@ CREATE TABLE repair_order_mechanics (
 		CONSTRAINT fk_invoice_issuer   FOREIGN KEY (issued_by)   REFERENCES users(user_id),
 		CONSTRAINT fk_invoice_receiver FOREIGN KEY (received_by) REFERENCES users(user_id)
 	);
-    USE VehicleRepair;
 
+
+ 
 -- =====================================================================
--- ROLES & POSITIONS
+-- MYSQL DATABASE USERS & PRIVILEGES
 -- =====================================================================
+ 
+DROP USER IF EXISTS 'admin_user'@'localhost';
+DROP USER IF EXISTS 'service_advisor'@'localhost';
+DROP USER IF EXISTS 'mechanic'@'localhost';
+ 
+CREATE USER 'admin_user'@'localhost'      IDENTIFIED BY 'admin123';
+CREATE USER 'service_advisor'@'localhost' IDENTIFIED BY 'advisor123';
+CREATE USER 'mechanic'@'localhost'        IDENTIFIED BY 'mechanic123';
+
+-- ---------------------------------------------------------------------
+-- ADMIN: buong access
+-- ---------------------------------------------------------------------
+GRANT ALL PRIVILEGES ON VehicleRepair.* TO 'admin_user'@'localhost';
+ 
+ 
+-- ---------------------------------------------------------------------
+-- SERVICE ADVISOR
+-- Screens: Dashboard, New Vehicle Intake, Active Repair Orders,
+--          Customer Records, Billing & Invoicing, Order History
+--
+-- Read access sa lahat ng kailangan ipakita sa screen.
+-- Ang pagsulat (intake, invoice, payment) ay via stored procedure.
+-- ---------------------------------------------------------------------
+GRANT SELECT ON VehicleRepair.customers              TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.vehicles               TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_orders          TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_order_services  TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_order_parts     TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_order_mechanics TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.invoices               TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.maintenance_history    TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.parts_inventory        TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.mechanics              TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.mechanic_positions     TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.service_catalog        TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.users                  TO 'service_advisor'@'localhost';
+GRANT SELECT ON VehicleRepair.roles                  TO 'service_advisor'@'localhost';
+ 
+GRANT EXECUTE ON VehicleRepair.* TO 'service_advisor'@'localhost';
+ 
+ 
+-- ---------------------------------------------------------------------
+-- MECHANIC
+-- Ginagawa: tingnan ang naka-assign na jobs, i-update ang order
+--           (diagnosis notes at status).
+--
+-- UPDATE sa repair_orders LANG ang direktang ibinibigay. Walang direktang
+-- write sa repair_order_parts, repair_order_services, parts_inventory,
+-- o maintenance_history — via stored procedure lahat iyon.
+-- ---------------------------------------------------------------------
+GRANT SELECT, UPDATE ON VehicleRepair.repair_orders TO 'mechanic'@'localhost';
+ 
+GRANT SELECT ON VehicleRepair.repair_order_mechanics TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_order_services  TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.repair_order_parts     TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.parts_inventory        TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.vehicles               TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.customers              TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.maintenance_history    TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.service_catalog        TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.mechanics              TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.mechanic_positions     TO 'mechanic'@'localhost';
+GRANT SELECT ON VehicleRepair.users                  TO 'mechanic'@'localhost';
+ 
+GRANT EXECUTE ON VehicleRepair.* TO 'mechanic'@'localhost';
+ 
+-- Walang access ang Mechanic sa invoices at roles.
+ 
+FLUSH PRIVILEGES;
+ 
+SHOW GRANTS FOR 'admin_user'@'localhost';
+SHOW GRANTS FOR 'service_advisor'@'localhost';
+SHOW GRANTS FOR 'mechanic'@'localhost';
 INSERT INTO roles (role_id, role_name, description) VALUES
 (1, 'Admin', 'Full system access, user & inventory management'),
 (2, 'Service Advisor', 'Handles intake, order assignment, customer records, and billing/payment'),
@@ -255,13 +334,16 @@ INSERT INTO users (user_id, username, password_hash, first_name, middle_name, la
 
 -- =====================================================================
 -- MECHANICS
--- position_id fixed per mechanic: 1=Diagnostician, 2=Lead Mechanic, 3=Electrical Specialist
+-- position_id REMOVED — position is no longer fixed to the mechanic,
+-- it's chosen per assignment again (see repair_order_mechanics below).
+-- specialization stays as advisory info for the Service Advisor's
+-- judgment call, not a hard restriction on what position they can hold.
 -- =====================================================================
-INSERT INTO mechanics (mechanic_id, user_id, position_id, specialization, date_hired, status) VALUES
-(1, 1, 1, 'Engine Diagnostics', '2025-02-01', 'ACTIVE'), -- mkay = Diagnostician
-(2, 4, 2, 'General Repair',     '2025-04-15', 'ACTIVE'), -- lean = Lead Mechanic
-(3, 5, 3, 'Electrical Systems', '2025-06-10', 'ACTIVE'), -- kruu = Electrical Specialist
-(4, 8, 2, 'General Repair',     '2025-01-15', 'ACTIVE'); -- joleks = Lead Mechanic
+INSERT INTO mechanics (mechanic_id, user_id, specialization, date_hired, status) VALUES
+(1, 1, 'Engine Diagnostics', '2025-02-01', 'ACTIVE'), -- mkay
+(2, 4, 'General Repair',     '2025-04-15', 'ACTIVE'), -- lean
+(3, 5, 'Electrical Systems', '2025-06-10', 'ACTIVE'), -- kruu
+(4, 8, 'General Repair',     '2025-01-15', 'ACTIVE'); -- joleks
 
 -- =====================================================================
 -- CUSTOMERS
@@ -322,25 +404,32 @@ INSERT INTO repair_order_services (order_service_id, order_id, service_catalog_i
 
 -- =====================================================================
 -- REPAIR ORDER MECHANICS
--- No position_id here anymore — position is derived via mechanics table.
--- mechanic_id: 1=mkay(Diagnostician), 2=lean(Lead), 3=kruu(Electrical), 4=joleks(Lead)
+-- position_id is BACK — chosen per assignment, not fixed to the mechanic.
+-- position_id: 1=Diagnostician, 2=Lead Mechanic, 3=Electrical Specialist
+-- mechanic_id: 1=mkay, 2=lean, 3=kruu, 4=joleks
+-- Note: mkay (mechanic 1) is Diagnostician on every order here, but
+-- nothing stops him from being assigned a different position on a
+-- future order — that's the whole point of this table shape.
 -- =====================================================================
-INSERT INTO repair_order_mechanics (assignment_id, order_id, mechanic_id, date_assigned) VALUES
-(1, 2, 1, '2026-08-26 10:30:00'), -- mkay diagnosing RO-2
-(2, 3, 1, '2026-08-25 13:50:00'), -- mkay diagnosed RO-3
-(3, 4, 1, '2026-08-24 15:00:00'), -- mkay diagnosed RO-4
-(4, 4, 2, '2026-08-24 16:15:00'), -- lean leading repair on RO-4
-(5, 4, 3, '2026-08-24 16:20:00'), -- kruu handling electrical on RO-4
-(6, 5, 1, '2026-08-23 08:35:00'), -- mkay diagnosed RO-5
-(7, 5, 4, '2026-08-23 09:05:00'); -- joleks led repair on RO-5
+INSERT INTO repair_order_mechanics (assignment_id, order_id, mechanic_id, position_id, date_assigned) VALUES
+(1, 2, 1, 1, '2026-08-26 10:30:00'), -- mkay as Diagnostician on RO-2
+(2, 3, 1, 1, '2026-08-25 13:50:00'), -- mkay as Diagnostician on RO-3
+(3, 4, 1, 1, '2026-08-24 15:00:00'), -- mkay as Diagnostician on RO-4
+(4, 4, 2, 2, '2026-08-24 16:15:00'), -- lean as Lead Mechanic on RO-4
+(5, 4, 3, 3, '2026-08-24 16:20:00'), -- kruu as Electrical Specialist on RO-4
+(6, 5, 1, 1, '2026-08-23 08:35:00'), -- mkay as Diagnostician on RO-5
+(7, 5, 4, 2, '2026-08-23 09:05:00'); -- joleks as Lead Mechanic on RO-5
 
 -- =====================================================================
 -- REPAIR ORDER PARTS
+-- status: ISSUED = part was pulled from inventory and used;
+-- PENDING_PARTS = requested but not yet available; CANCELLED = voided.
+-- All 3 rows here are ISSUED — actual parts used on RO-4 and RO-5.
 -- =====================================================================
-INSERT INTO repair_order_parts (order_part_id, order_id, part_id, batch_number, quantity_used, unit_price) VALUES
-(1, 4, 5, 'BATCH-2026-02', 1, 3800.00), -- Car Battery on RO-4
-(2, 5, 1, 'BATCH-2026-01', 3, 380.00),  -- Engine Oil on RO-5
-(3, 5, 3, 'BATCH-2026-01', 1, 380.00);  -- Air Filter on RO-5
+INSERT INTO repair_order_parts (order_part_id, order_id, part_id, batch_number, quantity_used, unit_price, status) VALUES
+(1, 4, 5, 'BATCH-2026-02', 1, 3800.00, 'ISSUED'), -- Car Battery on RO-4
+(2, 5, 1, 'BATCH-2026-01', 3, 380.00, 'ISSUED'),  -- Engine Oil on RO-5
+(3, 5, 3, 'BATCH-2026-01', 1, 380.00, 'ISSUED');  -- Air Filter on RO-5
 
 -- =====================================================================
 -- MAINTENANCE HISTORY
@@ -356,8 +445,9 @@ INSERT INTO invoices (invoice_id, order_id, invoice_date, labor_total, parts_tot
 (2, 5, '2026-08-23 17:05:00', 1000.00, 920.00, 0.00, 0.00, 1920.00, 'CASH', NULL, '2026-08-23 17:10:00', 'PAID', 6, 6);
 
 
-
 DELIMITER //
+
+DROP PROCEDURE IF EXISTS get_all_mechanics //
 
 CREATE PROCEDURE get_all_mechanics()
 BEGIN
@@ -368,17 +458,15 @@ BEGIN
         u.email,
         u.contact_no,
         r.role_name,
-        mp.position_name,
         m.specialization,
         m.date_hired,
         m.status AS mechanic_status
     FROM mechanics m
     JOIN users u ON m.user_id = u.user_id
     JOIN roles r ON u.role_id = r.role_id
-    JOIN mechanic_positions mp ON m.position_id = mp.position_id
     WHERE m.status = "ACTIVE";
 END //
- 
+
 DELIMITER ;
 
 DELIMITER //
@@ -395,7 +483,7 @@ DELIMITER //
 
 	
 DELIMITER //
-	DROP PROCEDURE sp_populate_dashboard_table; //
+	DROP PROCEDURE IF EXISTS sp_populate_dashboard_table; //
 	CREATE PROCEDURE sp_populate_dashboard_table()
 	BEGIN
 		SELECT 
@@ -763,9 +851,9 @@ DELIMITER ;
 
 
 DELIMITER //
- 
+
 DROP PROCEDURE IF EXISTS sp_get_repair_order_details //
- 
+
 CREATE PROCEDURE sp_get_repair_order_details(
     IN p_order_id INT
 )
@@ -782,10 +870,10 @@ BEGIN
         CONCAT(v.manufacturer, ' ', v.model, ' ', IFNULL(v.year_model, '')) AS vehicle_name,
         v.plate_number,
         v.vehicle_type,
- 
+
         -- 1. Assigned Mechanics Array
-        -- position now joined via mechanics.position_id (fixed per mechanic),
-        -- not rom.position_id (which no longer exists on this table)
+        -- position joined via rom.position_id — position is chosen per
+        -- assignment again, not fixed on the mechanic.
         CONCAT('[', 
             IFNULL(
                 (
@@ -803,13 +891,13 @@ BEGIN
                     FROM repair_order_mechanics rom
                     JOIN mechanics m ON rom.mechanic_id = m.mechanic_id
                     JOIN users u ON m.user_id = u.user_id
-                    JOIN mechanic_positions mp ON m.position_id = mp.position_id
+                    JOIN mechanic_positions mp ON rom.position_id = mp.position_id
                     WHERE rom.order_id = p_order_id
                 ), 
                 ''
             ), 
         ']') AS assigned_mechanics,
- 
+
         -- 2. Services Array
         CONCAT('[', 
             IFNULL(
@@ -831,7 +919,7 @@ BEGIN
                 ''
             ), 
         ']') AS services,
- 
+
         -- 3. Itemized Parts Array
         CONCAT('[', 
             IFNULL(
@@ -855,7 +943,7 @@ BEGIN
                 ''
             ), 
         ']') AS parts,
- 
+
         -- 4. Financial Calculations
         IFNULL(
             (
@@ -866,7 +954,7 @@ BEGIN
             ), 
             0.00
         ) AS total_labor_cost,
- 
+
         IFNULL(
             (
                 SELECT SUM(quantity_used * unit_price) 
@@ -875,7 +963,7 @@ BEGIN
             ), 
             0.00
         ) AS total_parts_cost,
- 
+
         (
             IFNULL(
                 (
@@ -893,11 +981,917 @@ BEGIN
                 ), 0.00
             )
         ) AS grand_total
- 
+
     FROM repair_orders ro
     JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
     JOIN customers c ON v.customer_id = c.customer_id
     WHERE ro.order_id = p_order_id;
 END //
- 
+
 DELIMITER ;
+-- =====================================================================
+-- sp_correct_intake_details
+--
+-- Layunin: pinapayagan ang Service Advisor na ayusin ang mga maling
+-- na-type na detalye (pangalan, contact, plate number, complaint)
+-- MATAPOS magawa ang intake — nang hindi binibigyan ng direktang
+-- GRANT UPDATE sa customers/vehicles/repair_orders.
+--
+-- Bakit ganito: kung DEFINER=root ang procedure, ang procedure mismo
+-- ang gumagawa ng UPDATE — hindi ang tumatawag. Kaya kahit SELECT lang
+-- ang meron ang Service Advisor sa mga table, gumagana pa rin ito.
+--
+-- Sinadyang HINDI kasama: status, diagnosis_notes, mileage,
+-- vehicle_type — mga iyon ay dapat sa ibang proseso/role dumaan
+-- (diagnosis workflow, mechanic updates), hindi basta "typo fix."
+-- =====================================================================
+
+DROP PROCEDURE IF EXISTS sp_correct_intake_details;
+DELIMITER $$
+CREATE PROCEDURE sp_correct_intake_details(
+    IN p_order_id INT,
+    IN p_first_name VARCHAR(75),
+    IN p_middle_name VARCHAR(75),
+    IN p_last_name VARCHAR(75),
+    IN p_contact_no VARCHAR(20),
+    IN p_email VARCHAR(100),
+    IN p_plate_number VARCHAR(20),
+    IN p_complaint VARCHAR(500),
+    OUT p_result VARCHAR(150)
+)
+BEGIN
+    DECLARE v_customer_id INT;
+    DECLARE v_vehicle_id INT;
+    DECLARE v_status VARCHAR(30);
+
+    -- hanapin muna kung sino talaga ang customer/vehicle ng order na ito
+    SELECT ro.status, v.vehicle_id, v.customer_id
+    INTO v_status, v_vehicle_id, v_customer_id
+    FROM repair_orders ro
+    JOIN vehicles v ON v.vehicle_id = ro.vehicle_id
+    WHERE ro.order_id = p_order_id;
+
+    IF v_customer_id IS NULL THEN
+        SET p_result = 'FAILED: Order not found.';
+
+    ELSEIF v_status IN ('FULFILLED', 'CANCELLED') THEN
+        -- huwag nang payagang baguhin ang mga sarado nang order —
+        -- dapat manatiling accurate ang history
+        SET p_result = 'FAILED: Order is already closed, cannot edit.';
+
+    ELSE
+        UPDATE customers
+        SET first_name = p_first_name,
+            middle_name = p_middle_name,
+            last_name   = p_last_name,
+            contact_no  = p_contact_no,
+            email       = p_email
+        WHERE customer_id = v_customer_id;
+
+        UPDATE vehicles
+        SET plate_number = p_plate_number
+        WHERE vehicle_id = v_vehicle_id;
+
+        UPDATE repair_orders
+        SET complaint = p_complaint
+        WHERE order_id = p_order_id;
+
+        SET p_result = 'SUCCESS: Details corrected.';
+    END IF;
+END $$
+DELIMITER ;
+GRANT EXECUTE ON PROCEDURE VehicleRepair.sp_correct_intake_details TO 'service_advisor'@'localhost';
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_assign_diagnostician //
+
+CREATE PROCEDURE sp_assign_diagnostician(
+    IN p_order_id INT,
+    IN p_mechanic_id INT,
+    IN p_created_by INT
+)
+BEGIN
+    DECLARE v_order_exists INT DEFAULT 0;
+    DECLARE v_current_status VARCHAR(50);
+    DECLARE v_mechanic_exists INT DEFAULT 0;
+    DECLARE v_diagnostician_position_id INT DEFAULT NULL;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- 1. Check if repair order exists and fetch current status
+    SELECT COUNT(*), status INTO v_order_exists, v_current_status 
+    FROM repair_orders 
+    WHERE order_id = p_order_id
+    GROUP BY status;
+
+    IF v_order_exists = 0 THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Repair order not found.';
+    END IF;
+
+    -- 2. Validate that order status is strictly PENDING_DIAGNOSIS
+    IF v_current_status != 'PENDING_DIAGNOSIS' THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Cannot assign diagnostician. Order is not in PENDING_DIAGNOSIS status.';
+    END IF;
+
+    -- 3. Check if mechanic exists and is active
+    SELECT COUNT(*) INTO v_mechanic_exists 
+    FROM mechanics 
+    WHERE mechanic_id = p_mechanic_id AND status = 'ACTIVE';
+
+    IF v_mechanic_exists = 0 THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Mechanic not found or inactive.';
+    END IF;
+
+    -- 4. Get position_id for "Diagnostician"
+    SELECT position_id INTO v_diagnostician_position_id
+    FROM mechanic_positions 
+    WHERE position_name = 'Diagnostician'
+    LIMIT 1;
+
+    IF v_diagnostician_position_id IS NULL THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Diagnostician position configuration missing in mechanic_positions table.';
+    END IF;
+
+    -- 5. Update repair order status
+    UPDATE repair_orders
+    SET status = 'AWAITING_DIAGNOSIS'
+    WHERE order_id = p_order_id;
+
+    -- 6. Insert assignment into repair_order_mechanics with position_id
+    INSERT INTO repair_order_mechanics (order_id, mechanic_id, position_id, date_assigned)
+    VALUES (p_order_id, p_mechanic_id, v_diagnostician_position_id, NOW());
+
+    COMMIT;
+END //
+
+DELIMITER ;
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_submit_diagnosis //
+
+CREATE PROCEDURE sp_submit_diagnosis(
+    IN p_order_id INT,
+    IN p_diagnosis_notes TEXT,
+    IN p_services_json JSON,
+    IN p_created_by INT
+)
+BEGIN
+    DECLARE i INT DEFAULT 0;
+    DECLARE v_service_count INT DEFAULT 0;
+    DECLARE v_service_id INT;
+    DECLARE v_order_exists INT DEFAULT 0;
+    DECLARE v_current_status VARCHAR(50);
+    DECLARE v_service_exists INT DEFAULT 0;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- 1. Check if repair order exists and fetch current status
+    SELECT COUNT(*), status INTO v_order_exists, v_current_status 
+    FROM repair_orders 
+    WHERE order_id = p_order_id
+    GROUP BY status;
+
+    IF v_order_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+    END IF;
+
+    -- 2. Validate status: allow initial submission or dynamic updates prior to active repair
+    IF v_current_status NOT IN ('AWAITING_DIAGNOSIS', 'PENDING_MECHANICS') THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot update diagnosis. Work is already in progress or completed.';
+    END IF;
+
+    -- 3. Validate all provided service IDs before applying changes
+    IF p_services_json IS NOT NULL AND JSON_VALID(p_services_json) THEN
+        SET v_service_count = JSON_LENGTH(p_services_json);
+        
+        WHILE i < v_service_count DO
+            SET v_service_id = CAST(JSON_EXTRACT(p_services_json, CONCAT('$[', i, ']')) AS UNSIGNED);
+            
+            SELECT COUNT(*) INTO v_service_exists
+            FROM service_catalog
+            WHERE service_catalog_id = v_service_id;
+
+            IF v_service_exists = 0 THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'One or more selected services do not exist in the catalog.';
+            END IF;
+
+            SET i = i + 1;
+        END WHILE;
+    END IF;
+
+    -- 4. Update Repair Order details
+    UPDATE repair_orders
+    SET status = 'PENDING_MECHANICS',
+        diagnosis_notes = p_diagnosis_notes,
+        diagnosis_completed_at = NOW()
+    WHERE order_id = p_order_id;
+
+    -- 5. Clear old service selections for this order to keep services dynamic
+    DELETE FROM repair_order_services 
+    WHERE order_id = p_order_id;
+
+    -- 6. Insert new/updated service list
+    SET i = 0;
+    IF p_services_json IS NOT NULL AND JSON_VALID(p_services_json) THEN
+        WHILE i < v_service_count DO
+            SET v_service_id = CAST(JSON_EXTRACT(p_services_json, CONCAT('$[', i, ']')) AS UNSIGNED);
+            
+            INSERT INTO repair_order_services (order_id, service_catalog_id)
+            VALUES (p_order_id, v_service_id);
+            
+            SET i = i + 1;
+        END WHILE;
+    END IF;
+
+    COMMIT;
+END //
+
+DELIMITER ;
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_assign_mechanic //
+
+CREATE PROCEDURE sp_assign_mechanic(
+    IN p_order_id INT,
+    IN p_mechanic_id INT,
+    IN p_position_id INT,
+    IN p_created_by INT
+)
+BEGIN
+    DECLARE v_current_status VARCHAR(50) DEFAULT NULL;
+    DECLARE v_mechanic_exists INT DEFAULT 0;
+    DECLARE v_position_exists INT DEFAULT 0;
+    DECLARE v_already_assigned INT DEFAULT 0;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- 1. Check if repair order exists and retrieve current status
+    SELECT status INTO v_current_status 
+    FROM repair_orders 
+    WHERE order_id = p_order_id;
+
+    IF v_current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Repair order not found.';
+    END IF;
+
+    -- 2. Guard Clause: Block assignment during diagnosis stages
+    IF v_current_status IN ('PENDING_DIAGNOSIS', 'AWAITING_DIAGNOSIS') THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Cannot assign mechanics while order is pending or awaiting diagnosis.';
+    ELSEIF v_current_status NOT IN ('PENDING_MECHANICS', 'IN_PROGRESS') THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Cannot assign mechanic. Order is not in a valid stage for crew assignment.';
+    END IF;
+
+    -- 3. Check if mechanic exists and is active
+    SELECT COUNT(*) INTO v_mechanic_exists 
+    FROM mechanics 
+    WHERE mechanic_id = p_mechanic_id AND status = 'ACTIVE';
+
+    IF v_mechanic_exists = 0 THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Mechanic not found or inactive.';
+    END IF;
+
+    -- 4. Check if position_id exists in mechanic_positions catalog
+    SELECT COUNT(*) INTO v_position_exists 
+    FROM mechanic_positions 
+    WHERE position_id = p_position_id;
+
+    IF v_position_exists = 0 THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Selected mechanic position does not exist.';
+    END IF;
+
+    -- 5. CHECK: Is mechanic ALREADY assigned to THIS repair order in ANY position?
+    SELECT COUNT(*) INTO v_already_assigned
+    FROM repair_order_mechanics
+    WHERE order_id = p_order_id 
+      AND mechanic_id = p_mechanic_id;
+
+    IF v_already_assigned > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'This mechanic is already assigned to this repair order.';
+    END IF;
+
+    -- 6. Record assignment in repair_order_mechanics
+    INSERT INTO repair_order_mechanics (order_id, mechanic_id, position_id, date_assigned)
+    VALUES (p_order_id, p_mechanic_id, p_position_id, NOW());
+
+    -- 7. Transition order status from PENDING_MECHANICS to IN_PROGRESS
+    IF v_current_status = 'PENDING_MECHANICS' THEN
+        UPDATE repair_orders
+        SET status = 'IN_PROGRESS'
+        WHERE order_id = p_order_id;
+    END IF;
+
+    COMMIT;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_available_mechanics //
+
+CREATE PROCEDURE sp_get_available_mechanics(
+    IN p_order_id INT
+)
+BEGIN
+    SELECT 
+        m.mechanic_id,
+        u.first_name,
+        u.last_name,
+        CONCAT(u.first_name, ' ', u.last_name) AS full_name,
+        m.specialization,
+        m.status
+    FROM mechanics m
+    INNER JOIN users u ON m.user_id = u.user_id
+    WHERE m.status = 'ACTIVE'
+      AND m.mechanic_id NOT IN (
+          SELECT rom.mechanic_id 
+          FROM repair_order_mechanics rom 
+          WHERE rom.order_id = p_order_id
+      )
+    ORDER BY u.first_name ASC, u.last_name ASC;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_log_repair_order_part //
+
+CREATE PROCEDURE sp_log_repair_order_part(
+    IN p_order_id INT,
+    IN p_part_id INT,
+    IN p_quantity INT
+)
+BEGIN
+    DECLARE v_order_status VARCHAR(50) DEFAULT NULL;
+    DECLARE v_qty_on_hand INT DEFAULT NULL;
+    DECLARE v_unit_price DECIMAL(10,2) DEFAULT NULL;
+    DECLARE v_batch_number VARCHAR(50) DEFAULT NULL;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- 1. Validate Input Quantity
+    IF p_quantity IS NULL OR p_quantity <= 0 THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Quantity must be greater than zero.';
+    END IF;
+
+    -- 2. Lock and Check Repair Order Status
+    SELECT status INTO v_order_status 
+    FROM repair_orders 
+    WHERE order_id = p_order_id
+    FOR UPDATE;
+
+    IF v_order_status IS NULL THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Repair order not found.';
+    END IF;
+
+    -- Guard Clause: Must be IN_PROGRESS or AWAITING_PARTS to log parts
+    IF v_order_status NOT IN ('IN_PROGRESS', 'AWAITING_PARTS') THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Parts can only be logged when order is IN_PROGRESS or AWAITING_PARTS.';
+    END IF;
+
+    -- 3. Lock and Check Part Details from Inventory
+    SELECT quantity_on_hand, unit_price, batch_number 
+    INTO v_qty_on_hand, v_unit_price, v_batch_number
+    FROM parts_inventory 
+    WHERE part_id = p_part_id AND status = 'ACTIVE'
+    FOR UPDATE;
+
+    IF v_unit_price IS NULL THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Selected part is inactive or does not exist.';
+    END IF;
+
+    -- 4. Branching Logic based on Stock Availability
+    IF v_qty_on_hand < p_quantity THEN
+        -- OUT OF STOCK:
+        -- Log request as PENDING_PARTS without deducting inventory
+        INSERT INTO repair_order_parts (
+            order_id, 
+            part_id, 
+            batch_number, 
+            quantity_used, 
+            unit_price,
+            status
+        ) VALUES (
+            p_order_id, 
+            p_part_id, 
+            v_batch_number, 
+            p_quantity, 
+            v_unit_price,
+            'PENDING_PARTS'
+        );
+
+        -- Update main repair order status to AWAITING_PARTS
+        UPDATE repair_orders 
+        SET status = 'AWAITING_PARTS' 
+        WHERE order_id = p_order_id;
+
+    ELSE
+        -- SUFFICIENT STOCK:
+        -- Deduct stock from inventory
+        UPDATE parts_inventory 
+        SET quantity_on_hand = quantity_on_hand - p_quantity 
+        WHERE part_id = p_part_id;
+
+        -- Log request as ISSUED
+        INSERT INTO repair_order_parts (
+            order_id, 
+            part_id, 
+            batch_number, 
+            quantity_used, 
+            unit_price,
+            status
+        ) VALUES (
+            p_order_id, 
+            p_part_id, 
+            v_batch_number, 
+            p_quantity, 
+            v_unit_price,
+            'ISSUED'
+        );
+    END IF;
+
+    COMMIT;
+END //
+
+DELIMITER ;
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_restock_and_fulfill_part //
+
+CREATE PROCEDURE sp_restock_and_fulfill_part(
+    IN p_part_id INT,
+    IN p_restock_qty INT
+)
+BEGIN
+    DECLARE v_remaining_stock INT DEFAULT NULL;
+    DECLARE v_done INT DEFAULT FALSE;
+    
+    -- Variables for cursor iteration
+    DECLARE v_order_part_id INT;
+    DECLARE v_order_id INT;
+    DECLARE v_qty_needed INT;
+    DECLARE v_pending_count INT DEFAULT 0;
+
+    -- Cursor to iterate through pending parts in FIFO order
+    DECLARE pending_cursor CURSOR FOR
+        SELECT order_part_id, order_id, quantity_used
+        FROM repair_order_parts
+        WHERE part_id = p_part_id 
+          AND status = 'PENDING_PARTS'
+        ORDER BY order_part_id ASC;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_done = TRUE;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- 1. Validate Input Quantity
+    IF p_restock_qty IS NULL OR p_restock_qty <= 0 THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Restock quantity must be greater than zero.';
+    END IF;
+
+    -- 2. Verify Part Existence FIRST and Lock Row
+    SELECT quantity_on_hand INTO v_remaining_stock
+    FROM parts_inventory
+    WHERE part_id = p_part_id AND status = 'ACTIVE'
+    FOR UPDATE;
+
+    -- Guard clause: if SELECT INTO didn't match any row, v_remaining_stock stays NULL
+    IF v_remaining_stock IS NULL THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Part does not exist or is inactive.';
+    END IF;
+
+    -- 3. Update Inventory Stock
+    UPDATE parts_inventory
+    SET quantity_on_hand = quantity_on_hand + p_restock_qty
+    WHERE part_id = p_part_id;
+
+    SET v_remaining_stock = v_remaining_stock + p_restock_qty;
+
+    -- 4. Process Pending Repair Orders via FIFO
+    OPEN pending_cursor;
+
+    read_loop: LOOP
+        FETCH pending_cursor INTO v_order_part_id, v_order_id, v_qty_needed;
+        
+        IF v_done OR v_remaining_stock <= 0 THEN
+            LEAVE read_loop;
+        END IF;
+
+        IF v_remaining_stock >= v_qty_needed THEN
+            -- Deduct from local stock count
+            SET v_remaining_stock = v_remaining_stock - v_qty_needed;
+
+            -- Update repair_order_parts status
+            UPDATE repair_order_parts
+            SET status = 'ISSUED'
+            WHERE order_part_id = v_order_part_id;
+
+            -- Check if repair order has any remaining pending parts
+            SELECT COUNT(*) INTO v_pending_count
+            FROM repair_order_parts
+            WHERE order_id = v_order_id AND status = 'PENDING_PARTS';
+
+            -- If all pending items are cleared, set order back to IN_PROGRESS
+            IF v_pending_count = 0 THEN
+                UPDATE repair_orders
+                SET status = 'IN_PROGRESS'
+                WHERE order_id = v_order_id;
+            END IF;
+        END IF;
+
+    END LOOP;
+
+    CLOSE pending_cursor;
+
+    -- 5. Finalize Inventory Quantity
+    UPDATE parts_inventory
+    SET quantity_on_hand = v_remaining_stock
+    WHERE part_id = p_part_id;
+
+    COMMIT;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_parts_inventory //
+
+CREATE PROCEDURE sp_get_parts_inventory(
+    IN p_status VARCHAR(50),
+    IN p_search VARCHAR(255)
+)
+BEGIN
+    -- Format search term with wildcards
+    SET p_search = IF(p_search IS NULL OR TRIM(p_search) = '', NULL, CONCAT('%', TRIM(p_search), '%'));
+
+    SELECT 
+        part_id,
+        part_code,
+        part_name,
+        category,
+        unit,
+        unit_price,
+        quantity_on_hand,
+        reorder_level,
+        batch_number,
+        date_added,
+        status
+    FROM parts_inventory
+    WHERE (p_status = 'ALL' OR p_status IS NULL OR status = p_status)
+      AND (
+          p_search IS NULL 
+          OR part_code LIKE p_search
+          OR part_name LIKE p_search 
+          OR category LIKE p_search
+          OR batch_number LIKE p_search
+      )
+    ORDER BY part_name ASC;
+END //
+
+DELIMITER ;
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_get_parts_by_repair_order$$
+
+CREATE PROCEDURE sp_get_parts_by_repair_order(
+    IN p_order_id INT
+)
+BEGIN
+    SELECT 
+        rop.order_part_id,
+        rop.order_id,
+        rop.part_id,
+        pi.part_code,
+        pi.part_name,
+        pi.category,
+        pi.unit,
+        rop.batch_number,
+        rop.quantity_used,
+        rop.unit_price AS unit_price_at_use,
+        pi.unit_price AS current_unit_price,
+        (rop.quantity_used * rop.unit_price) AS subtotal,
+        rop.status AS part_status,
+        pi.status AS inventory_status
+    FROM repair_order_parts rop
+    INNER JOIN parts_inventory pi ON rop.part_id = pi.part_id
+    WHERE rop.order_id = p_order_id
+    ORDER BY rop.order_part_id ASC;
+END$$
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_mark_ready_to_invoice$$
+
+CREATE PROCEDURE sp_mark_ready_to_invoice(
+    IN p_order_id INT,
+    IN p_user_id INT
+)
+sp_lbl: BEGIN
+    DECLARE v_pending_parts_count INT DEFAULT 0;
+    DECLARE v_current_status VARCHAR(50);
+
+    -- 1. Check if repair order exists & fetch current status
+    SELECT status INTO v_current_status
+    FROM repair_orders
+    WHERE order_id = p_order_id;
+
+    IF v_current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 2. Validate current state transitions
+    IF v_current_status IN ('PENDING_DIAGNOSIS','AWAITING_DIAGNOSIS','READY_TO_INVOICE', 'AWAITING_PAYMENT', 'READY_FOR_RELEASE', 'FULFILLED', 'CANCELLED') THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order has already passed the work stage or is cancelled.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 3. Ensure no parts are still pending stock fulfillment
+    SELECT COUNT(*) INTO v_pending_parts_count
+    FROM repair_order_parts
+    WHERE order_id = p_order_id AND status = 'PENDING_PARTS';
+
+    IF v_pending_parts_count > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot mark as Ready to Invoice: There are still parts pending stock fulfillment.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 4. Update Repair Order status and set completion timestamp
+    UPDATE repair_orders
+    SET 
+        status = 'READY_TO_INVOICE',
+        date_completed = NOW()
+    WHERE order_id = p_order_id;
+
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+DROP PROCEDURE IF EXISTS sp_mark_awaiting_payment$$
+
+CREATE PROCEDURE sp_mark_awaiting_payment(
+    IN p_order_id INT,
+    IN p_user_id INT,
+    IN p_tax_rate DECIMAL(5,2),
+    IN p_discount DECIMAL(10,2)
+)
+sp_lbl: BEGIN
+    DECLARE v_current_status VARCHAR(50);
+    DECLARE v_parts_total DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_labor_total DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_subtotal DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_tax_amount DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_total_amount DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_existing_invoice_id INT DEFAULT NULL;
+
+    -- Standard error handling rollback
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    -- 1. Check if repair order exists & verify current status
+    SELECT status INTO v_current_status
+    FROM repair_orders
+    WHERE order_id = p_order_id;
+
+    IF v_current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- Ensure order is in READY_TO_INVOICE state before generating invoice
+    IF v_current_status != 'READY_TO_INVOICE' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot generate invoice: Repair order must be in READY_TO_INVOICE status.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- Check if an active invoice already exists for this order
+    SELECT invoice_id INTO v_existing_invoice_id
+    FROM invoices
+    WHERE order_id = p_order_id AND status != 'VOID'
+    LIMIT 1;
+
+    IF v_existing_invoice_id IS NOT NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'An active invoice already exists for this repair order.';
+        LEAVE sp_lbl;
+    END IF;
+
+    START TRANSACTION;
+
+    -- 2. Calculate Total Parts Cost (using quantity_used)
+    SELECT IFNULL(SUM(quantity_used * unit_price), 0.00) INTO v_parts_total
+    FROM repair_order_parts
+    WHERE order_id = p_order_id AND status != 'CANCELLED';
+
+    -- 3. Calculate Total Labor Cost (joining repair_order_services with service_catalog)
+    SELECT IFNULL(SUM(sc.standard_labor_cost), 0.00) INTO v_labor_total
+    FROM repair_order_services ros
+    INNER JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+    WHERE ros.order_id = p_order_id;
+
+    -- 4. Compute Financial Totals
+    SET v_subtotal = v_parts_total + v_labor_total;
+    SET v_tax_amount = (v_subtotal - IFNULL(p_discount, 0.00)) * (IFNULL(p_tax_rate, 0.00) / 100);
+    SET v_total_amount = (v_subtotal - IFNULL(p_discount, 0.00)) + v_tax_amount;
+
+    -- 5. Insert record into `invoices` table
+    INSERT INTO invoices (
+        order_id,
+        invoice_date,
+        labor_total,
+        parts_total,
+        discount,
+        tax_amount,
+        total_amount,
+        status,
+        issued_by
+    ) VALUES (
+        p_order_id,
+        NOW(),
+        v_labor_total,
+        v_parts_total,
+        IFNULL(p_discount, 0.00),
+        v_tax_amount,
+        v_total_amount,
+        'UNPAID',
+        p_user_id
+    );
+
+    -- 6. Transition repair_orders status to AWAITING_PAYMENT
+    UPDATE repair_orders
+    SET status = 'AWAITING_PAYMENT'
+    WHERE order_id = p_order_id;
+
+    COMMIT;
+
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_process_invoice_payment$$
+
+CREATE PROCEDURE sp_process_invoice_payment(
+    IN p_order_id INT,
+    IN p_payment_method VARCHAR(20),
+    IN p_payment_reference VARCHAR(100),
+    IN p_received_by INT
+)
+sp_lbl: BEGIN
+    DECLARE v_current_status VARCHAR(50);
+    DECLARE v_invoice_id INT;	
+    DECLARE v_invoice_status VARCHAR(20);
+    DECLARE v_service_summary TEXT DEFAULT '';
+    DECLARE v_current_mileage INT DEFAULT 0;
+
+    -- Exit handler for atomic transaction rollback
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    -- 1. Validate Repair Order Existence & Status
+    SELECT status, IFNULL(mileage_at_service, 0)
+    INTO v_current_status, v_current_mileage
+    FROM repair_orders
+    WHERE order_id = p_order_id;
+
+    IF v_current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+        LEAVE sp_lbl;
+    END IF;
+
+    IF v_current_status != 'AWAITING_PAYMENT' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot process payment: Repair order must be in AWAITING_PAYMENT status.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 2. Validate Invoice Existence & Status
+    SELECT invoice_id, status INTO v_invoice_id, v_invoice_status
+    FROM invoices
+    WHERE order_id = p_order_id
+    LIMIT 1;
+
+    IF v_invoice_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Invoice not found for this repair order.';
+        LEAVE sp_lbl;
+    END IF;
+
+    IF v_invoice_status = 'PAID' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Invoice has already been paid.';
+        LEAVE sp_lbl;
+    END IF;
+
+    START TRANSACTION;
+
+    -- 3. Update Invoice record to PAID
+    UPDATE invoices
+    SET 
+        status = 'PAID',
+        payment_method = p_payment_method,
+        payment_reference = p_payment_reference,
+        payment_date = NOW(),
+        received_by = p_received_by
+    WHERE invoice_id = v_invoice_id;
+
+    -- 4. Transition Repair Order status to FULFILLED
+    UPDATE repair_orders
+    SET 
+        status = 'FULFILLED',
+        date_completed = NOW()
+    WHERE order_id = p_order_id;
+
+    -- 5. Build summary from services performed
+    SELECT IFNULL(GROUP_CONCAT(sc.service_name SEPARATOR ', '), 'General Repair & Maintenance')
+    INTO v_service_summary
+    FROM repair_order_services ros
+    INNER JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+    WHERE ros.order_id = p_order_id;
+
+    -- 6. Insert service record into MAINTENANCE_HISTORY
+    INSERT INTO maintenance_history (
+        order_id,
+        service_date,
+        service_summary,
+        next_service_due_date,
+        next_service_due_mileage
+    ) VALUES (
+        p_order_id,
+        NOW(),
+        v_service_summary,
+        DATE_ADD(NOW(), INTERVAL 6 MONTH),
+        v_current_mileage + 5000
+    );
+
+    COMMIT;
+
+END$$
+
+DELIMITER ;
+

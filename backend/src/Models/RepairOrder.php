@@ -69,8 +69,9 @@ public function processIntake($data, $createdByUserId) {
             $priority    = $data['priority'] ?? 'STANDARD';
             $userId      = (int)$createdByUserId;
 
+
             $stmt->bind_param(
-                "sssssssssiississi",
+                "ssssssssssississi",
                 $firstName,
                 $middleName,
                 $lastName,
@@ -263,6 +264,244 @@ public function processIntake($data, $createdByUserId) {
                 return [
                     "status"  => "error",
                     "message" => "Database operation failed: " . $e->getMessage()
+                ];
+            }
+        }
+        public function assignDiagnostician($orderId, $mechanicId, $createdByUserId) {
+            try {
+                $query = "CALL sp_assign_diagnostician(?, ?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal    = (int)$orderId;
+                $mechanicIdVal = (int)$mechanicId;
+                $userIdVal     = (int)$createdByUserId;
+
+                $stmt->bind_param("iii", $orderIdVal, $mechanicIdVal, $userIdVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                // Clear stored procedure result sets/buffers
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extra = self::$conn->use_result()) { 
+                        $extra->free(); 
+                    }
+                }
+
+                return ["success" => true];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to assign diagnostician: " . $e->getMessage()
+                ];
+            }
+        }
+
+        public function submitDiagnosis($orderId, $notes, $serviceIds, $createdByUserId) {
+            try {
+                $query = "CALL sp_submit_diagnosis(?, ?, ?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal   = (int)$orderId;
+                $notesVal     = trim($notes);
+                $servicesJson = json_encode(array_map('intval', (array)$serviceIds));
+                $userIdVal    = (int)$createdByUserId;
+
+                $stmt->bind_param("issi", $orderIdVal, $notesVal, $servicesJson, $userIdVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extra = self::$conn->use_result()) {
+                        $extra->free();
+                    }
+                }
+
+                return ["success" => true];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to submit diagnosis: " . $e->getMessage()
+                ];
+            }
+        }
+        public function assignMechanic($orderId, $mechanicId, $positionId, $createdByUserId) {
+            try {
+                $query = "CALL sp_assign_mechanic(?, ?, ?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal    = (int)$orderId;
+                $mechanicIdVal = (int)$mechanicId;
+                $positionIdVal = (int)$positionId;
+                $userIdVal     = (int)$createdByUserId;
+
+                $stmt->bind_param("iiii", $orderIdVal, $mechanicIdVal, $positionIdVal, $userIdVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                // Clear stored procedure result sets/buffers from MySQLi connection
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extra = self::$conn->use_result()) {
+                        $extra->free();
+                    }
+                }
+
+                return ["success" => true];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to assign mechanic: " . $e->getMessage()
+                ];
+            }
+        }
+        // POST: Log part to repair order (updates order status to AWAITING_PARTS if stock is insufficient)
+        public static function logPart($orderId, $partId, $quantity) {
+            $query = "CALL sp_log_repair_order_part(?, ?, ?)";
+
+            try {
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal = (int)$orderId;
+                $partIdVal  = (int)$partId;
+                $qtyVal     = (int)$quantity;
+
+                $stmt->bind_param("iii", $orderIdVal, $partIdVal, $qtyVal);
+                $stmt->execute();
+                $stmt->close();
+
+                // Clear stored procedure multi-result set buffer to prevent out of sync errors
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "message" => "Part processed successfully."
+                ];
+            } catch (\Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Error logging part: " . $e->getMessage()
+                ];
+            }
+        }
+        /**
+         * Fetch all parts logged for a specific repair order
+         * 
+         * @param int $orderId
+         * @return array
+         */
+        public function getPartsByRepairOrder($orderId) {
+            try {
+                $query = "CALL sp_get_parts_by_repair_order(?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal = (int)$orderId;
+                $stmt->bind_param("i", $orderIdVal);
+                $stmt->execute();
+
+                $result = $stmt->get_result();
+                $parts = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+                $stmt->close();
+
+                // Clear stored procedure result sets from connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "data"    => $parts
+                ];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Database operation failed: " . $e->getMessage()
+                ];
+            }
+        }
+            /**
+         * Mark a repair order as READY_TO_INVOICE (executed by Lead Mechanic)
+         * 
+         * @param int $orderId
+         * @param int $createdByUserId
+         * @return array
+         */
+        public function markReadyToInvoice($orderId, $createdByUserId) {
+            try {
+                $query = "CALL sp_mark_ready_to_invoice(?, ?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal = (int)$orderId;
+                $userIdVal  = (int)$createdByUserId;
+
+                $stmt->bind_param("ii", $orderIdVal, $userIdVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                // Clear stored procedure result sets from connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "message" => "Repair order successfully marked as READY_TO_INVOICE."
+                ];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to mark ready to invoice: " . $e->getMessage()
                 ];
             }
         }
