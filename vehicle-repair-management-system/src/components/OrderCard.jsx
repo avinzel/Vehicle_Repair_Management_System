@@ -1,14 +1,9 @@
 "use client"
 
-import { MoreHorizontal, User } from "lucide-react";
+import { User } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
-import {
-    Card,
-    CardHeader,
-    CardContent,
-    CardFooter
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
 function formatCurrency(amount) {
@@ -48,13 +43,13 @@ export function OrderCard({ order, isSelected = false, onClick, onMenuClick, rol
                     <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm">{order.id}</span>
                         <StatusBadge status={order.status} />
-                    </div>
-                    <div className="flex flex-col items-end text-xs gap-1">
                         {roleBadge && (
                             <Badge variant="outline" className="text-blue-700 border-blue-200 bg-blue-50">
                                 {roleBadge}
                             </Badge>
                         )}
+                    </div>
+                    <div className="flex items-end text-xs gap-1">
                         <span className="text-muted-foreground mt-0.5">{order.formatted_date ?? order.date}</span>
                     </div>
                 </div>

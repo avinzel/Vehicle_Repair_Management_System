@@ -56,15 +56,21 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg p-3 text-sm">
+      <div className="flex items-start gap-2 bg-primary/5 border border-primary/15 text-primary/80 rounded-lg p-3 text-sm">
         <Info className="w-4 h-4 shrink-0 mt-0.5" />
         <p>
           Record your initial inspection findings here. Include observed symptoms, root cause
-          analysis, and all required services. This will be shared with the full repair crew and
-          used to generate the invoice.
+          analysis, and all required services.
         </p>
       </div>
-
+      {order.complaint && (
+        <div>
+          <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-2 uppercase">
+            Customer Complaint
+          </h3>
+          <p className="text-sm bg-secondary/50 rounded-lg p-3">{order.complaint}</p>
+        </div>
+      )}
       <div className="space-y-2">
         <h3 className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
           Required Services
@@ -94,7 +100,7 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
         {selectedServices.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {selectedServices.map((service) => (
-              <Badge key={service} variant="secondary" className="gap-1 pr-1">
+              <Badge key={service} className="bg-primary/5 border border-primary/15 text-primary gap-1 pr-1">
                 {service}
                 <button
                   type="button"
@@ -164,6 +170,7 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
 
   return (
     <div className="space-y-6">
+      
       <div>
         <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-3 uppercase">
           Team on this Job
@@ -202,7 +209,7 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
           Diagnostic Notes
         </h3>
         {order.diagnosticNotes ? (
-          <p className="text-sm bg-blue-50 border border-blue-200 text-blue-900 rounded-lg p-3">
+          <p className="text-sm bg-primary/5 border border-primary/15 text-primary/80 rounded-lg p-3">
             {order.diagnosticNotes}
           </p>
         ) : iAmTheDiagnosticianStillPending ? (
@@ -264,7 +271,7 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
       {canMarkComplete && (
         <Button
           type="button"
-          className="w-full bg-green-600 hover:bg-green-700 text-white"
+          className="w-full bg-primary text-white"
           onClick={() => onUpdateOrder(order.id, { status: "READY_TO_INVOICE" })}
         >
           ✓ Mark Job Complete — Ready for Billing
