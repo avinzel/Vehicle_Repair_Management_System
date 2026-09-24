@@ -100,6 +100,18 @@
     --sidebar-accent-foreground: #111111;
     --sidebar-border: #E2E8F0;
     --sidebar-ring: #C73C00;
+
+
+  [data-role="mechanic"] {
+    --sidebar:#1a1f2e;               /* Figma tertiary */
+    --sidebar-foreground: #FFFFFF;       /* tertiary-foreground */
+    --sidebar-primary: #C73C00;          /* keep the orange active state */
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #3F4A59;           /* one step lighter, for hover */
+    --sidebar-accent-foreground: #FFFFFF;
+    --sidebar-border: #4A5665;
+    --sidebar-ring: #C73C00;
+  }
 }
 
 .dark {
@@ -134,6 +146,8 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+
+  
 }
 
 @layer base {
