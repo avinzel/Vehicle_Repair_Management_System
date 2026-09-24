@@ -10,7 +10,6 @@
     ]);
     session_start();
 
-   
     // CORS Headers
     header("Access-Control-Allow-Origin: http://localhost:5173");
     header("Access-Control-Allow-Credentials: true");
@@ -198,6 +197,22 @@
                         exit();
                     break;
                }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+                if (isset($_GET["put-method"])) {
+                    $putMethod = $_GET["put-method"]; 
+                    switch($putMethod){
+                        case "cancel-order-part": {
+                            $repairOrderController->cancelRepairOrderPart(); 
+                        }
+                        break;
+                        default : {
+                            http_response_code(400);
+                            echo json_encode(["error" => "Invalid put-method parameter"]);
+                            exit();
+                        }
+                    }
+                }
             }
         }
         break;

@@ -194,8 +194,18 @@ Creates a new repair order and customer/vehicle records.
   "quantity": 2
 }
 ```
+### J. Cancel order part
 
-### J. Mark order ready to invoice
+- URL: `http://localhost:8000/api.php?action=repair-orders&put-method=cancel-order-part`
+- Method: `PUT`
+- Body:
+
+```json
+{
+  "order_part_id": 12
+}
+```
+### K. Mark order ready to invoice
 
 - URL: `http://localhost:8000/api.php?action=repair-orders&post-method=mark-ready-to-invoice`
 - Method: `POST`
@@ -317,9 +327,10 @@ Error responses usually look like:
 3. Diagnosis is submitted with selected services.
 4. Mechanic(s) are assigned to the order.
 5. Parts are logged as used.
-6. Parts are restocked if inventory is insufficient.
-7. Order is marked `READY_TO_INVOICE`.
-8. Invoice is generated.
-9. Payment is processed and order becomes `FULFILLED`.
+6. (Optional) Unused or cancelled parts are returned to inventory via `cancel-order-part`.
+7. Parts are restocked if inventory is insufficient.
+8. Order is marked `READY_TO_INVOICE`.
+9. Invoice is generated.
+10. Payment is processed and order becomes `FULFILLED`.
 
 This is the basic flow the frontend should follow when interacting with the backend.

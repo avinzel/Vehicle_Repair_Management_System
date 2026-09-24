@@ -431,10 +431,7 @@ class RepairOrderController {
         }
         exit();
     }
-    /**
-     * GET/POST: Fetch all parts logged for a specific repair order
-     */
-    public function getPartsByRepairOrder() {
+   public function getPartsByRepairOrder() {
         header('Content-Type: application/json');
 
         // Check GET query parameter first, fallback to JSON body parameter
@@ -462,9 +459,10 @@ class RepairOrderController {
             if (isset($response['success']) && $response['success']) {
                 http_response_code(200);
                 echo json_encode([
-                    "status" => "success",
-                    "count"  => count($response['data']),
-                    "data"   => $response['data']
+                    "status"           => "success",
+                    "count"            => count($response['data']),
+                    "total_parts_cost" => $response['total_parts_cost'] ?? 0.00,
+                    "data"             => $response['data']
                 ]);
             } else {
                 http_response_code(400);
@@ -528,6 +526,51 @@ class RepairOrderController {
                 echo json_encode([
                     "status" => "error",
                     "error"  => $response['error'] ?? "Failed to mark order as ready to invoice"
+                ]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
+// POST/PUT: Cancel a repair order part and restore inventory stock
+    public function cancelRepairOrderPart() {
+        header('Content-Type: application/json');
+
+        $data = $this->getInputData();
+
+        // Support both camelCase and snake_case request parameters, fallback to $_GET
+        $orderPartId = $_GET['order_part_id'] ?? $_GET['orderPartId'] ?? $data['order_part_id'] ?? $data['orderPartId'] ?? null;
+
+        // Validate required parameter
+        if (empty($orderPartId) || !is_numeric($orderPartId)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing or invalid required parameter: order_part_id"
+            ]);
+            exit();
+        }
+
+        try {
+            // Call repair order model cancel method
+            $response = $this->repairOrderModel->cancelRepairOrderPart((int)$orderPartId);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"  => "success",
+                    "message" => $response['message'] ?? "Part cancelled and inventory restored successfully"
+                ]);
+            } else {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Failed to cancel repair order part"
                 ]);
             }
         } catch (Exception $e) {
