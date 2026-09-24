@@ -1626,9 +1626,11 @@ BEGIN
     FROM repair_order_parts rop
     INNER JOIN parts_inventory pi ON rop.part_id = pi.part_id
     WHERE rop.order_id = p_order_id
+      AND rop.status != 'CANCELLED'
     ORDER BY rop.order_part_id ASC;
 END$$
 
+DELIMITER ;
 DELIMITER $$
 
 DROP PROCEDURE IF EXISTS sp_mark_ready_to_invoice$$
@@ -1891,6 +1893,72 @@ sp_lbl: BEGIN
 
     COMMIT;
 
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_cancel_repair_order_part$$
+
+CREATE PROCEDURE sp_cancel_repair_order_part(
+    IN p_order_part_id INT
+)
+BEGIN
+    DECLARE v_part_id INT;
+    DECLARE v_quantity_used INT;
+    DECLARE v_order_id INT;
+    DECLARE v_part_status VARCHAR(50);
+    DECLARE v_order_status VARCHAR(50);
+
+    -- Rollback on any SQL exception
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- 1. Fetch part assignment details and lock row
+    SELECT order_id, part_id, quantity_used, status 
+    INTO v_order_id, v_part_id, v_quantity_used, v_part_status
+    FROM repair_order_parts
+    WHERE order_part_id = p_order_part_id
+    FOR UPDATE;
+
+    -- Verify item exists
+    IF v_part_id IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Repair order part record not found.';
+    END IF;
+
+    -- Check if already cancelled
+    IF v_part_status = 'CANCELLED' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Part item is already cancelled.';
+    END IF;
+
+    -- Verify repair order is not already finalized
+    SELECT status INTO v_order_status 
+    FROM repair_orders 
+    WHERE order_id = v_order_id;
+
+    IF v_order_status IN ('FULFILLED', 'CANCELLED') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot cancel parts from a fulfilled or cancelled repair order.';
+    END IF;
+
+    -- 2. Restore inventory stock using your schema's column: quantity_on_hand
+    UPDATE parts_inventory
+    SET quantity_on_hand = quantity_on_hand + v_quantity_used
+    WHERE part_id = v_part_id;
+
+    -- 3. Mark repair order part as CANCELLED
+    UPDATE repair_order_parts
+    SET status = 'CANCELLED'
+    WHERE order_part_id = p_order_part_id;
+
+    COMMIT;
+
+    SELECT 'Part cancelled and inventory restored successfully.' AS message;
 END$$
 
 DELIMITER ;
