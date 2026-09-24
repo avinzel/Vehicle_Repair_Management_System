@@ -37,7 +37,6 @@ const MOCK_ASSIGNED_ORDERS = [
     customer: "Grace Tan",
     vehicle: "Honda Civic 2022",
     plate: "STU-3344",
-    vinNumber: "1FVAC4DV6MH593254",
     vehicleType: "Car",
     date: "Aug 25, 2026",
     diagnosticNotes:
@@ -56,7 +55,6 @@ const MOCK_ASSIGNED_ORDERS = [
     statusLabel: "Awaiting Payment",
     customer: "Emma Brown",
     vehicle: "Toyota Vios 2019",
-    vinNumber: "1G1JE1112H7212753",
     plate: "GHI-3456",
     vehicleType: "Car",
     date: "Aug 24, 2026",
@@ -78,7 +76,6 @@ const MOCK_ASSIGNED_ORDERS = [
     statusLabel: "Awaiting Diagnosis",
     customer: "James Davis",
     vehicle: "Kawasaki Barako 175",
-    vinNumber: "JKBAFSE13NB503104",
     plate: "JKL-7890",
     vehicleType: "Motorcycle",
     date: "Aug 23, 2026",
@@ -127,8 +124,9 @@ export function AssignedOrders({ currentUserName = "Ben Reyes" }) {
   }
 
   function handleLogParts(orderId) {
-    // TODO: wire to a real "log parts" flow once that page/endpoint exists.
-    console.log("Log parts for", orderId);
+    const order = assignedOrders.find((o) => o.id === orderId);
+    const rawId = order?.rawId ?? orderId;
+    navigate(`/mechanic/part-logger?order_id=${encodeURIComponent(rawId)}`);
   }
 
   // Assigned Orders never hosts the editable diagnosis form — that's
@@ -150,7 +148,6 @@ export function AssignedOrders({ currentUserName = "Ben Reyes" }) {
   return (
     <div className="w-full">
       <div className="px-6 space-y-3">
-
         {visibleOrders.map((order) => (
           <OrderCard
             key={order.id}

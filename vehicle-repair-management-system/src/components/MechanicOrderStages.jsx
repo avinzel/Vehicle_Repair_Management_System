@@ -20,7 +20,7 @@ import { formatStatusLabel } from "@/utils/formatStatusLabel";
 const MOCK_SERVICE_CATALOG = [
   "Brake System Service",
   "Oil Change",
-  "Tune-Up Service",
+  "Tune-Up Service", 
   "Battery Replacement",
   "Tire Replacement",
   "Chain & Sprocket Service",
