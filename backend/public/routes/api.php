@@ -65,6 +65,7 @@
     $partController = new PartController();  
     $serviceController = new ServiceController(); 
 
+    
     $action = $_GET['action'] ?? null;
 
     // Define actions that do not require authentication
