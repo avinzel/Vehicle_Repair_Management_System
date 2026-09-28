@@ -219,7 +219,7 @@
         break;
         case "users": {
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
-               echo json_encode(["users" => User::getAllUsers()]);
+               echo json_encode(["users" => User::getAllStaffs()]);
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
                $userController->updateUser();
@@ -328,6 +328,21 @@
         case "services":{
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
                 $serviceController->getServices();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+              
+            }
+        }
+        break;
+        case "users":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                            
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
                

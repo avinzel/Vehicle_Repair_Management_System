@@ -1963,3 +1963,23 @@ END$$
 
 DELIMITER ;
 
+DELIMITER $$
+
+CREATE PROCEDURE sp_GetStaffMembers()
+BEGIN
+    SELECT 
+        u.user_id,
+        CONCAT(u.first_name, ' ', u.last_name) AS full_name,
+        u.email,
+        u.contact_no AS phone,
+        u.status,
+        DATE(u.created_at) AS since,
+        r.role_id,
+        r.role_name AS role
+    FROM users u
+    INNER JOIN roles r ON u.role_id = r.role_id
+    ORDER BY u.user_id ASC;
+END $$
+
+DELIMITER ;
+

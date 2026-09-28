@@ -88,6 +88,33 @@
                 }
             }
         }
+        public function getAllStaffs() {
+            header('Content-Type: application/json');
+
+            try {
+                $staffs = $this->userModel->getAllStaffs();
+
+                if ($staffs !== false) {
+                    http_response_code(200);
+                    echo json_encode([
+                        "status" => "success",
+                        "data"   => $staffs
+                    ]);
+                } else {
+                    http_response_code(500);
+                    echo json_encode([
+                        "status" => "error",
+                        "error"  => "Failed to retrieve staff members"
+                    ]);
+                }
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Server error: " . $e->getMessage()
+                ]);
+            }
+        }
 
         public function getInputData(){
             $input = json_decode(file_get_contents('php://input'), true);
