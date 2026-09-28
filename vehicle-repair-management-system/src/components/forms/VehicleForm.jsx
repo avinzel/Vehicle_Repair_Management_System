@@ -16,6 +16,7 @@ export const DEFAULT_VEHICLE_VALUES = {
   year: "",
   color: "",
   vinNumber: "",
+  currentMillage: "",
 };
 
 // Pure validation function so it's easy to unit test / reuse
@@ -193,7 +194,7 @@ export const VehicleForm = forwardRef(function VehicleForm(
           )}
         </div>
 
-        <div className="flex flex-col col-span-2 gap-1.5">
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="vinNumber">Vehicle Identification Number (optional)</Label>
           <Input
             id="vinNumber"
@@ -207,7 +208,22 @@ export const VehicleForm = forwardRef(function VehicleForm(
             <p className="text-sm text-destructive">{errors.vinNumber}</p>
           )}
         </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="currentMillage">Current Millage (optional)</Label>
+          <Input
+            id="currentMillage"
+            placeholder="e.g., 10,000"
+            value={values.currentMillage}
+            onChange={handleChange("currentMillage")}
+            aria-invalid={!!showError("currentMillage")}
+            maxlength="6" 
+          />
+          {showError("currentMillage") && (
+            <p className="text-sm text-destructive">{errors.currentMillage}</p>
+          )}
+        </div>
       </form>
+
     </div>
   );
 });

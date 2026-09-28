@@ -1,12 +1,12 @@
 import './App.css'
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate , useNavigate} from "react-router"
+import { Routes, Route, Navigate, useNavigate } from "react-router"
 import { LoginPage } from "./pages/LoginPage/LoginPage";
 import { ServiceAdvisorPage } from './pages/ServiceAdvisorPage/ServiceAdvisorPage';
 import { NotFoundPage } from './pages/NotFoundPage/NotFoundPage';
 import { RegisterPage } from './pages/RegisterPage/RegisterPage';
-import {MechanicPage} from "./pages/MechanicPage/MechanicPage"
-import {Loading} from "./components/Loading"
+import { MechanicPage } from "./pages/MechanicPage/MechanicPage"
+import { Loading } from "./components/Loading"
 import { AdminPage } from './pages/AdminPage/AdminPage';
 import { DashBoardTab } from './pages/ServiceAdvisorPage/DashboardTab';
 import Intake from './pages/ServiceAdvisorPage/Intake';
@@ -14,6 +14,9 @@ import { ActiveRepairOrder } from './pages/ServiceAdvisorPage/ActiveRepairOrder'
 import { CustomerRecords } from './pages/ServiceAdvisorPage/CustomerRecords';
 import { OrderHistory } from './pages/ServiceAdvisorPage/OrderHistory';
 import { Billing } from './pages/ServiceAdvisorPage/Billing';
+import { AssignedOrders } from './pages/MechanicPage/AssignedOrders';
+import { DiagnosticLogs } from './pages/MechanicPage/DiagnosticLogs';
+import { PartsLogger } from './pages/MechanicPage/PartsLogger';
 
 function App() {
   const [user, setUser] = useState(null)
@@ -30,7 +33,7 @@ function App() {
     }
     setLoading(false);
   }
-  
+
   useEffect(() => {
     // login()
     // logout();
@@ -38,38 +41,38 @@ function App() {
   }, []);
   if (loading) {
     return (
-      <Loading/>
+      <Loading />
     )
   }
   return (
     <>
       <Routes>
-        <Route path="/register" element={<RegisterPage/>} />
+        <Route path="/register" element={<RegisterPage />} />
 
         <Route path="/" element={
-          <LoginPage authenticateUser={authenticateUser}/>
-        }/>
-        
+          <LoginPage authenticateUser={authenticateUser} />
+        } />
+
         <Route
           path="/admin"
           element={
             user && Number(user.role_id) === 1 ? (
-              <AdminPage user={user} setUser={setUser}/>
+              <AdminPage user={user} setUser={setUser} />
             ) : (
               <Navigate to="/" replace />
             )
-          } 
+          }
         />
 
         <Route
           path="/service-advisor"
           element={
             user && Number(user.role_id) === 2 ? (
-              <ServiceAdvisorPage user={user} setUser ={setUser} />
+              <ServiceAdvisorPage user={user} setUser={setUser} />
             ) : (
               <Navigate to="/" replace />
             )
-          } 
+          }
         >
           <Route index element={<DashBoardTab />} />
           <Route path="intake" element={<Intake />} />
@@ -78,21 +81,30 @@ function App() {
           {/* Add this dynamic route for specific orders */}
           <Route path="orders/:orderId" element={<ActiveRepairOrder />} />
 
-          <Route path = "customers" element={<CustomerRecords />} />
-          <Route path = "billing" element={<Billing />} />
-          <Route path = "order-history" element={<OrderHistory />} />
+          <Route path="customers" element={<CustomerRecords />} />
+          <Route path="billing" element={<Billing />} />
+          <Route path="order-history" element={<OrderHistory />} />
         </Route>
 
+         {/* Sub-routes now nested as children of /mechanic instead of
+            declared as siblings at the top level — MechanicPage renders
+            an <Outlet />, so its children have to actually be registered
+            as children of this Route for the Outlet to have anything to
+            match against. */}
         <Route
           path="/mechanic"
           element={
-            user && Number(user.role_id) === 3? (
-              <MechanicPage user={user} setUser={setUser}/>
+            user && Number(user.role_id) === 3 ? (
+              <MechanicPage user={user} setUser={setUser} />
             ) : (
               <Navigate to="/" replace />
             )
-          } 
-        />
+          }
+        >
+          <Route index element={<AssignedOrders />} />
+          <Route path="diagnostic-log" element={<DiagnosticLogs />} />
+          <Route path="part-logger" element={<PartsLogger />} />
+        </Route>
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

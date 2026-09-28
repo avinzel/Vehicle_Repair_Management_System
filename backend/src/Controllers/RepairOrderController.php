@@ -331,27 +331,27 @@ class RepairOrderController {
         }
         exit();
     }
-    // POST/PUT: Assign a mechanic to work on a repair order
+    // POST/PUT: Assign a mechanic and position to a repair order
     public function assignMechanic() {
-        header('Content-Type: application/json');
 
         $data = $this->getInputData();
 
         // Support both camelCase and snake_case request parameters
         $orderId    = $data['order_id'] ?? $data['orderId'] ?? null;
         $mechanicId = $data['mechanic_id'] ?? $data['mechanicId'] ?? null;
+        $positionId = $data['position_id'] ?? $data['positionId'] ?? $data['pos_id'] ?? $data['posId'] ?? null;
 
-        // Validate required request parameters
-        if (empty($orderId) || empty($mechanicId)) {
+        // Validate required fields
+        if (empty($orderId) || empty($mechanicId) || empty($positionId)) {
             http_response_code(400);
             echo json_encode([
                 "status" => "error",
-                "error"  => "Missing required fields: order_id and mechanic_id"
+                "error"  => "Missing required fields: order_id, mechanic_id, and position_id"
             ]);
             exit();
         }
 
-        // Validate user authentication
+        // Verify authentication
         $createdByUserId = Auth::getUserId();
         if (!$createdByUserId) {
             http_response_code(401);
@@ -360,14 +360,13 @@ class RepairOrderController {
         }
 
         try {
-            // Call the model method to execute sp_AssignMechanicToOrder
-            $response = $this->repairOrderModel->assignMechanic($orderId, $mechanicId);
+            $response = $this->repairOrderModel->assignMechanic($orderId, $mechanicId, $positionId, $createdByUserId);
 
             if (isset($response['success']) && $response['success']) {
                 http_response_code(200);
                 echo json_encode([
                     "status"  => "success",
-                    "message" => $response['message'] ?? "Mechanic assigned successfully"
+                    "message" => "Mechanic assigned successfully"
                 ]);
             } else {
                 http_response_code(400);
@@ -376,7 +375,204 @@ class RepairOrderController {
                     "error"  => $response['error'] ?? "Mechanic assignment failed"
                 ]);
             }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
+    // POST: Log part to repair order (handles ISSUED vs PENDING_PARTS)
+    public function logPart() {
+        header('Content-Type: application/json');
 
+        $data = $this->getInputData();
+
+        // Support both camelCase and snake_case request parameters
+        $orderId  = $data['order_id'] ?? $data['orderId'] ?? null;
+        $partId   = $data['part_id'] ?? $data['partId'] ?? null;
+        $quantity = $data['quantity'] ?? $data['qty'] ?? null;
+
+        // Validate required fields
+        if (empty($orderId) || empty($partId) || empty($quantity)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing required fields: order_id, part_id, and quantity"
+            ]);
+            exit();
+        }
+
+        try {
+            // Call RepairOrder model logPart method
+            $response = $this->repairOrderModel->logPart((int)$orderId, (int)$partId, (int)$quantity);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"  => "success",
+                    "message" => $response['message'] ?? "Part logged successfully"
+                ]);
+            } else {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Failed to log part"
+                ]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
+   public function getPartsByRepairOrder() {
+        header('Content-Type: application/json');
+
+        // Check GET query parameter first, fallback to JSON body parameter
+        $orderId = $_GET['order_id'] ?? $_GET['orderId'] ?? null;
+
+        if ($orderId === null) {
+            $input = $this->getInputData();
+            $orderId = $input['order_id'] ?? $input['orderId'] ?? null;
+        }
+
+        // Validate parameter
+        if (empty($orderId) || !is_numeric($orderId)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing or invalid required parameter: order_id"
+            ]);
+            exit();
+        }
+
+        try {
+            // Call the model method on $this->repairOrderModel
+            $response = $this->repairOrderModel->getPartsByRepairOrder((int)$orderId);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"           => "success",
+                    "count"            => count($response['data']),
+                    "total_parts_cost" => $response['total_parts_cost'] ?? 0.00,
+                    "data"             => $response['data']
+                ]);
+            } else {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Failed to fetch order parts"
+                ]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
+    /**
+     * POST/PUT: Mark a repair order as READY_TO_INVOICE (executed by Lead Mechanic)
+     */
+    public function markReadyToInvoice() {
+        header('Content-Type: application/json');
+
+        $data = $this->getInputData();
+
+        // Support both camelCase and snake_case request parameters
+        $orderId = $data['order_id'] ?? $data['orderId'] ?? null;
+
+        if (empty($orderId) || !is_numeric($orderId)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing or invalid required parameter: order_id"
+            ]);
+            exit();
+        }
+
+        // Verify authentication
+        $createdByUserId = Auth::getUserId();
+        if (!$createdByUserId) {
+            http_response_code(401);
+            echo json_encode([
+                "status" => "error", 
+                "error"  => "User authentication required"
+            ]);
+            exit();
+        }
+
+        try {
+            // Call model method
+            $response = $this->repairOrderModel->markReadyToInvoice((int)$orderId, (int)$createdByUserId);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"  => "success",
+                    "message" => $response['message'] ?? "Repair order marked as ready to invoice successfully"
+                ]);
+            } else {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Failed to mark order as ready to invoice"
+                ]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
+// POST/PUT: Cancel a repair order part and restore inventory stock
+    public function cancelRepairOrderPart() {
+        header('Content-Type: application/json');
+
+        $data = $this->getInputData();
+
+        // Support both camelCase and snake_case request parameters, fallback to $_GET
+        $orderPartId = $_GET['order_part_id'] ?? $_GET['orderPartId'] ?? $data['order_part_id'] ?? $data['orderPartId'] ?? null;
+
+        // Validate required parameter
+        if (empty($orderPartId) || !is_numeric($orderPartId)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing or invalid required parameter: order_part_id"
+            ]);
+            exit();
+        }
+
+        try {
+            // Call repair order model cancel method
+            $response = $this->repairOrderModel->cancelRepairOrderPart((int)$orderPartId);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"  => "success",
+                    "message" => $response['message'] ?? "Part cancelled and inventory restored successfully"
+                ]);
+            } else {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Failed to cancel repair order part"
+                ]);
+            }
         } catch (Exception $e) {
             http_response_code(500);
             echo json_encode([

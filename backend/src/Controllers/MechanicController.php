@@ -116,6 +116,40 @@ class MechanicController {
             echo json_encode(["error" => "Database operation failed: " . $e->getMessage()]);
         }
     }
+    // GET: Fetch available mechanics not yet assigned to a given repair order
+    public function getAvailableMechanics() {
+
+        $orderId = $_GET['order_id'] ?? $_GET['orderId'] ?? null;
+
+        if (!$orderId) {
+            $data = $this->getInputData();
+            $orderId = $data['order_id'] ?? $data['orderId'] ?? null;
+        }
+
+        if (!$orderId) {
+            http_response_code(400);
+            echo json_encode(["error" => "order_id is required"]);
+            return;
+        }
+
+        try {
+            $response = Mechanic::getAvailableMechanics((int)$orderId);
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "message" => "Available mechanics fetched successfully",
+                    "data" => $response['data']
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode(["error" => $response['error'] ?? "Failed to fetch available mechanics"]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(["error" => "Database operation failed: " . $e->getMessage()]);
+        }
+    }
 
     // Helper method to parse input stream safely
     public function getInputData() {

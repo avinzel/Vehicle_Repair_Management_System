@@ -76,9 +76,13 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
               <p className="text-xs text-muted-foreground">Type</p>
               <p className="font-medium">{order.vehicleType ?? order.vehicle_type}</p>
             </div>
-            <div className="col-span-2 bg-secondary/50 rounded-lg p-3">
+            <div className="bg-secondary/50 rounded-lg p-3">
               <p className="text-xs text-muted-foreground">VIN Number</p>
               <p className="font-medium">{order.vinNumber ??  '—'}</p>
+            </div>
+            <div className="bg-secondary/50 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground">Current Millage</p>
+              <p className="font-medium">{order.currentMillage ??  '—'}</p>
             </div>
           </div>
         </div>
