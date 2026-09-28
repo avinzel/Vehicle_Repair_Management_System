@@ -167,6 +167,18 @@ use Exception;
                 ];
             }
         }
+        public static function getAllStaffs() {
+            $query = "CALL sp_GetStaffMembers()";
+            $stmt = self::$conn->prepare($query);
+            try {
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $data = $result->fetch_all(MYSQLI_ASSOC);
+                return $data;
+            } catch (\Exception $e) {
+                return false;
+            }
+        }
     }
     
 ?>
