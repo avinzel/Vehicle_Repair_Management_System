@@ -167,6 +167,45 @@ use Exception;
                 ];
             }
         }
+        public static function getAllStaffs() {
+            $query = "CALL sp_GetStaffMembers()";
+            $stmt = self::$conn->prepare($query);
+            try {
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $data = $result->fetch_all(MYSQLI_ASSOC);
+                return $data;
+            } catch (\Exception $e) {
+                return false;
+            }
+        }
+            /**
+         * Get mechanic_id associated with a given user_id
+         * 
+         * @param int $userId
+         * @return int|null|false
+         */
+        public static function getMechanicIdByUserId(int $userId) {
+            $query = "SELECT mechanic_id FROM mechanics WHERE user_id = ?";
+            
+            $stmt = self::$conn->prepare($query);
+            if (!$stmt) {
+                return false;
+            }
+
+            $stmt->bind_param("i", $userId);
+
+            try {
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $row = $result->fetch_assoc();
+                $stmt->close();
+
+                return $row ? (int)$row['mechanic_id'] : null;
+            } catch (\Exception $e) {
+                return false;
+            }
+        }
     }
     
 ?>

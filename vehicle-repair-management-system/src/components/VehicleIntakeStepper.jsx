@@ -1,5 +1,5 @@
 "use client"
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Stepper,
@@ -33,6 +33,10 @@ export function VehicleIntakeStepper({getTableData, getCardData}) {
     vehicle: DEFAULT_VEHICLE_VALUES,
     order: DEFAULT_REPAIR_ORDER_VALUES,
   });
+
+  // Success screen state (shown in place of the stepper after submit)
+  const [completed, setCompleted] = useState(false);
+  const [summary, setSummary] = useState({ customer: "", vehicle: "", status: "Pending Diagnosis" });
 
   const customerRef = useRef(null);
   const vehicleRef = useRef(null);
@@ -75,7 +79,15 @@ export function VehicleIntakeStepper({getTableData, getCardData}) {
     if (!response.ok) {
       alert(data["error"]);
     }else{
-       alert(data["message"]);
+       // Snapshot before the form is reset. Adjust field names to match your forms.
+       const c = formData.customer;
+       const v = formData.vehicle;
+       setSummary({
+         customer: (c.name || [c.firstName, c.lastName].filter(Boolean).join(" ")).toUpperCase(),
+         vehicle: [v.make, v.model, v.year].filter(Boolean).join(" "),
+         status: "Pending Diagnosis",
+       });
+       setCompleted(true);
        setFormData({
           customer: DEFAULT_CUSTOMER_VALUES,
           vehicle: DEFAULT_VEHICLE_VALUES,
@@ -86,6 +98,40 @@ export function VehicleIntakeStepper({getTableData, getCardData}) {
         if (typeof getTableData === "function") await getTableData();
     }
   };
+
+  if (completed) {
+    return (
+      <div className="w-full max-w-5xl mx-auto p-6 flex justify-center">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-10 text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
+            <Check className="h-9 w-9 text-green-600" strokeWidth={2.5} />
+          </div>
+
+          <h2 className="mt-4 text-xl font-bold">Repair Order Created!</h2>
+
+          <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+            <p>Customer: <span className="font-medium text-foreground">{summary.customer}</span></p>
+            <p>Vehicle: <span className="font-medium text-foreground">{summary.vehicle}</span></p>
+            <p className="flex items-center justify-center gap-2">
+              Status:
+              <span className="rounded-full border border-yellow-300 bg-yellow-50 px-3 py-0.5 text-xs font-medium text-yellow-800">
+                {summary.status}
+              </span>
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            size="lg"
+            className="mt-6 w-full"
+            onClick={() => setCompleted(false)}
+          >
+            Create Another Order
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-5xl mx-auto p-6">

@@ -31,12 +31,13 @@
             return $_SESSION['role_id'] ?? null;
         }
 
+
         
         public static function getRolePermissions(){
             return [
                 "repair-orders"=>[
                     "GET" => [1,2,3],
-                    "POST" => [1,2],
+                    "POST" => [1,2,3],
                     "DELETE" => [1,2],
                     "UPDATE" => [1,2,3]
                 ],
@@ -72,11 +73,17 @@
                 ],
                 "parts" =>[
                     "GET" => [1,2,3],
-                    "POST" => [1,2],
+                    "POST" => [1,2,3],
                     "DELETE" => [1],
                     "UPDATE" => [1]
                 ],
                 "services" =>[
+                    "GET" => [1,2,3],
+                    "POST" => [1],
+                    "DELETE" => [1],
+                    "UPDATE" => [1]
+                ],
+                "mechanic-position"=>[
                     "GET" => [1,2,3],
                     "POST" => [1],
                     "DELETE" => [1],

@@ -146,5 +146,64 @@
                 ];
             }
         }
+/**
+         * Fetch full invoice breakdown and assigned mechanics for modal UI
+         * 
+         * @param int $orderId
+         * @return array
+         */
+        public function getInvoiceDetails($orderId) {
+            try {
+                $orderIdVal = (int)$orderId;
+                $query = "CALL sp_get_invoice_details({$orderIdVal})";
+
+                if (!self::$conn->multi_query($query)) {
+                    throw new Exception("Query failed: " . self::$conn->error);
+                }
+
+                $invoiceData = [];
+                $mechanics = [];
+                $resultSetIndex = 0;
+
+                do {
+                    if ($result = self::$conn->store_result()) {
+                        $rows = $result->fetch_all(MYSQLI_ASSOC);
+                        
+                        if ($resultSetIndex === 0) {
+                            $invoiceData = !empty($rows) ? $rows[0] : [];
+                        } elseif ($resultSetIndex === 1) {
+                            $mechanics = $rows;
+                        }
+                        
+                        $result->free();
+                    }
+                    $resultSetIndex++;
+                } while (self::$conn->more_results() && self::$conn->next_result());
+
+                // If mechanics came back in index 0 because invoice record wasn't returned
+                if (empty($invoiceData) && !empty($mechanics)) {
+                    return [
+                        "success" => true,
+                        "data" => [
+                            "order_id"  => $orderIdVal,
+                            "mechanics" => $mechanics
+                        ]
+                    ];
+                }
+
+                $invoiceData['mechanics'] = $mechanics;
+
+                return [
+                    "success" => true,
+                    "data" => $invoiceData
+                ];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error" => "Failed to fetch invoice details: " . $e->getMessage()
+                ];
+            }
+        }
     }
 ?>
