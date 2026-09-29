@@ -501,7 +501,6 @@ DELIMITER //
 
 	DELIMITER ;
 
-
 DELIMITER //
 
 CREATE PROCEDURE sp_create_vehicle_intake(
@@ -534,7 +533,13 @@ CREATE PROCEDURE sp_create_vehicle_intake(
     OUT p_vehicle_id INT
 )
 BEGIN
+    -- Declare local variable to hold sanitized VIN
+    DECLARE v_vin VARCHAR(50);
+
     START TRANSACTION;
+
+    -- Converts "" (empty string) to NULL
+    SET v_vin = NULLIF(TRIM(p_vin_number), '');
 
     -- 1. Check if vehicle exists by plate number
     SELECT vehicle_id, customer_id 
@@ -569,8 +574,9 @@ BEGIN
 
     -- 4. Handle Vehicle (Insert if new, Sync mileage & color if existing)
     IF p_vehicle_id IS NULL THEN
+        -- Use v_vin here instead of p_vin_number
         INSERT INTO vehicles (customer_id, plate_number, vehicle_type, manufacturer, model, year_model, color, vin_number, current_mileage)
-        VALUES (p_customer_id, p_plate_number, p_vehicle_type, p_manufacturer, p_model, p_year_model, p_color, p_vin_number, p_current_mileage);
+        VALUES (p_customer_id, p_plate_number, p_vehicle_type, p_manufacturer, p_model, p_year_model, p_color, v_vin, p_current_mileage);
         
         SET p_vehicle_id = LAST_INSERT_ID();
     ELSE
@@ -1982,4 +1988,150 @@ BEGIN
 END $$
 
 DELIMITER ;
+
+DELIMITER //
+
+CREATE PROCEDURE sp_get_invoice_details(
+    IN p_order_id INT
+)
+BEGIN
+    -- -----------------------------------------------------------	------
+    -- 1. MAIN INVOICE & ORDER SUMMARY RESULT SET
+    -- Handles READY_TO_INVOICE, AWAITING_PAYMENT, and FULFILLED
+    -- -----------------------------------------------------------------
+    SELECT 
+        ro.order_id,
+        CONCAT('RO-', ro.order_id) AS order_number,
+        ro.status AS order_status,
+        
+        -- Customer Details
+        CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+        
+        -- Vehicle Details
+        CONCAT(v.manufacturer, ' ', v.model, ' ', IFNULL(v.year_model, '')) AS vehicle_info,
+        
+        -- Invoice Breakdown (Uses existing invoice record IF created; otherwise calculates dynamically)
+        IFNULL(inv.labor_total, (
+            SELECT IFNULL(SUM(sc.standard_labor_cost), 0.00)
+            FROM repair_order_services ros
+            JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+            WHERE ros.order_id = ro.order_id
+        )) AS labor_charges,
+        
+        IFNULL(inv.parts_total, (
+            SELECT IFNULL(SUM(rop.quantity_used * rop.unit_price), 0.00)
+            FROM repair_order_parts rop
+            WHERE rop.order_id = ro.order_id AND rop.status = 'ISSUED'
+        )) AS parts_charges,
+        
+        IFNULL(inv.discount, 0.00) AS discount,
+        IFNULL(inv.tax_amount, 0.00) AS tax_amount,
+        
+        IFNULL(inv.total_amount, (
+            (
+                SELECT IFNULL(SUM(sc.standard_labor_cost), 0.00)
+                FROM repair_order_services ros
+                JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+                WHERE ros.order_id = ro.order_id
+            ) + (
+                SELECT IFNULL(SUM(rop.quantity_used * rop.unit_price), 0.00)
+                FROM repair_order_parts rop
+                WHERE rop.order_id = ro.order_id AND rop.status = 'ISSUED'
+            )
+        )) AS total_due,
+        
+        -- Invoice Status Flags
+        inv.status AS invoice_status,
+        inv.payment_method,
+        inv.payment_reference,
+        inv.payment_date
+
+    FROM repair_orders ro
+    JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
+    JOIN customers c ON v.customer_id = c.customer_id
+    LEFT JOIN invoices inv ON ro.order_id = inv.order_id
+    WHERE ro.order_id = p_order_id
+      AND ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', 'FULFILLED');
+
+
+    -- -----------------------------------------------------------------
+    -- 2. MECHANICS ON JOB RESULT SET
+    -- -----------------------------------------------------------------
+    SELECT 
+        rom.assignment_id,
+        CONCAT(u.first_name, ' ', u.last_name) AS mechanic_name,
+        mp.position_name AS position
+    FROM repair_order_mechanics rom
+    JOIN mechanics m ON rom.mechanic_id = m.mechanic_id
+    JOIN users u ON m.user_id = u.user_id
+    JOIN mechanic_positions mp ON rom.position_id = mp.position_id
+    WHERE rom.order_id = p_order_id;
+
+END //
+
+DELIMITER ;
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_get_mechanic_work_orders$$
+
+CREATE PROCEDURE sp_get_mechanic_work_orders(
+    IN p_mechanic_id INT
+)
+BEGIN
+    SELECT 
+        ro.order_id,
+        CONCAT('RO-', ro.order_id) AS formatted_ro_number,
+        ro.status AS order_status,
+        ro.priority,
+        ro.complaint,
+        ro.diagnosis_notes,
+        ro.date_received,
+        
+        -- Customer Information
+        CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+        
+        -- Vehicle Information
+        v.manufacturer,
+        v.model,
+        v.year_model,
+        v.plate_number,
+        CONCAT(v.manufacturer, ' ', v.model, 
+            IF(v.year_model IS NOT NULL, CONCAT(' ', v.year_model), ''), 
+            ' · ', v.plate_number) AS vehicle_summary,
+        
+        -- Mechanic Assignment Position on this Order
+        mp.position_name AS assigned_position,
+        
+        -- Aggregated Metrics (Parts & Total Assigned Mechanics)
+        (
+            SELECT COUNT(DISTINCT rop.part_id)
+            FROM repair_order_parts rop
+            WHERE rop.order_id = ro.order_id 
+              AND rop.status != 'CANCELLED'
+        ) AS parts_logged_count,
+        
+        (
+            SELECT COUNT(DISTINCT rom2.mechanic_id)
+            FROM repair_order_mechanics rom2
+            WHERE rom2.order_id = ro.order_id
+        ) AS total_mechanics_count
+
+    FROM repair_order_mechanics rom
+    INNER JOIN repair_orders ro 
+        ON rom.order_id = ro.order_id
+    INNER JOIN vehicles v 
+        ON ro.vehicle_id = v.vehicle_id
+    INNER JOIN customers c 
+        ON v.customer_id = c.customer_id
+    INNER JOIN mechanic_positions mp 
+        ON rom.position_id = mp.position_id
+    WHERE rom.mechanic_id = p_mechanic_id
+    ORDER BY ro.date_received DESC;
+
+END$$
+
+DELIMITER ;
+
+
 

@@ -36,6 +36,7 @@
     use App\Auth\Auth;
     use App\Config\Database;
     use App\Models\User;
+    use App\Models\MechanicPosition;
 
     //controllers
     use App\Controllers\UserController;
@@ -52,6 +53,7 @@
     $db = new Database();
     $userModel = new User($db);
     $auth = new Auth();
+    new MechanicPosition($db); 
     $serviceAdvisorDashboard = new RepairOrder();
 
     $userController = new UserController($userModel);
@@ -120,48 +122,42 @@
             break;
         case "repair-orders":{
             if ($_SERVER["REQUEST_METHOD"] === "GET") {
-                // 1. Role Guard
-                if ($auth->getRoleId() != 2) {
-                    http_response_code(403);
-                    echo json_encode(["error" => "Forbidden: Unauthorized role"]);
+                $category = $_GET["category"] ?? null;
+                // 2. Default Dashboard (No category param)
+                if (!$category) {
+                    $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
+                    http_response_code(200);
+                    echo json_encode(["data" => $dashboardData]);
                     exit();
-                }else{
-                    $category = $_GET["category"] ?? null;
+                }
 
-                    // 2. Default Dashboard (No category param)
-                    if (!$category) {
-                        $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
-                        http_response_code(200);
-                        echo json_encode(["data" => $dashboardData]);
-                        exit();
-                    }
-
-                    // 3. Category Router
-                    switch ($category) {
-                        case "active":
-                            if (isset($_GET["order_id"])) {
-                                $repairOrderController->getRepairOrderDetails();
-                                exit();
-                            }
-                            $repairOrderController->getActiveRepairOrders();
-                            break;
-
-                        case "inactive":
-                            $invoiceController->getBillingAndInvoicingRecords();
-                            break;
-
-                        case "history":
-                            $repairOrderController->getOrderHistory();
-                            break;
-                        case "parts-by-order":
-                            $repairOrderController->getPartsByRepairOrder();
-                            break;
-
-                        default:
-                            http_response_code(400);
-                            echo json_encode(["error" => "Invalid category parameter"]);
+                // 3. Category Router
+                switch ($category) {
+                    case "active":
+                        if (isset($_GET["order_id"])) {
+                            $repairOrderController->getRepairOrderDetails();
                             exit();
-                    }
+                        }
+                        $repairOrderController->getActiveRepairOrders();
+                        break;
+
+                    case "inactive":
+                        $invoiceController->getBillingAndInvoicingRecords();
+                        break;
+
+                    case "history":
+                        $repairOrderController->getOrderHistory();
+                        break;
+                    case "parts-by-order":
+                        $repairOrderController->getPartsByRepairOrder();
+                        break;
+                    case "assigned":
+                        $repairOrderController->getMechanicWorkOrders();
+                        break;
+                    default:
+                        http_response_code(400);
+                        echo json_encode(["error" => "Invalid category parameter"]);
+                        exit();
                 }
             }
             if ($_SERVER["REQUEST_METHOD"] === "POST"){
@@ -275,6 +271,7 @@
                $mechanicsController->deleteMechanic();
             }
         }
+        break;
         case "parts": {
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
                 $partController->getParts();
@@ -305,7 +302,12 @@
         break;
         case "invoices":{
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
-
+                $input = json_decode(file_get_contents('php://input'), true);
+                $order_id = $input["order_id"]; 
+                if (isset($_GET["order_id"]) || isset($order_id)) {
+                    $invoiceController->getInvoiceDetails(); 
+                    exit;
+                }
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
                
@@ -340,9 +342,9 @@
             }
         }
         break;
-        case "users":{
+        case "mechanic-position":{
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
-                            
+                MechanicPosition::getAllMechanicPositions();
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
                
@@ -354,10 +356,13 @@
               
             }
         }
+        break;
         default:
             http_response_code(404);
             echo json_encode(["error" => "404 not found"]);
             exit();
         break;
+
+        
     }
 ?>

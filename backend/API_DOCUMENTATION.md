@@ -1,24 +1,10 @@
 # Vehicle Repair API Documentation
 
-This backend is session-based and is currently served from the PHP built-in server on:
+This backend uses PHP sessions and is served locally at:
 
 - Base URL: `http://localhost:8000/api.php`
 
-> Important: in this project, the actual entry file is `api.php`, not `/api`. The frontend should call `http://localhost:8000/api.php?action=...` and include `credentials: 'include'` for session cookies.
-
-## Auth and session flow
-
-- Public endpoints are accessible without login:
-  - `register`
-  - `login`
-  - `check-auth`
-  - `logout`
-- All other actions require an active PHP session.
-- The backend sets session data after a successful login:
-  - `user_id`
-  - `username`
-  - `role_id`
-- The frontend must send requests with:
+Pass every route through `api.php` using the `action` query parameter. Authenticated frontend requests must include `credentials: 'include'` so the browser sends the PHP session cookie. JSON request bodies should use `Content-Type: application/json`.
 
 ```js
 fetch(url, {
@@ -29,15 +15,14 @@ fetch(url, {
 })
 ```
 
----
+The API permits CORS requests from `http://localhost:5173` and handles `OPTIONS` preflight requests. A successful login stores `user_id`, `username`, and `role_id` in the session. `register`, `login`, `check-auth`, and `logout` are exempt from the authentication guard; all other actions require an authenticated session. Some handlers impose additional role checks.
 
-## Public endpoints
+## Authentication
 
-### 1) Register user
+### Register
 
-- URL: `http://localhost:8000/api.php?action=register`
-- Method: `POST`
-- Body:
+- `POST /api.php?action=register`
+- JSON body:
 
 ```json
 {
@@ -52,51 +37,79 @@ fetch(url, {
 }
 ```
 
-### 2) Login user
+Required fields are all shown except `middle_name`, which is optional. Returns `201` on success.
 
-- URL: `http://localhost:8000/api.php?action=login`
-- Method: `POST`
-- Body:
+### Login
 
-```json
-{
-  "username": "serviceadvisor1",
-  "password": "secret123"
-}
-```
+- `POST /api.php?action=login`
+- JSON body: `{"username":"serviceadvisor1","password":"secret123"}`
+- Successful response includes `user_id`, `username`, `role_id`, a message, and the new session ID.
 
-Returns session data and `role_id`.
+### Check session
 
-### 3) Check auth
+- `GET /api.php?action=check-auth`
+- Returns the authenticated user data; returns `401` when no session is active.
 
-- URL: `http://localhost:8000/api.php?action=check-auth`
-- Method: `GET`
+### Logout
 
-### 4) Logout
+- `GET` or `POST /api.php?action=logout`
+- Clears the current session and returns a success message. The dispatcher does not restrict this route to a specific method.
 
-- URL: `http://localhost:8000/api.php?action=logout`
-- Method: `POST` or `GET` depending on usage
+### Test authentication
 
----
+- `GET /api.php?action=test-auth`
+- Protected route. Returns a greeting containing the authenticated username. The dispatcher does not restrict this route to a specific method.
 
-## Repair order workflow
+## Repair orders
 
-Main route: `action=repair-orders`
+Main action: `action=repair-orders`. Supported categories and operations are selected using `category`, `post-method`, or `put-method`.
 
-### A. Create intake / vehicle registration
+### Dashboard
 
-- URL: `http://localhost:8000/api.php?action=repair-orders`
-- Method: `POST`
-- Body:
+- `GET /api.php?action=repair-orders`
+- Omitting `category` returns the service-advisor dashboard data in a `data` property.
+
+### Active orders and order details
+
+- `GET /api.php?action=repair-orders&category=active`
+- Optional query parameters: `status` (defaults to `ALL`) and `search`.
+- Add `order_id` to the same URL to retrieve one order's details, for example `...?category=active&order_id=12`.
+
+### Billing and invoicing list
+
+- `GET /api.php?action=repair-orders&category=inactive`
+- Optional query parameter: `search`.
+- Despite the category name `inactive`, this handler returns billing and invoicing records.
+
+### Order history
+
+- `GET /api.php?action=repair-orders&category=history`
+- Optional query parameter: `search`.
+- Response includes order data, count, and total revenue.
+
+### Parts used on an order
+
+- `GET /api.php?action=repair-orders&category=parts-by-order&order_id=12`
+- `order_id` is required. Response includes parts data, count, and total parts cost.
+
+### Mechanic work orders
+
+- `GET /api.php?action=repair-orders&category=assigned`
+- Optional query parameter: `mechanic_id`. If omitted, the backend attempts to find a mechanic associated with the logged-in user.
+
+### Create vehicle intake
+
+- `POST /api.php?action=repair-orders`
+- JSON body:
 
 ```json
 {
   "customer": {
     "firstName": "John",
+    "middleName": "M",
     "lastName": "Dela Cruz",
     "phone": "09171234567",
-    "email": "john@test.com",
-    "middleName": "M"
+    "email": "john@test.com"
   },
   "vehicle": {
     "plateNumber": "ABC1234",
@@ -114,223 +127,157 @@ Main route: `action=repair-orders`
 }
 ```
 
-Creates a new repair order and customer/vehicle records.
+Required intake values: customer first name, last name, phone; vehicle plate number, type, make, model; and order complaint. `year`, `color`, mileage, customer email/middle name, and priority are optional. Camel-case and corresponding snake-case keys are supported by the handler.
 
-### B. Get active repair orders
+### Assign diagnostician
 
-- URL: `http://localhost:8000/api.php?action=repair-orders&category=active`
-- Method: `GET`
-- Optional filters:
-  - `status=IN_PROGRESS`
-  - `search=plate` or `search=customer name`
+- `POST /api.php?action=repair-orders&post-method=assign-diagnostician`
+- JSON body: `{"order_id":12,"mechanic_id":3}`
 
-### C. Get repair order detail
+### Submit diagnosis
 
-- URL: `http://localhost:8000/api.php?action=repair-orders&category=active&order_id=12`
-- Method: `GET`
-
-### D. Get order history
-
-- URL: `http://localhost:8000/api.php?action=repair-orders&category=history`
-- Method: `GET`
-- Optional: `search=ABC1234`
-
-### E. Get parts by order
-
-- URL: `http://localhost:8000/api.php?action=repair-orders&category=parts-by-order&order_id=12`
-- Method: `GET`
-
-### F. Assign diagnostician
-
-- URL: `http://localhost:8000/api.php?action=repair-orders&post-method=assign-diagnostician`
-- Method: `POST`
-- Body:
+- `POST /api.php?action=repair-orders&post-method=submit-diagnosis`
+- JSON body:
 
 ```json
 {
   "order_id": 12,
-  "mechanic_id": 3
+  "diagnostic_notes": "Loose radiator hose and coolant leak.",
+  "required_services": [1, 5, 8]
 }
 ```
 
-### G. Submit diagnosis
+`order_id` and notes are required. The handler also accepts `diagnosis_notes` for the notes and `services` for the services array.
 
-- URL: `http://localhost:8000/api.php?action=repair-orders&post-method=submit-diagnosis`
-- Method: `POST`
-- Body:
+### Assign mechanic to repair job
 
-```json
-{
-  "order_id": 12,
-  "diagnosis_notes": "Loose radiator hose and coolant leak.",
-  "service_ids": [1, 5, 8]
-}
-```
+- `POST /api.php?action=repair-orders&post-method=assign-mechanic`
+- JSON body: `{"order_id":12,"mechanic_id":4,"position_id":2}`
 
-### H. Assign mechanic to repair job
+### Log a used part
 
-- URL: `http://localhost:8000/api.php?action=repair-orders&post-method=assign-mechanic`
-- Method: `POST`
-- Body:
+- `POST /api.php?action=repair-orders&post-method=log-part`
+- JSON body: `{"order_id":12,"part_id":7,"quantity":2}`
 
-```json
-{
-  "order_id": 12,
-  "mechanic_id": 4,
-  "position_id": 2
-}
-```
+### Mark order ready to invoice
 
-### I. Log used part
+- `POST /api.php?action=repair-orders&post-method=mark-ready-to-invoice`
+- JSON body: `{"order_id":12}`
 
-- URL: `http://localhost:8000/api.php?action=repair-orders&post-method=log-part`
-- Method: `POST`
-- Body:
+### Cancel a part on an order
 
-```json
-{
-  "order_id": 12,
-  "part_id": 7,
-  "quantity": 2
-}
-```
-### J. Cancel order part
-
-- URL: `http://localhost:8000/api.php?action=repair-orders&put-method=cancel-order-part`
-- Method: `PUT`
-- Body:
-
-```json
-{
-  "order_part_id": 12
-}
-```
-### K. Mark order ready to invoice
-
-- URL: `http://localhost:8000/api.php?action=repair-orders&post-method=mark-ready-to-invoice`
-- Method: `POST`
-- Body:
-
-```json
-{
-  "order_id": 12
-}
-```
-
----
+- `PUT /api.php?action=repair-orders&put-method=cancel-order-part`
+- Supply `order_part_id` as a query parameter or JSON body. Example body: `{"order_part_id":12}`.
+- Cancelling restores the part quantity to inventory.
 
 ## Invoices
 
-Main route: `action=invoices`
+### Invoice details
+
+- `GET /api.php?action=invoices&order_id=12`
+- `order_id` is required. The controller also accepts it in a JSON body, but a query parameter is recommended for GET requests.
 
 ### Generate invoice
 
-- URL: `http://localhost:8000/api.php?action=invoices`
-- Method: `POST`
-- Body:
-
-```json
-{
-  "order_id": 12,
-  "tax_rate": 12,
-  "discount": 0
-}
-```
+- `POST /api.php?action=invoices`
+- JSON body: `{"order_id":12,"tax_rate":12,"discount":0}`
+- `order_id` is required; `tax_rate` and `discount` default to `0` and must be non-negative numeric values.
 
 ### Process payment
 
-- URL: `http://localhost:8000/api.php?action=invoices&post-method=payment`
-- Method: `POST`
-- Body:
-
-```json
-{
-  "order_id": 12,
-  "payment_method": "CASH",
-  "payment_reference": "REF-001"
-}
-```
-
-If `payment_reference` is omitted, the backend generates one automatically.
-
----
+- `POST /api.php?action=invoices&post-method=payment`
+- JSON body: `{"order_id":12,"payment_method":"CASH","payment_reference":"REF-001"}`
+- `order_id` and `payment_method` are required. `payment_reference` is optional and generated automatically when omitted. The authenticated user's ID is used as the receiver.
 
 ## Parts inventory
 
-Main route: `action=parts`
+### List inventory
 
-### Get inventory
-
-- URL: `http://localhost:8000/api.php?action=parts&status=ALL&search=filter`
-- Method: `GET`
+- `GET /api.php?action=parts`
+- Optional query parameters: `status` (defaults to `ALL`) and `search`.
 
 ### Restock inventory
 
-- URL: `http://localhost:8000/api.php?action=parts&post-method=restock`
-- Method: `POST`
-- Body:
+- `POST /api.php?action=parts&post-method=restock`
+- JSON body: `{"part_id":7,"quantity":10}`
+- Both values must be positive integers.
 
-```json
-{
-  "part_id": 7,
-  "quantity": 10
-}
-```
+## Mechanics
 
----
+### List mechanics
 
-## Mechanics and customers
+- `GET /api.php?action=mechanics`
 
-### Mechanics
+### List mechanics available for an order
 
-- Get all mechanics: `GET http://localhost:8000/api.php?action=mechanics`
-- Get available mechanics for a repair order: `GET http://localhost:8000/api.php?action=mechanics&available=true&order_id=12`
+- `GET /api.php?action=mechanics&available=true&order_id=12`
+- `order_id` is required by the handler and may be supplied in the query string or JSON body.
+
+### Create mechanic
+
+- `POST /api.php?action=mechanics`
+- JSON body: `{"user_id":8,"specialization":"Engine","date_hired":"2025-01-15","status":"ACTIVE"}`
+- Required: `user_id`, `specialization`, and `date_hired`. `status` defaults to `ACTIVE`.
+
+### Update mechanic
+
+- `PUT /api.php?action=mechanics`
+- JSON body: `{"mechanic_id":3,"user_id":8,"specialization":"Engine","date_hired":"2025-01-15","status":"ACTIVE"}`
+- Required: `mechanic_id`, `user_id`, `specialization`, and `date_hired`. `status` defaults to `ACTIVE`.
+
+### Delete mechanic
+
+- `DELETE /api.php?action=mechanics`
+- JSON body: `{"mechanic_id":3}`
+- Performs a soft delete.
+
+> Implementation note: the `mechanics` switch case currently has no `break` before `parts`. A mechanics GET may therefore continue into the parts handler and append another JSON response. Fix the dispatcher before relying on a clean mechanics-list response.
+
+## Other read endpoints
+
+### Users/staff
+
+- `GET /api.php?action=users`
+- Returns staff records under the `users` property. Role permissions restrict this action to role ID `1`.
+- `PUT /api.php?action=users` updates a user. Required JSON fields: `user_id`, `username`, `first_name`, `last_name`, `contact_no`, `email`, and `role_id`. `middle_name` is optional and `status` defaults to `ACTIVE`.
+- `DELETE /api.php?action=users` soft-deletes a user. JSON body: `{"user_id":8}`. The currently authenticated user cannot delete their own account.
+
+### Reports dashboard
+
+- `GET /api.php?action=reports`
+- Returns service-advisor dashboard cards under `data`. The route only emits this response for role ID `2`.
 
 ### Customers
 
-- Get customer records: `GET http://localhost:8000/api.php?action=customers`
+- `GET /api.php?action=customers`
+- Optional query parameter: `search`.
+- The route only invokes the customer-record handler for role ID `2`.
 
-### Services
+### Services catalog
 
-- Get services catalog: `GET http://localhost:8000/api.php?action=services`
+- `GET /api.php?action=services`
+- Optional query parameter: `search`.
 
----
+### Mechanic positions
 
-## Standard response shape
+- `GET /api.php?action=mechanic-position`
+- Returns the mechanic-position records.
 
-The API generally returns:
+## Implemented write methods and gaps
 
-```json
-{
-  "status": "success",
-  "data": [...],
-  "count": 10,
-  "message": "Optional message"
-}
-```
+The dispatcher also contains method branches that do not call a handler, so they are not functional endpoints: `POST /users`; `POST`, `PUT`, and `DELETE /customers`; `PUT` and `DELETE /parts`; `POST`, `PUT`, and `DELETE /services`; and `POST`, `PUT`, and `DELETE /mechanic-position`. The `users` route does implement `PUT` (update) and `DELETE` (soft delete). The role table restricts DELETE to role ID `1`, but its update permission is keyed as `UPDATE` while the dispatcher checks the actual method `PUT`; as written, the role guard does not apply that configured restriction to user updates.
 
-Error responses usually look like:
+## Responses and errors
 
-```json
-{
-  "status": "error",
-  "error": "Message about missing data or validation failure"
-}
-```
+Response shapes vary by route. Many handlers return `{"status":"success","data":...}` and may include `count`, `message`, or other route-specific fields. Authentication and some simple routes use different shapes. Errors commonly include an `error` string, and may return HTTP `400`, `401`, `403`, `404`, or `500` depending on the failure. Unknown actions return `404`; invalid repair-order categories or operation names return `400`.
 
----
+## Order lifecycle
 
-## Order lifecycle summary
-
-1. Service advisor creates intake.
-2. Order is assigned to a diagnostician.
-3. Diagnosis is submitted with selected services.
-4. Mechanic(s) are assigned to the order.
-5. Parts are logged as used.
-6. (Optional) Unused or cancelled parts are returned to inventory via `cancel-order-part`.
-7. Parts are restocked if inventory is insufficient.
-8. Order is marked `READY_TO_INVOICE`.
-9. Invoice is generated.
-10. Payment is processed and order becomes `FULFILLED`.
-
-This is the basic flow the frontend should follow when interacting with the backend.
+1. Create intake.
+2. Assign a diagnostician.
+3. Submit diagnosis with required services.
+4. Assign mechanic(s) and positions.
+5. Log parts used; cancel an order part to return it to inventory when needed.
+6. Restock inventory if necessary.
+7. Mark the order ready to invoice.
+8. Generate the invoice and process payment.

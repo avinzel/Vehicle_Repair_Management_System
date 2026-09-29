@@ -39,7 +39,7 @@
             }
         }
 
-public function processIntake($data, $createdByUserId) {
+    public function processIntake($data, $createdByUserId) {
         try {
             $query = "CALL sp_create_vehicle_intake(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, @order_id, @customer_id, @vehicle_id)";
             $stmt = self::$conn->prepare($query);
@@ -538,6 +538,44 @@ public function processIntake($data, $createdByUserId) {
                 return [
                     "success" => false,
                     "error"   => "Database operation failed: " . $e->getMessage()
+                ];
+            }
+        }
+            /**
+         * Fetch work orders assigned to a specific mechanic via CALL sp_get_mechanic_work_orders(?)
+         * 
+         * @param int $mechanicId
+         * @return array
+         */
+        public function getMechanicWorkOrders($mechanicId) {
+            try {
+                $query = "CALL sp_get_mechanic_work_orders(?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $mechanicIdVal = (int)$mechanicId;
+                $stmt->bind_param("i", $mechanicIdVal);
+                $stmt->execute();
+
+                $result = $stmt->get_result();
+                $workOrders = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+                $stmt->close();
+
+                // Clear stored procedure result sets from MySQLi connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return $workOrders;
+
+            } catch (Exception $e) {
+                return [
+                    "error" => "Database operation failed: " . $e->getMessage()
                 ];
             }
         }

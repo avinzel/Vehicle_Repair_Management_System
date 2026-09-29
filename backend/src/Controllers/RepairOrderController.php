@@ -4,6 +4,7 @@ namespace App\Controllers;
 use Exception;
 use App\Models\RepairOrder;
 use App\Auth\Auth;
+use App\Models\User; 
 
 class RepairOrderController {
     private $repairOrderModel;
@@ -12,7 +13,11 @@ class RepairOrderController {
         // Fallback to direct instantiation if no dependency is passed
         $this->repairOrderModel = $repairOrderModel ?? new RepairOrder();
     }
-
+    // Helper method to parse input stream safely
+    private function getInputData() {
+        $input = json_decode(file_get_contents('php://input'), true);
+        return $input ?? [];
+    }
     // POST: Handle new vehicle intake & repair order creation
     public function createVehicleIntake() {
         header('Content-Type: application/json');
@@ -582,10 +587,50 @@ class RepairOrderController {
         }
         exit();
     }
-    // Helper method to parse input stream safely
-    private function getInputData() {
-        $input = json_decode(file_get_contents('php://input'), true);
-        return $input ?? [];
+    // GET: Retrieve work orders assigned to a mechanic
+    public function getMechanicWorkOrders() {
+        header('Content-Type: application/json');
+
+        // Extract mechanic ID from query parameters or request payload (supports camelCase and snake_case)
+        $data = $this->getInputData();
+        $mechanicId = $_GET['mechanic_id'] 
+                   ?? $_GET['mechanicId'] 
+                   ?? $data['mechanic_id'] 
+                   ?? $data['mechanicId'] 
+                   ?? null;
+
+        // Fallback: If no mechanic_id is passed, attempt to fetch from authenticated session
+        if (empty($mechanicId)) {
+            $mechanicId = User::getMechanicIdByUserId(Auth::getUserId());
+        }
+
+        // Validate parameter
+        if (empty($mechanicId) || !is_numeric($mechanicId)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Missing or invalid required parameter: mechanic_id"
+            ]);
+            exit();
+        }
+
+        try {
+            // Call model method executing CALL sp_get_mechanic_work_orders(?)
+            $workOrders = $this->repairOrderModel->getMechanicWorkOrders((int)$mechanicId);
+
+            http_response_code(200);
+            echo json_encode([
+                "status" => "success",
+                "data"   => $workOrders
+            ]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Controller operation failed: " . $e->getMessage()
+            ]);
+        }
+        exit();
     }
 
 }

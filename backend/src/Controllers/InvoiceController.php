@@ -260,6 +260,53 @@
             $input = json_decode(file_get_contents('php://input'), true);
             return $input ?? [];
         }
+    /**
+         * GET / POST: Fetch detailed breakdown and mechanics list for an invoice modal
+         */
+        public function getInvoiceDetails() {
 
+            // Read order_id from GET query parameter or POST payload
+            $orderId = $_GET['order_id'] ?? $_GET['orderId'] ?? null;
+
+            if ($orderId === null) {
+                $input = $this->getInputData();
+                $orderId = $input['order_id'] ?? $input['orderId'] ?? null;
+            }
+
+            if (empty($orderId) || !is_numeric($orderId)) {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Missing or invalid required parameter: order_id"
+                ]);
+                exit();
+            }
+
+            try {
+                $response = self::$model->getInvoiceDetails((int)$orderId);
+
+                if (isset($response['success']) && $response['success']) {
+                    http_response_code(200);
+                    echo json_encode([
+                        "status" => "success",
+                        "data"   => $response['data']
+                    ]);
+                } else {
+                    http_response_code(404);
+                    echo json_encode([
+                        "status" => "error",
+                        "error"  => $response['error'] ?? "Failed to fetch invoice details"
+                    ]);
+                }
+
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Controller operation failed: " . $e->getMessage()
+                ]);
+            }
+            exit();
+        }
     }
 ?>
