@@ -1,6 +1,6 @@
 "use client"
 
-import { User } from "lucide-react";
+import { MoreHorizontal, User } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -19,7 +19,7 @@ function formatCurrency(amount) {
 // Mechanic view for the "N parts logged · N mechanics on job" summary.
 export function OrderCard({ order, isSelected = false, onClick, onMenuClick, roleBadge, notesPreview, footerNote }) {
     const amountLabel = formatCurrency(order.amount);
-    const mechanics = order.mechanics ?? [];
+    const team = order.team ?? [];
 
     return (
         <Card
@@ -43,13 +43,16 @@ export function OrderCard({ order, isSelected = false, onClick, onMenuClick, rol
                     <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm">{order.id}</span>
                         <StatusBadge status={order.status} />
+                    </div>
+                    <div className="flex flex-col items-end text-xs gap-1">
                         {roleBadge && (
                             <Badge variant="outline" className="text-blue-700 border-blue-200 bg-blue-50">
                                 {roleBadge}
                             </Badge>
                         )}
-                    </div>
-                    <div className="flex items-end text-xs gap-1">
+                        {amountLabel && (
+                            <span className="text-base font-bold text-foreground">{amountLabel}</span>
+                        )}
                         <span className="text-muted-foreground mt-0.5">{order.formatted_date ?? order.date}</span>
                     </div>
                 </div>
@@ -57,7 +60,7 @@ export function OrderCard({ order, isSelected = false, onClick, onMenuClick, rol
                 <div className="flex flex-col">
                     <span className="font-medium text-base text-foreground">{order.customer}</span>
                     <span className="text-sm text-muted-foreground">
-                        {order.vehicle} · {order.plate} · {order.vehicleType}
+                        {order.vehicle} · {order.plateNumber} · {order.vehicleType}
                     </span>
                 </div>
 
@@ -72,12 +75,12 @@ export function OrderCard({ order, isSelected = false, onClick, onMenuClick, rol
                 )}
             </div>
 
-            {mechanics.length > 0 && (
+            {team.length > 0 && (
                 <div className="px-(--card-spacing) flex flex-col gap-2.5">
                     <Separator />
                     <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                         <User className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{mechanics.join(", ")}</span>
+                        <span className="truncate">{team.map((m) => m.name).join(", ")}</span>
                     </div>
                 </div>
             )}

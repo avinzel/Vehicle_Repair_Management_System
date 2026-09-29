@@ -6,6 +6,8 @@ import { DetailDrawer } from "@/components/DetailDrawer";
 import { OrderCard } from "@/components/OrderCard";
 import { MechanicOrderDetail } from "@/components/MechanicOrderDetail";
 import { getMyPositionOnOrder } from "@/components/MechanicOrderStages";
+import { normalizeOrder } from "@/utils/normalizeOrder";
+import { useOutletContext } from "react-router";
 
 // TODO: placeholder mock data — same shape/contract as AssignedOrders'
 // MOCK_ASSIGNED_ORDERS. Swap fetchDiagnosticOrders' body for a real call
@@ -56,16 +58,30 @@ const MOCK_DIAGNOSTIC_ORDERS = [
 // off this list.
 const VISIBLE_TO_DIAGNOSTIC_LOG_STATUSES = ["AWAITING_DIAGNOSIS", "PENDING_MECHANICS"];
 
-export function DiagnosticLogs({ currentUserName = "Ben Reyes" }) {
+export function DiagnosticLogs() {
+  const { user } = useOutletContext();
+  const currentUserName = `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim();
+
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [diagnosticOrders, setDiagnosticOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
   const fetchDiagnosticOrders = useCallback(async () => {
-    // TODO: backend not built yet. Replace with a real fetch, same
-    // pattern as AssignedOrders.fetchAssignedOrders.
-    setDiagnosticOrders(MOCK_DIAGNOSTIC_ORDERS);
+    try {
+      const response = await fetch(
+        //TODO: change category = assigned, after the category has been built
+        `http://localhost:8000/api.php?action=repair-orders&category=active`, 
+        {credentials: 'include'})
+        const json = await response.json();
+        if (json.status === 'success') {
+          setDiagnosticOrders(json.data.map(normalizeOrder));
+        } else {
+          console.error("Failed to fetch active orders:", json.error);
+        }
+    } catch (err) {
+      console.error("Failed to fetch active orders:", err);
+    }
   }, []);
 
   useEffect(() => {

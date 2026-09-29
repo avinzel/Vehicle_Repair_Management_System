@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,17 +14,21 @@ import {
 } from "@/components/ui/select";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
 
-// Placeholder service catalog for the Required Services multi-select.
-// TODO: replace with a real fetch once a services/catalog endpoint exists —
-// same "backend not built yet" situation as AssignedOrders' mock data.
-const MOCK_SERVICE_CATALOG = [
-  "Brake System Service",
-  "Oil Change",
-  "Tune-Up Service", 
-  "Battery Replacement",
-  "Tire Replacement",
-  "Chain & Sprocket Service",
-];
+// getServices is a real endpoint (GET action=services ->
+// ServiceController::getServices -> Service model's getAllServices),
+// confirmed routed in api.php. I don't have the Service model, so these
+// field names are a guess from the service_catalog table columns seen in
+// the schema (service_catalog_id, service_name, description,
+// standard_labor_cost) — same situation as getAvailableMechanics before
+// its real shape was confirmed. Tighten normalizeService once a real
+// response is pasted.
+function normalizeService(raw) {
+  return {
+    id: raw.service_catalog_id ?? raw.id,
+    name: raw.service_name ?? raw.name,
+    laborCost: Number(raw.standard_labor_cost ?? raw.laborCost ?? 0),
+  };
+}
 
 // --- Diagnostician view: filing (or revising) diagnosis + required services ---
 // Shared by both "not yet submitted" (Pending/Awaiting Diagnosis) and
@@ -32,23 +36,72 @@ const MOCK_SERVICE_CATALOG = [
 // button label and initial field values differ, so one component covers
 // both rather than duplicating the form.
 function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
-  const [selectedServices, setSelectedServices] = useState(order.requiredServices ?? []);
+  const [catalog, setCatalog] = useState([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
+  // Tracks full {id, name} objects, not just names — the real
+  // submit-diagnosis endpoint needs service_ids, so the id has to be
+  // carried alongside the display name from the moment a service is
+  // picked, rather than looked up again later.
+  const [selectedServices, setSelectedServices] = useState([]);
   const [notes, setNotes] = useState(order.diagnosticNotes ?? "");
+  const [hydrated, setHydrated] = useState(false);
 
-  const availableServices = MOCK_SERVICE_CATALOG.filter((s) => !selectedServices.includes(s));
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingCatalog(true);
 
-  function addService(service) {
+    fetch(`http://localhost:8000/api.php?action=services`, { credentials: "include" })
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        if (Array.isArray(json.data)) {
+          setCatalog(json.data.map(normalizeService));
+        } else {
+          console.error("Failed to fetch service catalog:", json.error ?? json);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) console.error("Failed to fetch service catalog:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCatalog(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Hydrate selectedServices from order.requiredServices (name strings,
+  // from whatever mock/earlier-stage data this order already carries)
+  // once the real catalog has loaded — matched by name, since that's all
+  // the pre-existing data has. Only runs once, on first successful load.
+  useEffect(() => {
+    if (hydrated || catalog.length === 0) return;
+    const existingNames = order.requiredServices ?? [];
+    const matched = catalog.filter((s) => existingNames.includes(s.name));
+    setSelectedServices(matched);
+    setHydrated(true);
+  }, [catalog, hydrated, order.requiredServices]);
+
+  const availableServices = catalog.filter(
+    (s) => !selectedServices.some((sel) => sel.id === s.id)
+  );
+
+  function addService(serviceId) {
+    const service = catalog.find((s) => String(s.id) === serviceId);
     if (!service) return;
     setSelectedServices((prev) => [...prev, service]);
   }
 
-  function removeService(service) {
-    setSelectedServices((prev) => prev.filter((s) => s !== service));
+  function removeService(serviceId) {
+    setSelectedServices((prev) => prev.filter((s) => s.id !== serviceId));
   }
 
   function handleSubmit() {
     onUpdateOrder(order.id, {
-      requiredServices: selectedServices,
+      requiredServices: selectedServices.map((s) => s.name),
+      requiredServiceIds: selectedServices.map((s) => s.id),
       diagnosticNotes: notes,
       status: "PENDING_MECHANICS",
     });
@@ -75,11 +128,13 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
         <h3 className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
           Required Services
         </h3>
-        <Select value="" onValueChange={addService}>
+        <Select value="" onValueChange={addService} disabled={loadingCatalog}>
           <SelectTrigger className="w-full bg-background">
             <SelectValue
               placeholder={
-                selectedServices.length > 0
+                loadingCatalog
+                  ? "Loading services..."
+                  : selectedServices.length > 0
                   ? `${selectedServices.length} service${selectedServices.length === 1 ? "" : "s"} selected`
                   : "Select applicable services..."
               }
@@ -87,11 +142,11 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
           </SelectTrigger>
           <SelectContent>
             {availableServices.map((service) => (
-              <SelectItem key={service} value={service}>
-                {service}
+              <SelectItem key={service.id} value={String(service.id)}>
+                {service.name}
               </SelectItem>
             ))}
-            {availableServices.length === 0 && (
+            {!loadingCatalog && availableServices.length === 0 && (
               <p className="p-2 text-sm text-muted-foreground">All services added.</p>
             )}
           </SelectContent>
@@ -100,12 +155,12 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
         {selectedServices.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {selectedServices.map((service) => (
-              <Badge key={service} className="bg-primary/5 border border-primary/15 text-primary gap-1 pr-1">
-                {service}
+              <Badge key={service.id} className="bg-primary/5 border border-primary/15 text-primary gap-1 pr-1">
+                {service.name}
                 <button
                   type="button"
-                  onClick={() => removeService(service)}
-                  aria-label={`Remove ${service}`}
+                  onClick={() => removeService(service.id)}
+                  aria-label={`Remove ${service.name}`}
                   className="hover:text-destructive"
                 >
                   <X className="w-3 h-3" />

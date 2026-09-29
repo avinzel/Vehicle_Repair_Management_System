@@ -13,7 +13,7 @@ import Intake from './pages/ServiceAdvisorPage/Intake';
 import { ActiveRepairOrder } from './pages/ServiceAdvisorPage/ActiveRepairOrder';
 import { CustomerRecords } from './pages/ServiceAdvisorPage/CustomerRecords';
 import { OrderHistory } from './pages/ServiceAdvisorPage/OrderHistory';
-import { Billing } from './pages/ServiceAdvisorPage/Billing';
+import { BillingInvoicing } from './pages/ServiceAdvisorPage/BillingInvoicing';
 import { AssignedOrders } from './pages/MechanicPage/AssignedOrders';
 import { DiagnosticLogs } from './pages/MechanicPage/DiagnosticLogs';
 import { PartsLogger } from './pages/MechanicPage/PartsLogger';
@@ -82,7 +82,7 @@ function App() {
           <Route path="orders/:orderId" element={<ActiveRepairOrder />} />
 
           <Route path="customers" element={<CustomerRecords />} />
-          <Route path="billing" element={<Billing />} />
+          <Route path="billing" element={<BillingInvoicing />} />
           <Route path="order-history" element={<OrderHistory />} />
         </Route>
 

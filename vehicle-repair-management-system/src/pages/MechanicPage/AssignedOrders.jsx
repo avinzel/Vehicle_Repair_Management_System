@@ -6,7 +6,8 @@ import { DetailDrawer } from "@/components/DetailDrawer";
 import { OrderCard } from "@/components/OrderCard";
 import { MechanicOrderDetail } from "@/components/MechanicOrderDetail";
 import { getMyPositionOnOrder } from "@/components/MechanicOrderStages";
-
+import { normalizeOrder } from "@/utils/normalizeOrder";
+import { useOutletContext } from "react-router";
 // Statuses a mechanic actually has something to do at. Everything past
 // IN_PROGRESS is advisor/billing territory (invoicing, payment, release)
 // — showing those here would just be noise a mechanic can't act on.
@@ -86,20 +87,30 @@ const MOCK_ASSIGNED_ORDERS = [
   },
 ];
 
-export function AssignedOrders({ currentUserName = "Ben Reyes" }) {
+export function AssignedOrders() {
+  const { user } = useOutletContext();
+  const currentUserName = `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim();
+
   const navigate = useNavigate();
   const [assignedOrders, setAssignedOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
   const fetchAssignedOrders = useCallback(async () => {
-    // TODO: backend not built yet. Replace with:
-    // const response = await fetch(
-    //   `http://localhost:8000/api.php?action=repair-orders&category=assigned`,
-    //   { credentials: 'include' }
-    // );
-    // const json = await response.json();
-    // if (json.status === "success") setAssignedOrders(json.data.map(normalizeOrder));
-    setAssignedOrders(MOCK_ASSIGNED_ORDERS);
+    try {
+      const response = await fetch(
+        //TODO: change category = assigned, after the category has been built
+        `http://localhost:8000/api.php?action=repair-orders&category=active`,
+        { credentials: 'include' }
+      );
+      const json = await response.json();
+      if(json.status === "success") {
+        setAssignedOrders(json.data.map(normalizeOrder))
+      } else {
+        console.error("Failed to fetch active orders:", json.error);
+      }
+    } catch (err) {
+      console.error("Failed to fetch active orders:", err);
+    }
   }, []);
 
   useEffect(() => {

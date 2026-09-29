@@ -157,7 +157,7 @@ export function ActiveRepairOrder() {
             isSelected={selectedOrderId === order.id}
             onClick={() => setSelectedOrderId(order.id)}
             onMenuClick={(clickedOrder) => {
-              console.log("Kebab menu clicked for", clickedOrder.id);
+              console.log("Order card clicked for", clickedOrder.id);
             }}
           />
         ))}
