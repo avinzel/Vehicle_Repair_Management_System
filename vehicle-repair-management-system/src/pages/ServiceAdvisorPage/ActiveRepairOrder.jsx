@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams, useOutletContext } from "react-router";
 import { OrderFilterBar } from "@/components/OrderSearchFilter";
 import { OrderCard } from "@/components/OrderCard";
 import { DetailDrawer } from "@/components/DetailDrawer";
@@ -23,9 +23,13 @@ function mergeOrder(base, overrides) {
 }
 
 export function ActiveRepairOrder() {
+  // activeOrders is the single source of truth for this list.
+  // ServiceAdvisorPage fetches + normalizes it, so the sidebar badge and
+  // this page can never disagree.
+  const { activeOrders, getActiveOrders, refreshOrders } = useOutletContext();
+
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeOrders, setActiveOrders] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -33,43 +37,23 @@ export function ActiveRepairOrder() {
   const [orderDetails, setOrderDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
-  // This page now owns its own fetch — it no longer reuses the
-  // dashboard's tableData (sp_populate_dashboard_table), since that
-  // procedure has no status/search filtering and is missing raw_order_id,
-  // plate_number, vehicle_type, and formatted_date. sp_get_active_repair_orders
-  // already returns all of that.
-  const fetchActiveOrders = useCallback(async () => {
-    try {
-      const response = await fetch(
-        `http://localhost:8000/api.php?action=repair-orders&category=active`,
-        { credentials: 'include' }
-      );
-      const json = await response.json();
-      if (json.status === "success") {
-        setActiveOrders(json.data.map(normalizeOrder));
-      } else {
-        console.error("Failed to fetch active orders:", json.error);
-      }
-    } catch (err) {
-      console.error("Failed to fetch active orders", err);
-    }
-  }, []);
-
+  // Refresh through the shared fetch when landing here, so changes made on
+  // other tabs show up. Same state, no second copy.
   useEffect(() => {
-    fetchActiveOrders();
-  }, [fetchActiveOrders]);
+    getActiveOrders();
+  }, [getActiveOrders]);
 
-  // Sorted list, newest first — reads rawId directly now, no more
-  // regex-stripping "RO-7" to get a number.
+  // Sorted list, newest first.
   const sortedOrders = useMemo(() => {
-    return [...activeOrders].sort((a, b) => (b.rawId ?? 0) - (a.rawId ?? 0));
+    const orders = Array.isArray(activeOrders) ? activeOrders : [];
+    return [...orders].sort((a, b) => (b.rawId ?? 0) - (a.rawId ?? 0));
   }, [activeOrders]);
 
   const selectedListOrder = sortedOrders.find((o) => o.id === selectedOrderId) ?? null;
-
   const selectedOrder = selectedListOrder ? mergeOrder(selectedListOrder, orderDetails) : null;
 
-
+  // Per-selection detail fetch stays local: it's on-demand for one order,
+  // not data the parent holds.
   const fetchOrderDetails = useCallback(async (rawOrderId) => {
     setDetailsLoading(true);
     try {
@@ -101,9 +85,8 @@ export function ActiveRepairOrder() {
     fetchOrderDetails(rawId);
   }, [selectedOrderId, selectedListOrder?.rawId, fetchOrderDetails]);
 
-  // Redirect-and-open: Dashboard quick actions link here with
-  // ?order_id=<rawId>. Once the list has loaded, find the matching
-  // row and open its drawer, then clear the param.
+  // Redirect-and-open: ?order_id=<rawId>. Once the list has loaded, find
+  // the matching row and open its drawer, then clear the param.
   useEffect(() => {
     const paramOrderId = searchParams.get("order_id");
     if (paramOrderId && sortedOrders.length > 0) {
@@ -131,8 +114,11 @@ export function ActiveRepairOrder() {
     });
   }, [sortedOrders, search, statusFilter]);
 
-  function handleUpdateOrder(orderId, updates) {
-    fetchActiveOrders();
+  // A status change affects the dashboard cards/table, this list, and the
+  // billing list, so refresh everything through the parent, then re-pull
+  // the open order's details.
+  async function handleUpdateOrder(orderId) {
+    await refreshOrders();
     if (orderId === selectedOrderId && selectedListOrder?.rawId != null) {
       fetchOrderDetails(selectedListOrder.rawId);
     }

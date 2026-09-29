@@ -38,14 +38,21 @@ function normalizeService(raw) {
 function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
   const [catalog, setCatalog] = useState([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
-  // Tracks full {id, name} objects, not just names — the real
-  // submit-diagnosis endpoint needs service_ids, so the id has to be
-  // carried alongside the display name from the moment a service is
-  // picked, rather than looked up again later.
   const [selectedServices, setSelectedServices] = useState([]);
   const [notes, setNotes] = useState(order.diagnosticNotes ?? "");
   const [hydrated, setHydrated] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
+  // Ids of services already saved on this order. Only needed in update mode.
+  // null = still loading. The assigned-orders SP doesn't return services, and
+  // normalizeOrder drops the ids anyway, so we read them from the detail endpoint.
+  const [existingServiceIds, setExistingServiceIds] = useState(isUpdate ? null : []);
+
+  // The backend needs the numeric order id, not "RO-1050".
+  const numericOrderId = order.rawId ?? order.id;
+
+  // 1. Service catalog
   useEffect(() => {
     let cancelled = false;
     setLoadingCatalog(true);
@@ -72,17 +79,53 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
     };
   }, []);
 
-  // Hydrate selectedServices from order.requiredServices (name strings,
-  // from whatever mock/earlier-stage data this order already carries)
-  // once the real catalog has loaded — matched by name, since that's all
-  // the pre-existing data has. Only runs once, on first successful load.
+  // 2. Update mode only: fetch the services already saved on this order
   useEffect(() => {
-    if (hydrated || catalog.length === 0) return;
+    if (!isUpdate) return;
+    let cancelled = false;
+
+    fetch(
+      `http://localhost:8000/api.php?action=repair-orders&category=active&order_id=${encodeURIComponent(numericOrderId)}`,
+      { credentials: "include" }
+    )
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        const detail = Array.isArray(json.data) ? json.data[0] : json.data;
+        let services = detail?.services;
+        // The SP builds this column with CONCAT, so it may arrive as a JSON string.
+        if (typeof services === "string") {
+          try {
+            services = JSON.parse(services);
+          } catch {
+            services = [];
+          }
+        }
+        setExistingServiceIds(
+          Array.isArray(services) ? services.map((s) => s.service_catalog_id) : []
+        );
+      })
+      .catch((err) => {
+        console.error("Failed to fetch existing services:", err);
+        if (!cancelled) setExistingServiceIds([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isUpdate, numericOrderId]);
+
+  // 3. Hydrate once both the catalog and (in update mode) existing ids are ready
+  useEffect(() => {
+    if (hydrated || catalog.length === 0 || existingServiceIds === null) return;
     const existingNames = order.requiredServices ?? [];
-    const matched = catalog.filter((s) => existingNames.includes(s.name));
-    setSelectedServices(matched);
+    setSelectedServices(
+      catalog.filter(
+        (s) => existingServiceIds.includes(s.id) || existingNames.includes(s.name)
+      )
+    );
     setHydrated(true);
-  }, [catalog, hydrated, order.requiredServices]);
+  }, [catalog, hydrated, existingServiceIds, order.requiredServices]);
 
   const availableServices = catalog.filter(
     (s) => !selectedServices.some((sel) => sel.id === s.id)
@@ -98,14 +141,47 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
     setSelectedServices((prev) => prev.filter((s) => s.id !== serviceId));
   }
 
-  function handleSubmit() {
-    onUpdateOrder(order.id, {
-      requiredServices: selectedServices.map((s) => s.name),
-      requiredServiceIds: selectedServices.map((s) => s.id),
-      diagnosticNotes: notes,
-      status: "PENDING_MECHANICS",
-    });
+  async function handleSubmit() {
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const response = await fetch(
+        "http://localhost:8000/api.php?action=repair-orders&post-method=submit-diagnosis",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            order_id: Number(numericOrderId),
+            diagnostic_notes: notes.trim(),
+            required_services: selectedServices.map((s) => s.id),
+          }),
+        }
+      );
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok || (json.status && json.status !== "success")) {
+        throw new Error(json.error ?? json.message ?? `Request failed (HTTP ${response.status})`);
+      }
+
+      // Backend succeeded. Mirror the change locally so the drawer and list
+      // update immediately. The parent's re-fetch will confirm it.
+      onUpdateOrder(order.id, {
+        requiredServices: selectedServices.map((s) => s.name),
+        requiredServiceIds: selectedServices.map((s) => s.id),
+        diagnosticNotes: notes.trim(),
+        status: "PENDING_MECHANICS",
+      });
+    } catch (err) {
+      console.error("Failed to submit diagnosis:", err);
+      setSubmitError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
+
+  const formLoading = loadingCatalog || existingServiceIds === null;
 
   return (
     <div className="space-y-4">
@@ -128,11 +204,11 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
         <h3 className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
           Required Services
         </h3>
-        <Select value="" onValueChange={addService} disabled={loadingCatalog}>
+        <Select value="" onValueChange={addService} disabled={formLoading || submitting}>
           <SelectTrigger className="w-full bg-background">
             <SelectValue
               placeholder={
-                loadingCatalog
+                formLoading
                   ? "Loading services..."
                   : selectedServices.length > 0
                   ? `${selectedServices.length} service${selectedServices.length === 1 ? "" : "s"} selected`
@@ -146,7 +222,7 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
                 {service.name}
               </SelectItem>
             ))}
-            {!loadingCatalog && availableServices.length === 0 && (
+            {!formLoading && availableServices.length === 0 && (
               <p className="p-2 text-sm text-muted-foreground">All services added.</p>
             )}
           </SelectContent>
@@ -160,6 +236,7 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
                 <button
                   type="button"
                   onClick={() => removeService(service.id)}
+                  disabled={submitting}
                   aria-label={`Remove ${service.name}`}
                   className="hover:text-destructive"
                 >
@@ -178,18 +255,27 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
         <Textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
+          disabled={submitting}
           placeholder="e.g. Customer reports engine misfiring at idle. Initial inspection shows fouled spark plugs and clogged air filter. Fuel system contamination likely. Recommend full tune-up and fuel system cleaning..."
           className="min-h-32 bg-background"
         />
       </div>
 
+      {submitError && (
+        <p role="alert" className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+          {submitError}
+        </p>
+      )}
+
       <Button
         type="button"
         className="w-full"
-        disabled={selectedServices.length === 0 || notes.trim() === ""}
+        disabled={submitting || formLoading || selectedServices.length === 0 || notes.trim() === ""}
         onClick={handleSubmit}
       >
-        {isUpdate ? "Update Diagnosis" : "Submit Diagnosis"}
+        {submitting
+          ? isUpdate ? "Updating..." : "Submitting..."
+          : isUpdate ? "Update Diagnosis" : "Submit Diagnosis"}
       </Button>
     </div>
   );

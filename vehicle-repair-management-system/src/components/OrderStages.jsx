@@ -27,61 +27,72 @@ import {
   CommandList,
 } from "@/components/ui/command";
 
+const API = "http://localhost:8000/api.php";
+
 export const STATUS = {
   PENDING_DIAGNOSIS: "PENDING_DIAGNOSIS",
   AWAITING_DIAGNOSIS: "AWAITING_DIAGNOSIS",
   PENDING_MECHANICS: "PENDING_MECHANICS",
   IN_PROGRESS: "IN_PROGRESS",
-  // Was PENDING_PARTS — didn't match the actual DB enum (AWAITING_PARTS),
-  // which the Mechanic-side pages were already built against. Fixed here
-  // so both sides agree.
   AWAITING_PARTS: "AWAITING_PARTS",
   READY_TO_INVOICE: "READY_TO_INVOICE",
   AWAITING_PAYMENT: "AWAITING_PAYMENT",
   READY_FOR_RELEASE: "READY_FOR_RELEASE",
-  // Was COMPLETED — didn't match the actual DB enum (FULFILLED). Same
-  // class of bug as PENDING_PARTS/AWAITING_PARTS above: StatusBadge's
-  // style map already has a 'Fulfilled' key, not 'Completed', so
-  // formatStatusLabel("FULFILLED") produces "Fulfilled" — the old
-  // ORDER_STAGES key "Completed" would never have matched it, meaning
-  // any FULFILLED order's drawer would have hit the "Unknown status"
-  // fallback instead of CompletedStage.
   FULFILLED: "FULFILLED",
 };
-
-// Positions selectable when building out the rest of the repair team.
-// Diagnostician is intentionally excluded — that assignment happens in
-// AssignDiagnosticianStage, one stage earlier, and is locked in by the
-// time AssignMechanicsStage runs.
-// TODO: still mocked — AssignMechanicsStage hasn't been wired to a real
-// backend endpoint yet (this task was scoped to Assign Diagnostician +
-// Diagnosis stage only). mechanic_positions is a real table per the
-// schema; this should eventually come from a fetch, same as the
-// Diagnostician picker below.
-const MOCK_POSITIONS = ["Lead Mechanic", "Electrical Specialist", "Assistant"];
 
 function formatCurrency(amount) {
   if (amount == null) return null;
   return `₱${Number(amount).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
 }
 
-// --- Fully built: Pending Diagnosis ---
-// Fetches real available mechanics for this order (GET
-// action=mechanics&available=true&order_id=X, per API_DOCUMENTATION.md ->
-// MechanicController::getAvailableMechanics) and POSTs the real
-// assignment (action=repair-orders&post-method=assign-diagnostician ->
-// RepairOrderController::assignDiagnostician).
-//
-// There is deliberately NO position filter on this list. Under dynamic
-// positioning, `mechanics` carries no position at all — position lives on
-// each repair_order_mechanics row, per order. So there's no such thing as
-// "a diagnostician mechanic"; any available mechanic can be assigned as
-// this order's Diagnostician.
-//
-// Confirmed response shape (getAvailableMechanics -> { message, data: [...] }),
-// each item: { mechanic_id, first_name, last_name, full_name,
-// specialization, status }. Note there is no position anywhere on it —
-// see above.
+// --- Shape helpers -----------------------------------------------------
+// sp_get_repair_order_details builds `assigned_mechanics` and `services` with
+// CONCAT, so they can arrive as JSON strings. The list SP
+// (sp_get_active_repair_orders) only returns a comma-separated name string
+// for assigned_mechanics, which is NOT parseable — those fall through to [].
+// These helpers accept either the already-normalized fields (order.team,
+// order.requiredServices) or the raw detail columns.
+// TODO: tighten once normalizeOrder's real output for these is confirmed.
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function getTeam(order) {
+  if (Array.isArray(order.team) && order.team.length > 0) return order.team;
+  return parseJsonArray(order.assigned_mechanics ?? order.assignedMechanics).map((m) => ({
+    id: m.mechanic_id,
+    name: m.mechanic_name,
+    role: m.position_name,
+  }));
+}
+
+function getServiceNames(order) {
+  if (Array.isArray(order.requiredServices) && order.requiredServices.length > 0) {
+    return order.requiredServices;
+  }
+  return parseJsonArray(order.services).map((s) => s.service_name);
+}
+
+function getDiagnostician(order) {
+  const team = getTeam(order);
+  return team.find((m) => m.role === "Diagnostician") ?? team[0];
+}
+
+// --- Pending Diagnosis: assign diagnostician ---
+// GET action=mechanics&available=true&order_id=X, then
+// POST action=repair-orders&post-method=assign-diagnostician.
+// No position filter: position lives on repair_order_mechanics per order,
+// so any available mechanic can be this order's Diagnostician.
 function AssignDiagnosticianStage({ order, onUpdateOrder }) {
   const [mechanics, setMechanics] = useState([]);
   const [loadingMechanics, setLoadingMechanics] = useState(true);
@@ -97,7 +108,7 @@ function AssignDiagnosticianStage({ order, onUpdateOrder }) {
     setError(null);
 
     fetch(
-      `http://localhost:8000/api.php?action=mechanics&available=true&order_id=${encodeURIComponent(orderRawId)}`,
+      `${API}?action=mechanics&available=true&order_id=${encodeURIComponent(orderRawId)}`,
       { credentials: "include" }
     )
       .then((res) => res.json())
@@ -121,9 +132,6 @@ function AssignDiagnosticianStage({ order, onUpdateOrder }) {
     };
   }, [orderRawId]);
 
-  // Base UI's Select prints the raw `value` (the mechanic id) in the trigger
-  // unless the Root is given an `items` list mapping each value to its label.
-  // Specialization is included in the label because mechanics can share a name.
   const mechanicItems = mechanics.map((m) => ({
     value: String(m.mechanic_id),
     label: `${m.full_name}${m.specialization ? ` · ${m.specialization}` : ""}`,
@@ -133,24 +141,19 @@ function AssignDiagnosticianStage({ order, onUpdateOrder }) {
     setAssigning(true);
     setError(null);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api.php?action=repair-orders&post-method=assign-diagnostician`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            order_id: orderRawId,
-            mechanic_id: Number(selectedMechanicId),
-          }),
-        }
-      );
+      const response = await fetch(`${API}?action=repair-orders&post-method=assign-diagnostician`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_id: Number(orderRawId),
+          mechanic_id: Number(selectedMechanicId),
+        }),
+      });
       const json = await response.json();
 
       if (json.status === "success") {
-        // assignDiagnostician doesn't return updated order data — this
-        // call only exists to trigger ActiveRepairOrder's refetch, which
-        // ignores the updates object entirely and always re-fetches.
+        // Parent refetches everything; the updates object is ignored.
         onUpdateOrder(order.id, {});
       } else {
         setError(json.error ?? "Failed to assign diagnostician");
@@ -168,8 +171,6 @@ function AssignDiagnosticianStage({ order, onUpdateOrder }) {
         Assigned Diagnostician
       </h3>
 
-      {/* value is null (not "") when nothing is selected — that's Base UI's
-          "no selection" state, which is what makes the placeholder show. */}
       <Select
         items={mechanicItems}
         value={selectedMechanicId || null}
@@ -203,19 +204,10 @@ function AssignDiagnosticianStage({ order, onUpdateOrder }) {
   );
 }
 
-// --- Fully built: Awaiting Diagnosis ---
-// No advisor action here by design — this stage advances when the
-// mechanic files their notes from Diagnostic Log. The dev-only mock
-// simulate link has been removed now that a real submitDiagnosis
-// endpoint exists on the backend (RepairOrderController::submitDiagnosis)
-// — it was standing in for that action, and leaving a fake version of it
-// around would be actively misleading once we're wiring real data.
-// NOTE: the Diagnostic Log page (Mechanic side) has NOT been wired to
-// call the real endpoint yet — it's still fully mocked. Until that's
-// done, an order can get stuck here with no way to actually advance it
-// from this UI. See mechanic-side-handoff-summary.md.
-function DiagnosisStage({ order, onUpdateOrder }) {
-  const diagnostician = order.team?.[0];
+// --- Awaiting Diagnosis: no advisor action; advances when the mechanic
+// files notes from Diagnostic Log. ---
+function DiagnosisStage({ order }) {
+  const diagnostician = getDiagnostician(order);
 
   return (
     <div className="space-y-3">
@@ -235,24 +227,76 @@ function DiagnosisStage({ order, onUpdateOrder }) {
   );
 }
 
-// --- Fully built: Pending Mechanics ---
-// This is the ONLY stage where the repair team can be built or changed —
-// once the order moves to In Progress, the roster locks (see
-// RepairInProgressStage below). Mechanic selection is a searchable
-// combobox, never a free-text input; position is chosen independently
-// per row, since a mechanic's role is per-order, not fixed to their
-// profile.
+// --- Pending Mechanics: the ONLY stage where the repair team is built. ---
+// Available mechanics: GET action=mechanics&available=true&order_id=X
+// (already excludes anyone on this order, including the diagnostician).
+// Positions: GET action=mechanic-position.
+// Submit: one POST assign-mechanic per row, SEQUENTIALLY — sp_assign_mechanic
+// flips the order PENDING_MECHANICS -> IN_PROGRESS on the first success, and
+// later rows are valid only because IN_PROGRESS is also accepted.
 function AssignMechanicsStage({ order, onUpdateOrder }) {
-  const diagnostician = order.team?.[0];
+  const diagnostician = getDiagnostician(order);
+  const orderRawId = order.rawId ?? order.id;
 
-  // Each row: { rowId, mechanicId, position }
-  const [rows, setRows] = useState([{ rowId: crypto.randomUUID(), mechanicId: "", position: "" }]);
+  const [mechanics, setMechanics] = useState([]);
+  const [positions, setPositions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+
+  // Each row: { rowId, mechanicId, positionId } (ids kept as strings)
+  const [rows, setRows] = useState([{ rowId: crypto.randomUUID(), mechanicId: "", positionId: "" }]);
   const [openComboboxRowId, setOpenComboboxRowId] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
-  const alreadyAssignedIds = new Set([diagnostician?.id, ...rows.map((r) => r.mechanicId)].filter(Boolean));
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+
+    Promise.all([
+      fetch(`${API}?action=mechanics&available=true&order_id=${encodeURIComponent(orderRawId)}`, {
+        credentials: "include",
+      }).then((r) => r.json()),
+      fetch(`${API}?action=mechanic-position`, { credentials: "include" }).then((r) => r.json()),
+    ])
+      .then(([mechJson, posJson]) => {
+        if (cancelled) return;
+        if (Array.isArray(mechJson.data)) {
+          setMechanics(mechJson.data);
+        } else {
+          setLoadError(mechJson.error ?? "Failed to load available mechanics");
+        }
+        // TODO: MechanicPosition::getAllMechanicPositions isn't in the
+        // uploaded files, so its envelope is unconfirmed — accept the
+        // likely ones. Rows expected: { position_id, position_name }.
+        const posRows = Array.isArray(posJson)
+          ? posJson
+          : posJson.data ?? posJson.positions ?? posJson.mechanic_positions ?? [];
+        // Diagnostician is assigned one stage earlier and is locked in.
+        setPositions(posRows.filter((p) => p.position_name !== "Diagnostician"));
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError("Failed to load mechanics or positions");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderRawId]);
+
+  const positionItems = positions.map((p) => ({
+    value: String(p.position_id),
+    label: p.position_name,
+  }));
+
+  const pickedIds = new Set(rows.map((r) => r.mechanicId).filter(Boolean));
 
   function addRow() {
-    setRows((prev) => [...prev, { rowId: crypto.randomUUID(), mechanicId: "", position: "" }]);
+    setRows((prev) => [...prev, { rowId: crypto.randomUUID(), mechanicId: "", positionId: "" }]);
   }
 
   function removeRow(rowId) {
@@ -263,19 +307,46 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
     setRows((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, ...changes } : r)));
   }
 
-  const isComplete = rows.length > 0 && rows.every((r) => r.mechanicId && r.position);
+  const isComplete = rows.length > 0 && rows.every((r) => r.mechanicId && r.positionId);
 
-  function handleSubmit() {
-    const newTeamMembers = rows.map((r) => {
-      const mechanic = MOCK_MECHANICS.find((m) => m.id === r.mechanicId);
-      return { id: mechanic.id, name: mechanic.name, role: r.position };
-    });
+  async function handleSubmit() {
+    setSubmitting(true);
+    setSubmitError(null);
 
-    onUpdateOrder(order.id, {
-      status: STATUS.IN_PROGRESS,
-      team: [...(order.team ?? []), ...newTeamMembers],
-    });
+    for (const row of rows) {
+      const mechanic = mechanics.find((m) => String(m.mechanic_id) === row.mechanicId);
+      try {
+        const response = await fetch(`${API}?action=repair-orders&post-method=assign-mechanic`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            order_id: Number(orderRawId),
+            mechanic_id: Number(row.mechanicId),
+            position_id: Number(row.positionId),
+          }),
+        });
+        const json = await response.json().catch(() => ({}));
+
+        if (!response.ok || json.status !== "success") {
+          throw new Error(json.error ?? `HTTP ${response.status}`);
+        }
+        // Drop rows that already succeeded so a retry doesn't re-send them.
+        setRows((prev) => prev.filter((r) => r.rowId !== row.rowId));
+      } catch (err) {
+        setSubmitError(`Could not assign ${mechanic?.full_name ?? "mechanic"}: ${err.message}`);
+        setSubmitting(false);
+        // Earlier rows may have succeeded (order can already be In Progress).
+        onUpdateOrder(order.id, {});
+        return;
+      }
+    }
+
+    setSubmitting(false);
+    onUpdateOrder(order.id, {});
   }
+
+  const serviceNames = getServiceNames(order);
 
   return (
     <div className="space-y-5">
@@ -290,11 +361,14 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-1.5">Required Services</p>
           <div className="flex flex-wrap gap-1.5">
-            {(order.requiredServices ?? []).map((service) => (
+            {serviceNames.map((service) => (
               <Badge key={service} variant="secondary">
                 {service}
               </Badge>
             ))}
+            {serviceNames.length === 0 && (
+              <p className="text-sm text-muted-foreground">None recorded.</p>
+            )}
           </div>
         </div>
 
@@ -310,10 +384,12 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
         </h3>
         {diagnostician && <MechanicChip name={diagnostician.name} role={diagnostician.role} />}
 
+        {loadError && <p className="text-sm text-destructive">{loadError}</p>}
+
         {rows.map((row) => {
-          const mechanic = MOCK_MECHANICS.find((m) => m.id === row.mechanicId);
-          const availableMechanics = MOCK_MECHANICS.filter(
-            (m) => m.status === "Active" && (!alreadyAssignedIds.has(m.id) || m.id === row.mechanicId)
+          const mechanic = mechanics.find((m) => String(m.mechanic_id) === row.mechanicId);
+          const options = mechanics.filter(
+            (m) => !pickedIds.has(String(m.mechanic_id)) || String(m.mechanic_id) === row.mechanicId
           );
 
           return (
@@ -327,9 +403,10 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
                     type="button"
                     variant="outline"
                     role="combobox"
+                    disabled={loading || submitting}
                     className="flex-1 justify-between font-normal bg-background"
                   >
-                    {mechanic ? mechanic.name : "Choose a mechanic..."}
+                    {mechanic ? mechanic.full_name : loading ? "Loading..." : "Choose a mechanic..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -339,17 +416,24 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
                     <CommandList>
                       <CommandEmpty>No mechanic found.</CommandEmpty>
                       <CommandGroup>
-                        {availableMechanics.map((m) => (
+                        {options.map((m) => (
                           <CommandItem
-                            key={m.id}
-                            value={m.name}
+                            key={m.mechanic_id}
+                            value={m.full_name}
                             onSelect={() => {
-                              updateRow(row.rowId, { mechanicId: m.id });
+                              updateRow(row.rowId, { mechanicId: String(m.mechanic_id) });
                               setOpenComboboxRowId(null);
                             }}
                           >
-                            <Check className={`mr-2 h-4 w-4 ${row.mechanicId === m.id ? "opacity-100" : "opacity-0"}`} />
-                            {m.name}
+                            <Check
+                              className={`mr-2 h-4 w-4 ${
+                                row.mechanicId === String(m.mechanic_id) ? "opacity-100" : "opacity-0"
+                              }`}
+                            />
+                            <span className="flex-1">{m.full_name}</span>
+                            {m.specialization && (
+                              <span className="text-xs text-muted-foreground">{m.specialization}</span>
+                            )}
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -358,14 +442,19 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
                 </PopoverContent>
               </Popover>
 
-              <Select value={row.position} onValueChange={(value) => updateRow(row.rowId, { position: value })}>
+              <Select
+                items={positionItems}
+                value={row.positionId || null}
+                onValueChange={(value) => updateRow(row.rowId, { positionId: value ?? "" })}
+                disabled={loading || submitting}
+              >
                 <SelectTrigger className="w-44 bg-background">
                   <SelectValue placeholder="Position..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {MOCK_POSITIONS.map((position) => (
-                    <SelectItem key={position} value={position}>
-                      {position}
+                  {positions.map((p) => (
+                    <SelectItem key={p.position_id} value={String(p.position_id)}>
+                      {p.position_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -375,6 +464,7 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
                 <button
                   type="button"
                   aria-label="Remove mechanic"
+                  disabled={submitting}
                   className="text-muted-foreground hover:text-destructive shrink-0"
                   onClick={() => removeRow(row.rowId)}
                 >
@@ -388,34 +478,42 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
         <button
           type="button"
           onClick={addRow}
-          className="w-full text-sm text-muted-foreground border border-dashed border-border rounded-lg py-2 hover:text-foreground hover:border-foreground/40 transition-colors"
+          disabled={submitting || rows.length >= mechanics.length}
+          className="w-full text-sm text-muted-foreground border border-dashed border-border rounded-lg py-2 hover:text-foreground hover:border-foreground/40 transition-colors disabled:opacity-50"
         >
           + Add Another Mechanic
         </button>
 
-        <Button type="button" className="w-full" disabled={!isComplete} onClick={handleSubmit}>
-          Assign Mechanics & Start Repair
+        {submitError && (
+          <p role="alert" className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+            {submitError}
+          </p>
+        )}
+
+        <Button type="button" className="w-full" disabled={!isComplete || submitting || loading} onClick={handleSubmit}>
+          {submitting ? "Assigning..." : "Assign Mechanics & Start Repair"}
         </Button>
       </div>
     </div>
   );
 }
 
-// --- In Progress: read-only. No "mark complete" action here — that's
-// owned by the Lead Mechanic from their own interface, and the roster is
-// locked once work has started. See point 1 in the accompanying
-// explanation for why both of those are deliberate, not omissions. ---
+// --- In Progress: read-only. Marking the job complete belongs to the Lead
+// Mechanic's own interface, and the roster is locked once work starts. ---
 function RepairInProgressStage({ order }) {
+  const team = getTeam(order);
+  const serviceNames = getServiceNames(order);
+
   return (
     <div className="space-y-5">
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">
           Assigned Mechanics
         </h3>
-        {(order.team ?? []).map((member) => (
+        {team.map((member) => (
           <MechanicChip key={member.id ?? member.name} name={member.name} role={member.role} />
         ))}
-        {(!order.team || order.team.length === 0) && (
+        {team.length === 0 && (
           <p className="text-sm text-muted-foreground">No mechanics assigned.</p>
         )}
       </div>
@@ -425,7 +523,7 @@ function RepairInProgressStage({ order }) {
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-1.5">Required Services</p>
           <div className="flex flex-wrap gap-1.5">
-            {(order.requiredServices ?? []).map((service) => (
+            {serviceNames.map((service) => (
               <Badge key={service} variant="secondary">
                 {service}
               </Badge>
@@ -446,22 +544,69 @@ function RepairInProgressStage({ order }) {
   );
 }
 
-function AwaitingPartsStage() {
+// --- Awaiting Parts: shows which logged parts are actually blocking.
+// GET category=parts-by-order&order_id=X returns non-cancelled rows with
+// part_name, quantity_used and part_status (ISSUED | PENDING_PARTS). ---
+function AwaitingPartsStage({ order }) {
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const orderRawId = order.rawId ?? order.id;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    fetch(`${API}?action=repair-orders&category=parts-by-order&order_id=${encodeURIComponent(orderRawId)}`, {
+      credentials: "include",
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        const rows = Array.isArray(json.data) ? json.data : [];
+        setPending(rows.filter((r) => r.part_status === "PENDING_PARTS"));
+      })
+      .catch((err) => console.error("Failed to fetch pending parts:", err))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderRawId]);
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">Awaiting Parts</h3>
       <p className="text-sm text-muted-foreground">
-        This order is on hold — a required part is out of stock. It resumes automatically once the part is
-        restocked.
+        This order is on hold — a required part is out of stock. It resumes automatically once the
+        part is restocked.
       </p>
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading pending parts...</p>
+      ) : (
+        pending.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Waiting on</p>
+            {pending.map((part) => (
+              <div
+                key={part.order_part_id}
+                className="flex items-center justify-between bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2 text-sm"
+              >
+                <span>{part.part_name}</span>
+                <span>Qty {part.quantity_used}</span>
+              </div>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 }
 
-// --- Invoicing-adjacent stages: financial content lives ONLY here, never
-// on any other stage. Full invoice breakdown/payment collection is
-// deliberately NOT built inline — these are stubs with a placeholder
-// link out to a dedicated Invoice page, not yet built. See point 5. ---
+// --- Invoicing-adjacent stages: financial content lives ONLY on the
+// Billing & Invoicing page. These stages just deep-link to it. ---
 function InvoicingStub({ title, description, order }) {
   const navigate = useNavigate();
   const amountLabel = formatCurrency(order.amount);
@@ -505,17 +650,20 @@ function CollectPaymentStage({ order }) {
     <InvoicingStub
       order={order}
       title="Awaiting Payment"
-      description="Invoice generated. Collect payment to release the vehicle."
+      description="Invoice generated. Collect payment to close out the order."
     />
   );
 }
 
-function ReleaseVehicleStage({ order, onUpdateOrder }) {
+// sp_process_invoice_payment moves AWAITING_PAYMENT straight to FULFILLED,
+// so READY_FOR_RELEASE is never reached by the current backend. Kept only
+// so a stray/legacy row doesn't fall into the "Unknown status" fallback.
+function ReleaseVehicleStage({ order }) {
   return (
     <InvoicingStub
       order={order}
       title="Ready for Release"
-      description="Payment received. Release the vehicle to the customer."
+      description="Payment received. Review the invoice record."
     />
   );
 }
@@ -525,7 +673,7 @@ function CompletedStage() {
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">Order Complete</h3>
       <p className="text-sm text-muted-foreground">
-        Vehicle released and payment collected. This order is now read-only.
+        Payment collected and order fulfilled. This order is now read-only.
       </p>
     </div>
   );

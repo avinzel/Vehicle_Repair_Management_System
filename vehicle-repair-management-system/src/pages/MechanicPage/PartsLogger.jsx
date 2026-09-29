@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react";
-import { useSearchParams } from "react-router";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams, useOutletContext } from "react-router";
 import { Check, ChevronsUpDown, ArrowUpDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,42 +19,50 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { normalizeOrder } from "@/utils/normalizeOrder";
 
-// Order picker is STILL MOCKED — deliberately deferred. It's blocked on
-// the same `category=assigned` backend work we agreed to build later
-// (mechanic-scoped order list with real per-order position data). Come
-// back here once that endpoint exists and swap this for a real fetch,
-// same pattern as fetchInventory/fetchLoggedParts below.
-const MOCK_ELIGIBLE_ORDERS = [
-  {
-    id: "RO-1050",
-    rawId: 1050,
-    status: "IN_PROGRESS",
-    statusLabel: "In Progress",
-    customer: "Grace Tan",
-    vehicle: "Honda Civic 2022",
-    plate: "STU-3344",
-    vehicleType: "Car",
-    date: "Aug 25, 2026",
-    team: [
-      { id: "u1", name: "Ramon Cruz", role: "Diagnostician" },
-      { id: "u2", name: "Ben Reyes", role: "Lead Mechanic" },
-      { id: "u3", name: "Leo Santos", role: "Assistant" },
-    ],
-  },
-];
+const API = "http://localhost:8000/api.php";
 
-// Inventory and per-order logged parts are REAL endpoints
-// (GET action=parts&status=ALL, GET category=parts-by-order&order_id=X —
-// both routed in api.php), but I don't have PartController.php or
-// getPartsByRepairOrder()'s exact response shape, so these normalizers
-// are defensive/tolerant guesses, same situation as getAvailableMechanics
-// before its real shape was confirmed. Test against real responses and
-// tighten these once confirmed.
+// Only these statuses accept parts. Must match the guard in
+// sp_log_repair_order_part (IN_PROGRESS / AWAITING_PARTS) and
+// canLogParts in MechanicOrderStages.jsx.
+const LOGGABLE_STATUSES = ["IN_PROGRESS", "AWAITING_PARTS"];
+
+// --- Normalizers -----------------------------------------------------
+// These map the exact columns returned by the stored procedures, so they
+// no longer go through normalizeOrder (which is shaped for repair orders).
+// MySQL/PDO often returns DECIMAL and INT columns as strings, hence Number().
+
+// sp_get_parts_inventory
+function normalizePart(raw) {
+  return {
+    part_id: Number(raw.part_id),
+    part_code: raw.part_code,
+    part_name: raw.part_name,
+    category: raw.category,
+    unit: raw.unit ?? "pc",
+    unit_price: Number(raw.unit_price ?? 0),
+    quantity_on_hand: Number(raw.quantity_on_hand ?? 0),
+    reorder_level: Number(raw.reorder_level ?? 0),
+    status: raw.status,
+  };
+}
+
+// sp_get_parts_by_repair_order — note the SP names these columns
+// unit_price_at_use and part_status.
+function normalizeLoggedPart(raw) {
+  return {
+    order_part_id: Number(raw.order_part_id),
+    part_id: Number(raw.part_id),
+    part_name: raw.part_name,
+    quantity_used: Number(raw.quantity_used ?? 0),
+    unit_price: Number(raw.unit_price_at_use ?? raw.unit_price ?? 0),
+    status: raw.part_status ?? raw.status,
+  };
+}
 
 function formatPeso(amount) {
-  return `₱${Number(amount).toLocaleString("en-PH", { minimumFractionDigits: amount % 1 === 0 ? 0 : 2 })}`;
+  const n = Number(amount) || 0;
+  return `₱${n.toLocaleString("en-PH", { minimumFractionDigits: n % 1 === 0 ? 0 : 2 })}`;
 }
 
 const STATUS_LABEL = {
@@ -70,9 +78,11 @@ const STATUS_BADGE_STYLE = {
 };
 
 export function PartsLogger() {
+  // tableData comes from MechanicPage, same source as Assigned Orders,
+  // Diagnostic Log and the sidebar badge.
+  const { tableData, getTableData } = useOutletContext();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [eligibleOrders, setEligibleOrders] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [loggedPartsByOrder, setLoggedPartsByOrder] = useState({});
 
@@ -81,20 +91,28 @@ export function PartsLogger() {
   const [selectedPartId, setSelectedPartId] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [confirmingCancelId, setConfirmingCancelId] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState(null);
 
-  const fetchEligibleOrders = useCallback(async () => {
-    // TODO: still mocked — see comment above MOCK_ELIGIBLE_ORDERS.
-    setEligibleOrders(MOCK_ELIGIBLE_ORDERS);
-  }, []);
+  // Refresh the shared order list when landing here.
+  useEffect(() => {
+    getTableData();
+  }, [getTableData]);
+
+  // Orders the mechanic can actually log parts against.
+  const eligibleOrders = useMemo(() => {
+    const orders = Array.isArray(tableData) ? tableData : [];
+    return orders.filter((o) => LOGGABLE_STATUSES.includes(o.status));
+  }, [tableData]);
 
   const fetchInventory = useCallback(async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api.php?action=parts&status=ALL`, {
+      const response = await fetch(`${API}?action=parts&status=ACTIVE`, {
         credentials: "include",
       });
       const json = await response.json();
       if (Array.isArray(json.data)) {
-        setInventory(json.data.map(normalizeOrder));
+        setInventory(json.data.map(normalizePart));
       } else {
         console.error("Failed to fetch parts inventory:", json.error ?? json);
       }
@@ -107,34 +125,29 @@ export function PartsLogger() {
     if (rawOrderId == null) return;
     try {
       const response = await fetch(
-        `http://localhost:8000/api.php?action=repair-orders&category=parts-by-order&order_id=${encodeURIComponent(rawOrderId)}`,
+        `${API}?action=repair-orders&category=parts-by-order&order_id=${encodeURIComponent(rawOrderId)}`,
         { credentials: "include" }
       );
       const json = await response.json();
       const rows = Array.isArray(json.data) ? json.data : [];
-      setLoggedPartsByOrder((prev) => ({ ...prev, [rawOrderId]: rows.map(normalizeOrder) }));
+      setLoggedPartsByOrder((prev) => ({ ...prev, [rawOrderId]: rows.map(normalizeLoggedPart) }));
     } catch (err) {
       console.error("Failed to fetch logged parts for order", rawOrderId, err);
     }
   }, []);
 
   useEffect(() => {
-    fetchEligibleOrders();
     fetchInventory();
-  }, [fetchEligibleOrders, fetchInventory]);
+  }, [fetchInventory]);
 
-  // Fetch this order's logged parts the moment it's selected — the list
-  // endpoint doesn't include them, so each order's parts only load once
-  // you actually pick that card.
+  const selectedOrder = eligibleOrders.find((o) => o.id === selectedOrderId) ?? null;
+
+  // Load this order's logged parts as soon as it's selected.
   useEffect(() => {
-    if (selectedOrderId == null) return;
-    const order = eligibleOrders.find((o) => o.id === selectedOrderId);
-    if (order?.rawId != null) fetchLoggedParts(order.rawId);
-  }, [selectedOrderId, eligibleOrders, fetchLoggedParts]);
+    if (selectedOrder?.rawId != null) fetchLoggedParts(selectedOrder.rawId);
+  }, [selectedOrder?.rawId, fetchLoggedParts]);
 
-  // Redirect-and-preselect: "+ Log Parts Used" on an order's drawer links
-  // here with ?order_id=<rawId>, same convention as the Diagnostic Log
-  // redirect.
+  // Redirect-and-preselect: "+ Log Parts Used" links here with ?order_id=<rawId>.
   useEffect(() => {
     const paramOrderId = searchParams.get("order_id");
     if (paramOrderId && eligibleOrders.length > 0) {
@@ -144,9 +157,14 @@ export function PartsLogger() {
     }
   }, [eligibleOrders, searchParams, setSearchParams]);
 
-  const selectedOrder = eligibleOrders.find((o) => o.id === selectedOrderId) ?? null;
+  // If the selected order drops out of the eligible list (e.g. status changed), deselect it.
+  useEffect(() => {
+    if (selectedOrderId != null && !selectedOrder) setSelectedOrderId(null);
+  }, [selectedOrderId, selectedOrder]);
+
   const selectedPart = inventory.find((p) => p.part_id === selectedPartId) ?? null;
   const loggedForSelectedOrder = selectedOrder ? loggedPartsByOrder[selectedOrder.rawId] ?? [] : [];
+  const visibleLogged = loggedForSelectedOrder.filter((r) => r.status !== "CANCELLED");
 
   const isOverStock = selectedPart ? quantity > selectedPart.quantity_on_hand : false;
   const subtotal = selectedPart ? selectedPart.unit_price * quantity : 0;
@@ -158,96 +176,81 @@ export function PartsLogger() {
 
   function handleSelectOrder(orderId) {
     setSelectedOrderId(orderId);
+    setActionError(null);
+    setConfirmingCancelId(null);
     resetPartSelection();
   }
 
   async function handleLogPart() {
-    if (!selectedOrder || !selectedPart || quantity < 1) return;
+    if (!selectedOrder || !selectedPart || quantity < 1 || submitting) return;
 
+    setSubmitting(true);
+    setActionError(null);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api.php?action=repair-orders&post-method=log-part`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            order_id: selectedOrder.rawId,
-            part_id: selectedPart.part_id,
-            quantity,
-          }),
-        }
-      );
-      const json = await response.json();
+      const response = await fetch(`${API}?action=repair-orders&post-method=log-part`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_id: selectedOrder.rawId,
+          part_id: selectedPart.part_id,
+          quantity,
+        }),
+      });
+      const json = await response.json().catch(() => ({}));
 
-      if (json.status === "success") {
-        // Don't guess the outcome locally (whether it went ISSUED or
-        // PENDING_PARTS, whether stock actually moved) — sp_log_part
-        // decides that server-side. Just refetch both sources of truth.
-        await Promise.all([fetchInventory(), fetchLoggedParts(selectedOrder.rawId)]);
+      if (response.ok && json.status === "success") {
+        // The SP decides ISSUED vs PENDING_PARTS server-side (and may flip the
+        // order to AWAITING_PARTS), so refetch everything instead of guessing.
+        await Promise.all([fetchInventory(), fetchLoggedParts(selectedOrder.rawId), getTableData()]);
         resetPartSelection();
       } else {
-        console.error("Failed to log part:", json.error ?? json);
+        setActionError(json.error ?? json.message ?? `Failed to log part (HTTP ${response.status})`);
       }
     } catch (err) {
       console.error("Failed to log part:", err);
+      setActionError("Something went wrong while logging the part. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
-  // STILL LOCAL-ONLY: no backend endpoint exists for this at all (see the
-  // sp_cancel_logged_part discussion — never built). This used to be
-  // harmless when the whole page was mocked, but now that handleLogPart
-  // triggers real refetches, a "cancelled" row here would silently
-  // reappear the next time inventory/logged-parts gets refetched, since
-  // nothing was actually cancelled server-side. The X button below is
-  // disabled rather than left looking functional — flip it back on once
-  // a real cancel endpoint exists.
-  function handleCancelPart(row) {
+  // Real endpoint: PUT action=repair-orders&put-method=cancel-order-part
+  async function handleCancelPart(row) {
     if (!selectedOrder) return;
 
-    const remaining = (loggedPartsByOrder[selectedOrder.rawId] ?? []).filter(
-      (r) => r.order_part_id !== row.order_part_id
-    );
-
-    setLoggedPartsByOrder((prev) => ({ ...prev, [selectedOrder.rawId]: remaining }));
-
-    // Mirrors the proposed sp_cancel_logged_part: give stock back only if
-    // it was actually deducted (ISSUED); PENDING_PARTS never touched stock.
-    if (row.status === "ISSUED") {
-      setInventory((prev) =>
-        prev.map((p) =>
-          p.part_id === row.part_id
-            ? { ...p, quantity_on_hand: p.quantity_on_hand + row.quantity_used }
-            : p
-        )
+    setActionError(null);
+    try {
+      const response = await fetch(
+        `${API}?action=repair-orders&put-method=cancel-order-part`,
+        {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order_part_id: row.order_part_id }),
+        }
       );
-    }
+      const json = await response.json().catch(() => ({}));
 
-    // Mirrors sp_restock_and_fulfill's reversion check: if that was the
-    // last PENDING_PARTS row for this order, drop it back to IN_PROGRESS.
-    const stillPending = remaining.some((r) => r.status === "PENDING_PARTS");
-    if (row.status === "PENDING_PARTS" && !stillPending) {
-      setEligibleOrders((prev) =>
-        prev.map((o) =>
-          o.id === selectedOrder.id ? { ...o, status: "IN_PROGRESS", statusLabel: "In Progress" } : o
-        )
-      );
+      if (response.ok && json.status === "success") {
+        await Promise.all([fetchInventory(), fetchLoggedParts(selectedOrder.rawId), getTableData()]);
+      } else {
+        setActionError(json.error ?? json.message ?? `Failed to cancel part (HTTP ${response.status})`);
+      }
+    } catch (err) {
+      console.error("Failed to cancel part:", err);
+      setActionError("Something went wrong while cancelling the part. Please try again.");
+    } finally {
+      setConfirmingCancelId(null);
     }
-
-    setConfirmingCancelId(null);
   }
 
-  const partsTotal = loggedForSelectedOrder
-    .filter((r) => r.status !== "CANCELLED")
-    .reduce((sum, r) => sum + r.unit_price * r.quantity_used, 0);
+  const partsTotal = visibleLogged.reduce((sum, r) => sum + r.unit_price * r.quantity_used, 0);
 
   return (
     <div className="w-full">
       <div className="p-6 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
-        {/* LEFT: order list, with the logging form expanding inline right
-            under whichever card is selected — not below the whole list,
-            so picking an order lower down doesn't require scrolling past
-            every card above it to reach the form. */}
+        {/* LEFT: order list, with the logging form expanding inline under the selected card. */}
         <div className="space-y-3">
           <h3 className="text-sm font-semibold">Repair Order</h3>
 
@@ -375,15 +378,28 @@ export function PartsLogger() {
                           <span className="font-semibold text-primary">{formatPeso(subtotal)}</span>
                         </div>
                       )}
-
-                      <Button
-                        type="button"
-                        className={`w-full ${isOverStock ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}`}
-                        onClick={handleLogPart}
-                      >
-                        {isOverStock ? "Log Part — Order Will Move to Awaiting Parts" : "Log Part & Deduct from Inventory"}
-                      </Button>
                     </>
+                  )}
+
+                  {actionError && (
+                    <p role="alert" className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                      {actionError}
+                    </p>
+                  )}
+
+                  {selectedPart && (
+                    <Button
+                      type="button"
+                      disabled={submitting}
+                      className={`w-full ${isOverStock ? "bg-amber-600 hover:bg-amber-700 text-white" : ""}`}
+                      onClick={handleLogPart}
+                    >
+                      {submitting
+                        ? "Logging..."
+                        : isOverStock
+                        ? "Log Part — Order Will Move to Awaiting Parts"
+                        : "Log Part & Deduct from Inventory"}
+                    </Button>
                   )}
                 </div>
               )}
@@ -404,60 +420,60 @@ export function PartsLogger() {
           )}
         </div>
 
-        {/* RIGHT: order-specific log + global inventory. Sticky so it
-            stays in view while the left column scrolls through however
-            many order cards there are — same top-[73px] header-offset
-            convention as ActiveRepairOrder's sticky filter bar.
-            max-h + overflow-y-auto is required, not optional: a sticky
-            element only has room to "float" while its parent (the grid
-            row) is taller than it. As Parts Logged grows, this column's
-            own height grows too — once it exceeds the left column's
-            height, the grid row height becomes driven by this column
-            itself, leaving no slack to stick within, and it falls back
-            to scrolling normally with the page. Capping this column at
-            the viewport height and scrolling its own content instead
-            guarantees it never outgrows that slack, regardless of how
-            many parts get logged. Adjust the offset if this page's
-            Header renders at a different height. */}
+        {/* RIGHT: order-specific log + inventory snapshot. Sticky, capped to viewport height. */}
         <div className="space-y-4 sticky top-[73px] max-h-[calc(100vh-97px)] overflow-y-auto pr-1">
           {selectedOrder && (
             <div className="border border-border rounded-xl p-4 space-y-3">
               <h3 className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
                 Parts Logged on {selectedOrder.id}
               </h3>
-              {loggedForSelectedOrder.filter((r) => r.status !== "CANCELLED").length > 0 ? (
+              {visibleLogged.length > 0 ? (
                 <div className="space-y-2">
-                  {loggedForSelectedOrder
-                    .filter((r) => r.status !== "CANCELLED")
-                    .map((row) => (
-                      <div key={row.order_part_id} className="flex items-start justify-between gap-2 text-sm">
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <p className="font-medium">{row.part_name}</p>
-                            <Badge variant="secondary" className={STATUS_BADGE_STYLE[row.status]}>
-                              {STATUS_LABEL[row.status]}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {[`Qty ${row.quantity_used}`, row.loggedBy ? `by ${row.loggedBy}` : null]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </p>
+                  {visibleLogged.map((row) => (
+                    <div key={row.order_part_id} className="flex items-start justify-between gap-2 text-sm">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-medium">{row.part_name}</p>
+                          <Badge variant="secondary" className={STATUS_BADGE_STYLE[row.status]}>
+                            {STATUS_LABEL[row.status] ?? row.status}
+                          </Badge>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="font-medium">{formatPeso(row.unit_price * row.quantity_used)}</span>
+                        <p className="text-xs text-muted-foreground">Qty {row.quantity_used}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-medium">{formatPeso(row.unit_price * row.quantity_used)}</span>
+                        {confirmingCancelId === row.order_part_id ? (
+                          <div className="flex items-center gap-1 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => handleCancelPart(row)}
+                              className="text-destructive font-medium hover:underline"
+                            >
+                              Cancel part
+                            </button>
+                            <span className="text-muted-foreground">·</span>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmingCancelId(null)}
+                              className="text-muted-foreground hover:underline"
+                            >
+                              Keep
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             type="button"
-                            disabled
                             aria-label={`Cancel ${row.part_name}`}
-                            title="Cancelling a logged part isn't available yet — no backend endpoint exists for it."
-                            className="text-muted-foreground/40 cursor-not-allowed"
+                            title="Cancel this logged part"
+                            onClick={() => setConfirmingCancelId(row.order_part_id)}
+                            className="text-muted-foreground hover:text-destructive"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
-                        </div>
+                        )}
                       </div>
-                    ))}
+                    </div>
+                  ))}
                   <div className="flex justify-between text-sm font-semibold pt-2 border-t border-border">
                     <span>Parts Total</span>
                     <span>{formatPeso(partsTotal)}</span>

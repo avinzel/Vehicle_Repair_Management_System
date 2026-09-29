@@ -1,53 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react";
-import { useSearchParams } from "react-router";
+import { useState, useEffect, useMemo } from "react";
+import { useSearchParams, useOutletContext } from "react-router";
 import { DetailDrawer } from "@/components/DetailDrawer";
 import { OrderCard } from "@/components/OrderCard";
 import { MechanicOrderDetail } from "@/components/MechanicOrderDetail";
 import { getMyPositionOnOrder } from "@/components/MechanicOrderStages";
-import { normalizeOrder } from "@/utils/normalizeOrder";
-import { useOutletContext } from "react-router";
-
-// TODO: placeholder mock data — same shape/contract as AssignedOrders'
-// MOCK_ASSIGNED_ORDERS. Swap fetchDiagnosticOrders' body for a real call
-// once a backend endpoint exists (likely the same underlying data source
-// as Assigned Orders, just filtered differently — see filter below).
-const MOCK_DIAGNOSTIC_ORDERS = [
-  {
-    id: "RO-1044",
-    rawId: 1044,
-    status: "AWAITING_DIAGNOSIS",
-    statusLabel: "Awaiting Diagnosis",
-    customer: "James Davis",
-    vehicle: "Kawasaki Barako 175",
-    plate: "JKL-7890",
-    vehicleType: "Motorcycle",
-    date: "Aug 23, 2026",
-    complaint: "Engine makes a rattling noise when idling and loses power going uphill.",
-    diagnosticNotes: null,
-    requiredServices: [],
-    team: [{ id: "u2", name: "Ben Reyes", role: "Diagnostician" }],
-    partsLogged: [],
-  },
-  {
-    id: "RO-1041",
-    rawId: 1041,
-    status: "PENDING_MECHANICS",
-    statusLabel: "Pending Mechanics",
-    customer: "Maria Lopez",
-    vehicle: "Suzuki Raider 150",
-    plate: "MNO-2233",
-    vehicleType: "Motorcycle",
-    date: "Aug 22, 2026",
-    complaint: "Chain feels loose and makes noise on rough roads. Front brake feels soft.",
-    diagnosticNotes:
-      "Chain slack beyond spec, sprocket teeth showing wear. Front brake lever has excessive play. Recommend chain and sprocket set replacement, front brake adjustment and fluid check.",
-    requiredServices: ["Chain & Sprocket Service"],
-    team: [{ id: "u2", name: "Ben Reyes", role: "Diagnostician" }],
-    partsLogged: [],
-  },
-];
 
 // Orders where the viewer is the Diagnostician and diagnosis is still
 // theirs to file or revise: not yet submitted (AWAITING_DIAGNOSIS), or
@@ -59,43 +17,33 @@ const MOCK_DIAGNOSTIC_ORDERS = [
 const VISIBLE_TO_DIAGNOSTIC_LOG_STATUSES = ["AWAITING_DIAGNOSIS", "PENDING_MECHANICS"];
 
 export function DiagnosticLogs() {
-  const { user } = useOutletContext();
+  // tableData is the single source of truth for the mechanic's orders.
+  // MechanicPage fetches + normalizes it (and builds each order's `team`),
+  // so this page, Assigned Orders, and the sidebar badge never disagree.
+  const { user, tableData, setTableData, getTableData } = useOutletContext();
   const currentUserName = `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim();
 
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const [diagnosticOrders, setDiagnosticOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
-  const fetchDiagnosticOrders = useCallback(async () => {
-    try {
-      const response = await fetch(
-        //TODO: change category = assigned, after the category has been built
-        `http://localhost:8000/api.php?action=repair-orders&category=active`, 
-        {credentials: 'include'})
-        const json = await response.json();
-        if (json.status === 'success') {
-          setDiagnosticOrders(json.data.map(normalizeOrder));
-        } else {
-          console.error("Failed to fetch active orders:", json.error);
-        }
-    } catch (err) {
-      console.error("Failed to fetch active orders:", err);
-    }
-  }, []);
-
+  // Refresh through the shared fetch when landing here, so assignments or
+  // status changes made elsewhere show up. Same state, no second copy.
   useEffect(() => {
-    fetchDiagnosticOrders();
-  }, [fetchDiagnosticOrders]);
+    getTableData();
+  }, [getTableData]);
 
   // Orders where I'm the Diagnostician and status is still open for
-  // diagnosis. Kept as a derived list (not filtered at fetch time) for
-  // the same reason as AssignedOrders' visibleOrders.
-  const visibleOrders = diagnosticOrders.filter(
-    (o) =>
-      VISIBLE_TO_DIAGNOSTIC_LOG_STATUSES.includes(o.status) &&
-      getMyPositionOnOrder(o, currentUserName) === "Diagnostician"
-  );
+  // diagnosis. Derived from tableData (not filtered at fetch time) so
+  // tableData stays the full set for the sidebar badge and other tabs.
+  // Memoized so the redirect effect below doesn't re-run every render.
+  const visibleOrders = useMemo(() => {
+    const orders = Array.isArray(tableData) ? tableData : [];
+    return orders.filter(
+      (o) =>
+        VISIBLE_TO_DIAGNOSTIC_LOG_STATUSES.includes(o.status) &&
+        getMyPositionOnOrder(o, currentUserName) === "Diagnostician"
+    );
+  }, [tableData, currentUserName]);
 
   const selectedOrder = visibleOrders.find((o) => o.id === selectedOrderId) ?? null;
 
@@ -115,15 +63,10 @@ export function DiagnosticLogs() {
   }, [visibleOrders, searchParams, setSearchParams]);
 
   function handleUpdateOrder(orderId, updates) {
-    // TODO: backend not built yet — this only updates local state so the
-    // UI reflects the change. Replace with a real POST/PUT once the
-    // endpoint exists, then re-fetch (same pattern as AssignedOrders).
-    setDiagnosticOrders((prev) =>
+    setTableData((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o))
     );
-    // Submitting a diagnosis moves status to PENDING_MECHANICS, which
-    // falls out of visibleOrders automatically on next render — no extra
-    // logic needed to make the card disappear from this list.
+    getTableData();
   }
 
   return (

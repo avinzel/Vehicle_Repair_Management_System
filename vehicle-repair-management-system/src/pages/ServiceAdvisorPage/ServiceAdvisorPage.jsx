@@ -3,6 +3,9 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { Outlet, useLocation } from "react-router";
+import { normalizeOrder } from '@/utils/normalizeOrder';
+
+const API = 'http://localhost:8000/api.php';
 
 // Static title/subtitle per tab. Dashboard is intentionally excluded here
 // since it needs a dynamic personalized greeting instead — handled below.
@@ -15,16 +18,22 @@ const PAGE_META = {
 };
 
 export function ServiceAdvisorPage({ user, setUser }) {
+  // Each dataset comes from a different stored procedure with a different
+  // row shape, so they can't share one array:
+  //   tableData     -> sp_populate_dashboard_table   (dashboard, compact rows)
+  //   card          -> sp_populate_dashboard_cards   (dashboard metrics)
+  //   activeOrders  -> sp_get_active_repair_orders   (Active Repair Orders)
+  //   billingOrders -> sp_get_billing_and_invoicing  (Billing & Invoicing)
   const [tableData, setTableData] = useState([]);
   const [card, setCard] = useState([]);
+  const [activeOrders, setActiveOrders] = useState([]);
+  const [billingOrders, setBillingOrders] = useState([]);
   const location = useLocation();
 
   // 1. Stable Fetch Functions
   const getCardData = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:8000/api.php?action=reports', {
-        credentials: 'include'
-      });
+      const response = await fetch(`${API}?action=reports`, { credentials: 'include' });
       const data = await response.json();
       setCard(data.data || []);
     } catch (err) {
@@ -34,9 +43,7 @@ export function ServiceAdvisorPage({ user, setUser }) {
 
   const getTableData = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:8000/api.php?action=repair-orders', {
-        credentials: 'include'
-      });
+      const response = await fetch(`${API}?action=repair-orders`, { credentials: 'include' });
       const data = await response.json();
       setTableData(data.data || []);
     } catch (err) {
@@ -44,19 +51,66 @@ export function ServiceAdvisorPage({ user, setUser }) {
     }
   }, []);
 
+  // Status/search filtering happens client-side in the pages, so we always
+  // fetch the full set (status defaults to ALL server-side).
+  const getActiveOrders = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `${API}?action=repair-orders&category=active`,
+        { credentials: 'include' }
+      );
+      const json = await response.json();
+      if (json.status === 'success' && Array.isArray(json.data)) {
+        setActiveOrders(json.data.map(normalizeOrder));
+      } else {
+        console.error("Failed to fetch active orders:", json.error ?? json);
+      }
+    } catch (err) {
+      console.error("Failed to fetch active orders", err);
+    }
+  }, []);
+
+  // Route: repair-orders&category=inactive -> InvoiceController::
+  // getBillingAndInvoicingRecords. (The old page called action=invoices
+  // with no order_id, which api.php never routes to the list handler.)
+  const getBillingOrders = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `${API}?action=repair-orders&category=inactive`,
+        { credentials: 'include' }
+      );
+      const json = await response.json();
+      if (json.status === 'success' && Array.isArray(json.data)) {
+        setBillingOrders(json.data.map(normalizeOrder));
+      } else {
+        console.error("Failed to fetch billing orders:", json.error ?? json);
+      }
+    } catch (err) {
+      console.error("Failed to fetch billing orders", err);
+    }
+  }, []);
+
+  // Any status change (assign diagnostician, invoice, payment...) touches
+  // the dashboard, the active list, and the billing list at once — pages
+  // call this after a mutation instead of refetching only their own slice.
+  const refreshOrders = useCallback(
+    () => Promise.all([getCardData(), getTableData(), getActiveOrders(), getBillingOrders()]),
+    [getCardData, getTableData, getActiveOrders, getBillingOrders]
+  );
+
   // 2. Initial Mount Fetch
   useEffect(() => {
-    getCardData();
-    getTableData();
-  }, [getCardData, getTableData]);
+    refreshOrders();
+  }, [refreshOrders]);
 
   // 3. Memoized Badge Calculation
-  const activeOrdersCount = useMemo(() => {
-    if (!Array.isArray(tableData)) return 0;
-    return tableData.reduce((count, item) => {
-      return item.status !== 'FULFILLED' && item.status !== 'CANCELLED' ? count + 1 : count;
-    }, 0);
-  }, [tableData]);
+  // Derived from activeOrders so the badge counts exactly what the Active
+  // Repair Orders list shows (that SP already excludes READY_TO_INVOICE,
+  // AWAITING_PAYMENT, READY_FOR_RELEASE, FULFILLED, CANCELLED).
+  const activeOrdersCount = useMemo(
+    () => (Array.isArray(activeOrders) ? activeOrders.length : 0),
+    [activeOrders]
+  );
 
   // 4. Metadata and User Format
   const currentSegment = location.pathname;
@@ -77,22 +131,39 @@ export function ServiceAdvisorPage({ user, setUser }) {
   const outletContextValue = useMemo(() => ({
     user,
     setUser,
+    // dashboard
     tableData,
     setTableData,
     card,
     setCard,
-    getCardData,
     getTableData,
-  }), [user, setUser, tableData, card, getCardData, getTableData]);
+    getCardData,
+    // active repair orders
+    activeOrders,
+    setActiveOrders,
+    getActiveOrders,
+    // billing & invoicing
+    billingOrders,
+    setBillingOrders,
+    getBillingOrders,
+    // refetch everything after a mutation
+    refreshOrders,
+  }), [
+    user, setUser,
+    tableData, card, getTableData, getCardData,
+    activeOrders, getActiveOrders,
+    billingOrders, getBillingOrders,
+    refreshOrders,
+  ]);
 
   return (
     <SidebarProvider>
-      <AppSidebar 
-        role="Service Advisor" 
-        userName={displayName} 
-        user={user} 
-        setUser={setUser} 
-        tableData={tableData} 
+      <AppSidebar
+        role="Service Advisor"
+        userName={displayName}
+        user={user}
+        setUser={setUser}
+        tableData={tableData}
         badges={{ activeOrders: activeOrdersCount, lowStock: 2, assignedOrders: 3 }}
       />
       <SidebarInset>
