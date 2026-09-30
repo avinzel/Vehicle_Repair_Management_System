@@ -233,7 +233,7 @@
                     http_response_code(200);
                     echo json_encode([
                         "status"            => "success",
-                        "message"           => "Payment processed and repair order fulfilled successfully.",
+                        "message"           => "Payment processed and repair order is ready for realese",
                         "payment_reference" => $paymentReference
                     ]);
                 } else {
@@ -296,6 +296,63 @@
                     echo json_encode([
                         "status" => "error",
                         "error"  => $response['error'] ?? "Failed to fetch invoice details"
+                    ]);
+                }
+
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Controller operation failed: " . $e->getMessage()
+                ]);
+            }
+            exit();
+        }
+        /**
+         * POST: Fulfill and release a repair order (READY_FOR_RELEASE -> FULFILLED)
+         */
+        public function fulfillRepairOrder() {
+            header('Content-Type: application/json');
+
+            // Authenticate user dynamic session/token check
+            $userId = Auth::getUserId();
+            if (!$userId) {
+                http_response_code(401);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "User authentication required."
+                ]);
+                exit();
+            }
+
+            $input = $this->getInputData();
+
+            // Extract order_id supporting GET query param or POST JSON body
+            $orderId = $_GET['order_id'] ?? $_GET['orderId'] ?? $input['order_id'] ?? $input['orderId'] ?? null;
+
+            if (empty($orderId) || !is_numeric($orderId)) {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Missing or invalid required parameter: order_id"
+                ]);
+                exit();
+            }
+
+            try {
+                $response = self::$model->fulfillRepairOrder((int)$orderId);
+
+                if (isset($response['success']) && $response['success']) {
+                    http_response_code(200);
+                    echo json_encode([
+                        "status"  => "success",
+                        "message" => $response['message']
+                    ]);
+                } else {
+                    http_response_code(400);
+                    echo json_encode([
+                        "status" => "error",
+                        "error"  => $response['error'] ?? "Failed to fulfill repair order"
                     ]);
                 }
 

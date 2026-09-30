@@ -315,8 +315,20 @@
             if ($_SERVER["REQUEST_METHOD"] === "POST"){
                 if (isset($_GET["post-method"])) {
                     $postMethod = $_GET["post-method"]; 
-                    if ($postMethod == "payment") {
-                        $invoiceController->processInvoicePayment(); 
+                    switch($postMethod){
+                        case "release-vehicle":{
+                            $invoiceController->fulfillRepairOrder(); 
+                        }
+                        break;
+                        case "payment":{
+                            $invoiceController->processInvoicePayment(); 
+                        }
+                        break;
+                        default:                                              
+                            http_response_code(404);
+                            echo json_encode(["error" => "post-method not found"]);
+                            exit();
+                        break;
                     }
                     exit(); 
                 }

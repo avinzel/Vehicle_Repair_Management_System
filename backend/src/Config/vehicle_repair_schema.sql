@@ -637,7 +637,7 @@ BEGIN
     LEFT JOIN users u ON m.user_id = u.user_id
     LEFT JOIN invoices i ON ro.order_id = i.order_id
     
-    WHERE ro.status NOT IN ('FULFILLED', 'CANCELLED',"READY_TO_INVOICE", "READY_FOR_RELEASE" , "AWAITING_PAYMENT")
+    WHERE ro.status NOT IN ('FULFILLED', 'CANCELLED' , "AWAITING_PAYMENT")
       -- Status Filter
       AND (p_status = 'ALL' OR p_status IS NULL OR ro.status = p_status)
       -- Search Bar Filter
@@ -1871,7 +1871,7 @@ sp_lbl: BEGIN
     -- 4. Transition Repair Order status to FULFILLED
     UPDATE repair_orders
     SET 
-        status = 'FULFILLED',
+        status = 'READY_FOR_RELEASE',
         date_completed = NOW()
     WHERE order_id = p_order_id;
 
@@ -2051,7 +2051,7 @@ BEGIN
     JOIN customers c ON v.customer_id = c.customer_id
     LEFT JOIN invoices inv ON ro.order_id = inv.order_id
     WHERE ro.order_id = p_order_id
-      AND ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', 'FULFILLED');
+      AND ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', 'FULFILLED',"READY_FOR_RELEASE");
 
 
     -- -----------------------------------------------------------------
@@ -2132,6 +2132,4 @@ BEGIN
 END$$
 
 DELIMITER ;
-
-
 

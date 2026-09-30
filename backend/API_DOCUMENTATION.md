@@ -189,6 +189,12 @@ Required intake values: customer first name, last name, phone; vehicle plate num
 - JSON body: `{"order_id":12,"payment_method":"CASH","payment_reference":"REF-001"}`
 - `order_id` and `payment_method` are required. `payment_reference` is optional and generated automatically when omitted. The authenticated user's ID is used as the receiver.
 
+### Release vehicle
+
+- `POST /api.php?action=invoices&post-method=release-vehicle`
+- Supply `order_id` as a query parameter or in the JSON body. Example body: `{"order_id":12}`.
+- The controller also accepts `orderId` as an alias. An authenticated session is required. Returns a success message when the repair order is fulfilled; invalid or missing order IDs return `400`, and unauthenticated requests return `401`.
+
 ## Parts inventory
 
 ### List inventory
