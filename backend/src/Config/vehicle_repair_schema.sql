@@ -2133,3 +2133,41 @@ END$$
 
 DELIMITER ;
 
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_fulfill_repair_order(
+    IN p_order_id INT
+)
+BEGIN
+    DECLARE current_status VARCHAR(50);
+
+    -- Check if the repair order exists and retrieve its current status
+    SELECT status INTO current_status
+    FROM repair_orders
+    WHERE order_id = p_order_id;
+
+    IF current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+    ELSEIF current_status != 'READY_FOR_RELEASE' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Order cannot be fulfilled. It must be in READY_FOR_RELEASE status.';
+    ELSE
+        -- Update the status to FULFILLED and set date_completed
+        UPDATE repair_orders
+        SET status = 'FULFILLED',
+            date_completed = NOW()
+        WHERE order_id = p_order_id;
+
+        SELECT 
+            order_id, 
+            status, 
+            date_completed, 
+            'Order successfully fulfilled and released.' AS message
+        FROM repair_orders
+        WHERE order_id = p_order_id;
+    END IF;
+END $$
+
+DELIMITER ;
