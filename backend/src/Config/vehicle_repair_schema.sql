@@ -2170,3 +2170,61 @@ BEGIN
 END $$
 
 DELIMITER ;
+
+DELIMITER //
+
+CREATE PROCEDURE sp_GetCustomerDetailsWithHistory(
+    IN p_customer_id INT
+)
+BEGIN
+    -- Result Set 1: Customer Info & Aggregated Summary
+    SELECT 
+        c.customer_id,
+        CONCAT(c.first_name, ' ', IFNULL(CONCAT(c.middle_name, ' '), ''), c.last_name) AS full_name,
+        c.contact_no,
+        c.email,
+        c.address,
+        COUNT(DISTINCT v.vehicle_id) AS total_vehicles,
+        MAX(ro.date_received) AS last_visit
+    FROM customers c
+    LEFT JOIN vehicles v ON c.customer_id = v.customer_id
+    LEFT JOIN repair_orders ro ON v.vehicle_id = ro.vehicle_id
+    WHERE c.customer_id = p_customer_id
+    GROUP BY c.customer_id;
+
+    -- Result Set 2: Registered Vehicles
+    SELECT 
+        v.vehicle_id,
+        v.plate_number,
+        v.vehicle_type,
+        v.manufacturer,
+        v.model,
+        v.year_model,
+        v.color,
+        v.current_mileage
+    FROM vehicles v
+    WHERE v.customer_id = p_customer_id
+    ORDER BY v.date_registered DESC;
+
+    -- Result Set 3: Repair Order History
+    SELECT 
+        ro.order_id,
+        v.vehicle_id,
+        CONCAT(v.manufacturer, ' ', v.model, ' (', v.plate_number, ')') AS vehicle_info,
+        ro.date_received,
+        ro.date_completed,
+        ro.mileage_at_service,
+        ro.complaint,
+        ro.status,
+        ro.priority,
+        i.total_amount AS invoice_total,
+        i.status AS payment_status
+    FROM repair_orders ro
+    JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
+    LEFT JOIN invoices i ON ro.order_id = i.order_id
+    WHERE v.customer_id = p_customer_id
+    ORDER BY ro.date_received DESC;
+END //
+
+DELIMITER ;
+

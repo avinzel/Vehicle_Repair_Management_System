@@ -238,9 +238,14 @@
         break;
         case "customers":{
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
-               if ($auth->getRoleId() == 2 ) {
-                 $customerController->getCustomerRecordsByServiceProvider();
-               }
+                $input = json_decode(file_get_contents('php://input'), true);
+                if (isset($_GET["customer_id"]) || isset($_GET["customerId"]) || isset($input["customer_id"])) {
+                    $customerController->getCustomerDetailsWithHistory(); 
+                    exit; 
+                }
+                $customerController->getCustomerRecordsByServiceProvider();
+
+
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
                
