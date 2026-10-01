@@ -325,12 +325,12 @@ INSERT INTO service_catalog (service_catalog_id, service_name, description, stan
 -- role_id: 1=Admin, 2=Service Advisor, 3=Mechanic
 -- =====================================================================
 INSERT INTO users (user_id, username, password_hash, first_name, middle_name, last_name, contact_no, email, role_id, status, created_at) VALUES
-(1, 'mkay',       '$2y$12$L.5FB1jubPnhDH2rAGLEgerl8zDinIdj0KzBjUFQvckF4jfzyK2YG', 'Vinzel',    'Merona',   'Mandap',   '09493156781', 'vin@gmail.com',        3, 'ACTIVE', '2026-09-14 16:44:43'),
-(4, 'lean',       '$2y$12$nQu26E7giBxGxMY7/b1K4.S0TcAHxbN4MKg4Ru.3Epn2x1vKSlkgC', 'Vinzel',    'Merona',   'Mandap',   '09493156781', 'vieeen@gmail.com',     3, 'ACTIVE', '2026-09-14 16:48:02'),
-(5, 'kruu',       '$2y$12$lfqiNWlNLbvjiejTKD.VbO76nQFEqhuZb9CZTNnbM3tf/7E85EZ62', 'Vinzel',    'Merona',   'Mandap',   '09493156781', 'viee3435n@gmail.com', 3, 'ACTIVE', '2026-09-14 16:48:21'),
-(6, 'vinzel',     '$2y$12$HAw./A6cusUN2DreFRvTKeWLTzoowIQADPRg1Iwt9qsTHNqm.wVfW', 'Vincent',   'Tubice',   'Mandap',   '09423456781', 'vinzel@gmail.com',     2, 'ACTIVE', '2026-09-06 15:52:16'),
-(7, 'bananabeam', '$2y$12$Tu4T3taD14qPLjdlVUe40.E3xb.vE66opjqKzjOkLTkPOGH/Rt7Ce', 'Noel',      'Enseymada','Mercadal', '09423456781', 'bananabeam@gmail.com', 1, 'ACTIVE', '2026-09-06 15:53:07'),
-(8, 'joleks',     '$2y$12$rQUt/5Asy2zEUIF13jcDI.NLTzeyOSnAc890RV/E030FIIHTVq8yS', 'John Aleks','Wasuo',    'Lumpay',   '09423156781', 'janelle@gmail.com',    3, 'ACTIVE', '2026-09-06 15:56:46');
+(1, 'mkay',       '$2y$12$L.5FB1jubPnhDH2rAGLEgerl8zDinIdj0KzBjUFQvckF4jfzyK2YG', 'Mkay',    'Lakan',   'Malaro',   '09493156781', 'mkay@gmail.com',        3, 'ACTIVE', '2026-09-14 16:44:43'),
+(4, 'lean',       '$2y$12$nQu26E7giBxGxMY7/b1K4.S0TcAHxbN4MKg4Ru.3Epn2x1vKSlkgC', 'Leann',    'Janelle',   'Marie',   '09493156782', 'lean@gmail.com',     3, 'ACTIVE', '2026-09-14 16:48:02'),
+(5, 'kruu',       '$2y$12$lfqiNWlNLbvjiejTKD.VbO76nQFEqhuZb9CZTNnbM3tf/7E85EZ62', 'Kruu',    'Patrik',   'Malana',   '09493156783', 'kruu@gmail.com', 3, 'ACTIVE', '2026-09-14 16:48:21'),
+(6, 'vinzel',     '$2y$12$HAw./A6cusUN2DreFRvTKeWLTzoowIQADPRg1Iwt9qsTHNqm.wVfW', 'Vincent',   'Tubice',   'Mandap',   '09423456784', 'vinzel@gmail.com',     2, 'ACTIVE', '2026-09-06 15:52:16'),
+(7, 'bananabeam', '$2y$12$Tu4T3taD14qPLjdlVUe40.E3xb.vE66opjqKzjOkLTkPOGH/Rt7Ce', 'Noel',      'Enseymada','Mercadal', '09423456785', 'bananabeam@gmail.com', 1, 'ACTIVE', '2026-09-06 15:53:07'),
+(8, 'joleks',     '$2y$12$rQUt/5Asy2zEUIF13jcDI.NLTzeyOSnAc890RV/E030FIIHTVq8yS', 'John Aleks','Wasuo',    'Lumpay',   '09423156786', 'joleks@gmail.com',    3, 'ACTIVE', '2026-09-06 15:56:46');
 
 -- =====================================================================
 -- MECHANICS
