@@ -766,7 +766,7 @@ BEGIN
         GROUP BY order_id
     ) parts_sum ON ro.order_id = parts_sum.order_id
 
-    WHERE ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', 'FULFILLED', "READY_FOR_RELEASE")
+    WHERE ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', "READY_FOR_RELEASE")
       AND (
             p_search IS NULL
             OR CONCAT('RO-', ro.order_id) LIKE CONCAT('%', p_search, '%')
@@ -2132,7 +2132,6 @@ BEGIN
 END$$
 
 DELIMITER ;
-
 
 DELIMITER $$
 
