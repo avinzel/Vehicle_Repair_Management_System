@@ -59,6 +59,8 @@ export function normalizeOrder(raw) {
   const plateNumber =
     raw.plate_number ?? raw.plateNumber ?? (vehicleInfoParts ? vehicleInfoParts[1] : null) ?? null;
 
+  const rawAmount = raw.grand_total ?? raw.invoice_amount ?? raw.total_amount ?? raw.amount ?? null;
+
   return {
     ...raw, // keep anything not explicitly mapped below, so new/unknown backend fields aren't silently dropped
 
@@ -102,7 +104,8 @@ export function normalizeOrder(raw) {
     // Card display total. invoice_amount (list endpoint) is legitimately
     // null for pre-invoice statuses — that's correct data, not a bug;
     // OrderCard already hides the amount line whenever this is null.
-    amount: raw.grand_total ?? raw.invoice_amount ?? raw.amount ?? null,
+    
+    amount: rawAmount !== null ? Number(rawAmount) : null,
     laborCharges: raw.total_labor_cost ?? raw.laborCharges ?? null,
     partsCharges: raw.total_parts_cost ?? raw.partsCharges ?? null,
 

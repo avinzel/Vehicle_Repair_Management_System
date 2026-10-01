@@ -294,7 +294,53 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
   // Only an in-progress job can be marked complete from here; later
   // stages (Awaiting Payment, Ready for Release, Completed) are read-only
   // from the mechanic's side — those are advisor/billing actions.
-  const canMarkComplete = statusLabel === "In Progress";
+  // Only the Lead Mechanic on this job can do it (the advisor-side stage
+  // text says the same). NOTE: sp_mark_ready_to_invoice does not check the
+  // caller's position, so this gate is UI-only for now.
+  const isLeadMechanic = myPositionOnThisJob === "Lead Mechanic";
+  const canMarkComplete = statusLabel === "In Progress" && isLeadMechanic;
+  const showLeadOnlyHint = statusLabel === "In Progress" && !isLeadMechanic;
+
+  const [confirmingComplete, setConfirmingComplete] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [completeError, setCompleteError] = useState(null);
+  const numericOrderId = order.rawId ?? order.id;
+
+  // POST action=repair-orders&post-method=mark-ready-to-invoice
+  // -> RepairOrderController::markReadyToInvoice -> sp_mark_ready_to_invoice.
+  // The SP rejects the call while any part is still PENDING_PARTS, and
+  // stamps date_completed on success.
+  async function handleMarkComplete() {
+    setCompleting(true);
+    setCompleteError(null);
+    try {
+      const response = await fetch(
+        "http://localhost:8000/api.php?action=repair-orders&post-method=mark-ready-to-invoice",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order_id: Number(numericOrderId) }),
+        }
+      );
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok || (json.status && json.status !== "success")) {
+        throw new Error(json.error ?? json.message ?? `Request failed (HTTP ${response.status})`);
+      }
+
+      setConfirmingComplete(false);
+      // Parent re-fetches the assigned orders; the updates object is only
+      // a hint. The order drops off the mechanic's list once it leaves
+      // the actionable statuses.
+      onUpdateOrder(order.id, { status: "READY_TO_INVOICE" });
+    } catch (err) {
+      console.error("Failed to mark job complete:", err);
+      setCompleteError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setCompleting(false);
+    }
+  }
   
   // Parts only make sense once a diagnosis has scoped the job and repair
   // work has actually started — showing this on Awaiting Diagnosis or
@@ -409,14 +455,57 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
         </Button>
       )}
 
-      {canMarkComplete && (
+      {completeError && (
+        <p role="alert" className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+          {completeError}
+        </p>
+      )}
+
+      {canMarkComplete && !confirmingComplete && (
         <Button
           type="button"
           className="w-full bg-primary text-white"
-          onClick={() => onUpdateOrder(order.id, { status: "READY_TO_INVOICE" })}
+          onClick={() => {
+            setCompleteError(null);
+            setConfirmingComplete(true);
+          }}
         >
           ✓ Mark Job Complete — Ready for Billing
         </Button>
+      )}
+
+      {canMarkComplete && confirmingComplete && (
+        <div className="space-y-2 border border-primary/30 bg-primary/5 rounded-lg p-3">
+          <p className="text-sm">
+            Hand this job over for billing? It leaves your list and can't be moved back to
+            In Progress from here.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              disabled={completing}
+              onClick={() => setConfirmingComplete(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="flex-1 bg-primary text-white"
+              disabled={completing}
+              onClick={handleMarkComplete}
+            >
+              {completing ? "Marking..." : "Confirm"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {showLeadOnlyHint && (
+        <p className="text-xs text-muted-foreground">
+          Only the Lead Mechanic can mark this job complete.
+        </p>
       )}
     </div>
   );

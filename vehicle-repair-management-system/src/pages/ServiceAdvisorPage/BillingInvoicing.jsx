@@ -13,12 +13,12 @@ import { formatStatusLabel } from "@/utils/formatStatusLabel";
 // historical Fulfilled orders for reference. It deliberately does NOT
 // include earlier statuses (Pending Diagnosis through Awaiting Parts) —
 // those belong on Active Repair Orders.
-const BILLING_TABS = ["All", "Ready to Invoice", "Awaiting Payment", "Ready for Release", "Fulfilled"];
+const BILLING_TABS = ["All", "Ready to Invoice", "Awaiting Payment", "Ready for Release"];
 
 export function BillingInvoicing() {
   // billingOrders is the single source of truth for this list.
   // ServiceAdvisorPage fetches + normalizes it.
-  const { billingOrders, setBillingOrders, getBillingOrders } = useOutletContext();
+  const { billingOrders, getBillingOrders, refreshOrders } = useOutletContext();
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -60,12 +60,10 @@ export function BillingInvoicing() {
     });
   }, [orders, search, statusFilter]);
 
-  function handleUpdateOrder(orderId, updates) {
-    // TODO: backend calls not wired yet (generate invoice, payment,
-    // release). Until then this only updates the shared state so the UI
-    // reflects the change. Once wired, replace with the POST and call
-    // refreshOrders() from context instead.
-    setBillingOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o)));
+  // Generate invoice / payment change status across the dashboard, active
+  // and billing lists, so refresh everything through the parent.
+  async function handleUpdateOrder() {
+    await refreshOrders();
   }
 
   return (

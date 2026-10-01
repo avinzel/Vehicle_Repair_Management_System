@@ -12,6 +12,7 @@ export const DEFAULT_CUSTOMER_VALUES = {
   lastName: "",
   phone: "",
   email: "",
+  address: ""
 };
 
 // Pure validation function so it's easy to unit test / reuse
@@ -35,12 +36,16 @@ function validateField(name, value) {
       if (!trimmed) return "Email address is required";
       if (!EMAIL_REGEX.test(trimmed)) return "Enter a valid email address";
       return "";
+    case "address":
+      if (!trimmed) return "Home address is required";
+      if (trimmed.length < 10) return "Please enter a complete address (include Street, Barangay, and City)";
+      return "";
     default:
       return "";
   }
 }
 
-const FIELD_NAMES = ["firstName", "lastName", "phone", "email"];
+const FIELD_NAMES = ["firstName", "lastName", "phone", "email", "address"];
 
 // `values` + `onFieldChange` come from the parent stepper so the data
 // survives switching between steps. This component only owns UI-only
@@ -114,7 +119,7 @@ export const CustomerForm = forwardRef(function CustomerForm(
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="phone">Phone Number</Label>
+          <Label htmlFor="phone">Contact Number</Label>
           <Input
             id="phone"
             placeholder="0917-000-0000"
@@ -139,6 +144,21 @@ export const CustomerForm = forwardRef(function CustomerForm(
           />
           {showError("email") && (
             <p className="text-sm text-destructive">{errors.email}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col col-span-2  gap-1.5">
+          <Label htmlFor="address">Home Address</Label>
+          <Input
+            id="address"
+            type="address"
+            placeholder="House No., Street, Barangay, City/Municipality"
+            value={values.address}
+            onChange={handleChange("address")}
+            aria-invalid={!!showError("address")}
+          />
+          {showError("address") && (
+            <p className="text-sm text-destructive">{errors.address}</p>
           )}
         </div>
       </form>

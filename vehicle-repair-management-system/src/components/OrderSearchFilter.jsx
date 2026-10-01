@@ -14,9 +14,6 @@ export const ORDER_STATUSES = [
   "Pending Mechanics",
   "In Progress",
   "Awaiting Parts",
-  "Ready to Invoice", 
-  "Awaiting Payment", 
-  "Ready for Release"
 ];
 
 export function OrderFilterBar({

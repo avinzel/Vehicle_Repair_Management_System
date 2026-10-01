@@ -7,8 +7,8 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
 function formatCurrency(amount) {
-    if (amount == null) return null;
-    return `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+    if (amount == null || isNaN(Number(amount))) return null;
+    return `₱${Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 }
 
 // roleBadge: optional pill shown top-right (e.g. "Diagnostician") — used
@@ -60,7 +60,7 @@ export function OrderCard({ order, isSelected = false, onClick, onMenuClick, rol
                 <div className="flex flex-col">
                     <span className="font-medium text-base text-foreground">{order.customer}</span>
                     <span className="text-sm text-muted-foreground">
-                        {order.vehicle} · {order.plateNumber} · {order.vehicleType}
+                        {[order.vehicle, order.plateNumber, order.vehicleType].filter(Boolean).join(" · ")}
                     </span>
                 </div>
 

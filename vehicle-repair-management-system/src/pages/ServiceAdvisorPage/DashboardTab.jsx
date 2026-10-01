@@ -19,8 +19,11 @@ const ORDER_ACTIONS = {
     'IN_PROGRESS': { label: 'View Order', icon: null, variant: 'default', className: 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200' },
     'In Progress': { label: 'View Order', icon: null, variant: 'default', className: 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200' },
     
-    'PENDING_PARTS': { label: 'View Order', icon: PackageX, variant: 'default', className: 'bg-red-100 border-red-300 text-red-800 hover:bg-red-200' },
-    'Pending Parts': { label: 'View Order', icon: PackageX, variant: 'default', className: 'bg-red-100 border-red-300 text-red-800 hover:bg-red-200' },
+    'AWAITING_PARTS': { label: 'View Order', icon: PackageX, variant: 'default', className: 'bg-red-100 border-red-300 text-red-800 hover:bg-red-200' },
+    'Awaiting Parts': { label: 'View Order', icon: PackageX, variant: 'default', className: 'bg-red-100 border-red-300 text-red-800 hover:bg-red-200' },
+
+    'READY_TO_INVOICE': { label: 'Generate Invoice', icon: FileText, variant: 'default', className: 'bg-purple-100 border-purple-300 text-purple-800 hover:bg-purple-200' },
+    'Ready to Invoice': { label: 'Generate Invoice', icon: FileText, variant: 'default', className: 'bg-purple-100 border-purple-300 text-purple-800 hover:bg-purple-200' },
     
     'AWAITING_PAYMENT': { label: 'Collect Payment', icon: null, variant: 'default', className: 'bg-primary hover:bg-primary/70 text-white' },
     'Awaiting Payment': { label: 'Collect Payment', icon: null, variant: 'default', className: 'bg-primary hover:bg-primary/70 text-white' },
@@ -39,6 +42,25 @@ const METRICS = [
     { dbKey: 'awaiting_parts', altKey: 'pendingParts', label: 'Pending Parts', icon: PackageX, color: 'text-red-600', bg: 'bg-red-50' },
     { dbKey: 'ready_to_invoice', altKey: 'readyToInvoice', label: 'Ready to Invoice', icon: FileText, color: 'text-purple-600', bg: 'bg-purple-50' },
 ];
+
+// Neutral fallback — an unmapped status must not masquerade as
+// "Assign Diagnostician".
+const DEFAULT_ACTION = { label: 'View Order', icon: null, variant: 'outline', className: '' };
+
+// Statuses whose work happens on Billing & Invoicing, not Active Orders.
+const BILLING_STATUSES = new Set([
+    'READY_TO_INVOICE', 'Ready to Invoice',
+    'AWAITING_PAYMENT', 'Awaiting Payment',
+    'READY_FOR_RELEASE', 'Ready for Release',
+]);
+
+// Dashboard rows only carry the formatted id ("RO-12"). Both target pages
+// open their drawer from ?order_id=<rawId>, so strip the prefix.
+function getOrderLink(status, formattedOrderId) {
+    const rawId = String(formattedOrderId).replace(/\D/g, '');
+    const base = BILLING_STATUSES.has(status) ? '/service-advisor/billing' : '/service-advisor/orders';
+    return `${base}?order_id=${encodeURIComponent(rawId)}`;
+}
 
 function formatCurrency(amount) {
     if (amount == null) return '—';
@@ -100,7 +122,7 @@ export function DashBoardTab() {
                             {tableData
                                 .filter((order) => order.status !== "FULFILLED" && order.status !== "Fulfilled")
                                 .map((order) => {
-                                    const action = ORDER_ACTIONS[order.status] || ORDER_ACTIONS['PENDING_DIAGNOSIS'];
+                                    const action = ORDER_ACTIONS[order.status] || DEFAULT_ACTION;
                                     const ActionIcon = action?.icon;
                                     const orderId = order.orderId ?? order.order_id;
 
@@ -116,7 +138,7 @@ export function DashBoardTab() {
                                             <TableCell className="text-right">
                                                 {/* Routing uses standard React Router Link */}
                                                 <Button
-                                                    render={<Link to={`/service-advisor/orders/${orderId}`} />}
+                                                    render={<Link to={getOrderLink(order.status, orderId)} />}
                                                     size="sm"
                                                     variant={action?.variant ?? 'outline'}
                                                     className={action?.className}

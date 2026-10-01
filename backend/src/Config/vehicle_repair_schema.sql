@@ -722,30 +722,21 @@ CREATE PROCEDURE sp_get_billing_and_invoicing(
 BEGIN
     IF p_search IS NOT NULL THEN
         SET p_search = TRIM(p_search);
-        IF p_search = '' THEN
-            SET p_search = NULL;
-        END IF;
+        IF p_search = '' THEN SET p_search = NULL; END IF;
     END IF;
 
     SELECT 
         CONCAT('RO-', ro.order_id) AS order_id,
         ro.order_id AS raw_order_id,
         CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
-        CONCAT(v.manufacturer, ' ', v.model, ' ', IFNULL(v.year_model, ''), ' · ', DATE_FORMAT(ro.date_received, '%b %d, %Y')) AS vehicle_summary,
+        CONCAT(v.manufacturer, ' ', v.model, ' ', IFNULL(v.year_model, '')) AS vehicle_name,
+        v.plate_number,
+        v.vehicle_type,
+        DATE_FORMAT(ro.date_received, '%b %d, %Y') AS formatted_date,
         ro.status,
-        
-        -- Currency formatted for UI
-        CONCAT('₱', FORMAT(
-            IFNULL(i.total_amount, 
-                (IFNULL(sc_sum.labor_cost, 0) + IFNULL(parts_sum.parts_cost, 0))
-            ), 0
-        )) AS formatted_total_amount,
-
-        -- Raw total for logic calculations
-        IFNULL(i.total_amount, 
+        IFNULL(i.total_amount,
             (IFNULL(sc_sum.labor_cost, 0) + IFNULL(parts_sum.parts_cost, 0))
         ) AS total_amount
-
     FROM repair_orders ro
     JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
     JOIN customers c ON v.customer_id = c.customer_id
@@ -766,7 +757,7 @@ BEGIN
         GROUP BY order_id
     ) parts_sum ON ro.order_id = parts_sum.order_id
 
-    WHERE ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', 'FULFILLED', "READY_FOR_RELEASE")
+    WHERE ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', "READY_FOR_RELEASE")
       AND (
             p_search IS NULL
             OR CONCAT('RO-', ro.order_id) LIKE CONCAT('%', p_search, '%')

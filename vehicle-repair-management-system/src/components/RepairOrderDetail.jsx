@@ -6,11 +6,6 @@ import { SheetClose } from "@/components/ui/sheet";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
 import { ORDER_STAGES } from "@/components/OrderStages";
 
-function formatCurrency(amount) {
-  if (amount == null) return null;
-  return `₱${Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
-}
-
 // The Customer & Vehicle block and the header stay constant across every
 // status. The stage section in the middle is the only part that actually
 // changes shape as the order moves through the pipeline.
@@ -19,7 +14,6 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
 
   const statusLabel = formatStatusLabel(order.status);
   const StageComponent = ORDER_STAGES[statusLabel];
-  //const amountLabel = formatCurrency(order.amount);
 
   return (
     <div className="flex flex-col h-full">
@@ -34,17 +28,19 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground"
+            disabled
+            className="text-muted-foreground/40 cursor-not-allowed"
             aria-label="Edit order"
-            onClick={() => console.log("Edit", order.id)}
+            title="Editing an order isn't available yet — no backend endpoint exists for it."
           >
             <Pencil className="w-4 h-4" />
           </button>
           <button
             type="button"
-            className="text-muted-foreground hover:text-destructive"
+            disabled
+            className="text-muted-foreground/40 cursor-not-allowed"
             aria-label="Delete order"
-            onClick={() => console.log("Delete", order.id)}
+            title="Cancelling an order isn't available yet — no backend endpoint exists for it."
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -78,11 +74,11 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
             </div>
             <div className="bg-secondary/50 rounded-lg p-3">
               <p className="text-xs text-muted-foreground">VIN Number</p>
-              <p className="font-medium">{order.vinNumber ??  '—'}</p>
+              <p className="font-medium">{order.vinNumber ?? '—'}</p>
             </div>
             <div className="bg-secondary/50 rounded-lg p-3">
               <p className="text-xs text-muted-foreground">Current Millage</p>
-              <p className="font-medium">{order.currentMillage ??  '—'}</p>
+              <p className="font-medium">{order.currentMileage ?? order.currentMillage ?? '—'}</p>
             </div>
           </div>
         </div>
@@ -93,12 +89,6 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
           <p className="text-sm text-destructive">Unknown status: {order.status}</p>
         )}
 
-        {/* {amountLabel && (
-          <div>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Amount</h3>
-            <p className="text-2xl font-bold">{amountLabel}</p>
-          </div>
-        )} */}
       </div>
     </div>
   );
