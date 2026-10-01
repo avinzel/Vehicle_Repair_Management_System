@@ -1890,7 +1890,6 @@ sp_lbl: BEGIN
 END$$
 
 DELIMITER ;
-
 DELIMITER $$
 
 DROP PROCEDURE IF EXISTS sp_cancel_repair_order_part$$
@@ -1904,6 +1903,7 @@ BEGIN
     DECLARE v_order_id INT;
     DECLARE v_part_status VARCHAR(50);
     DECLARE v_order_status VARCHAR(50);
+    DECLARE v_pending_parts_count INT DEFAULT 0;
 
     -- Rollback on any SQL exception
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
@@ -1940,7 +1940,7 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot cancel parts from a fulfilled or cancelled repair order.';
     END IF;
 
-    -- 2. Restore inventory stock using your schema's column: quantity_on_hand
+    -- 2. Restore inventory stock using: quantity_on_hand
     UPDATE parts_inventory
     SET quantity_on_hand = quantity_on_hand + v_quantity_used
     WHERE part_id = v_part_id;
@@ -1950,9 +1950,24 @@ BEGIN
     SET status = 'CANCELLED'
     WHERE order_part_id = p_order_part_id;
 
+    -- 4. Check if repair order status should revert to IN_PROGRESS
+    IF v_order_status = 'AWAITING_PARTS' THEN
+        SELECT COUNT(*) 
+        INTO v_pending_parts_count
+        FROM repair_order_parts
+        WHERE order_id = v_order_id 
+          AND status = 'PENDING_PARTS';
+
+        IF v_pending_parts_count = 0 THEN
+            UPDATE repair_orders
+            SET status = 'IN_PROGRESS'
+            WHERE order_id = v_order_id;
+        END IF;
+    END IF;
+
     COMMIT;
 
-    SELECT 'Part cancelled and inventory restored successfully.' AS message;
+    SELECT 'Part cancelled, inventory restored, and repair order status updated successfully.' AS message;
 END$$
 
 DELIMITER ;
