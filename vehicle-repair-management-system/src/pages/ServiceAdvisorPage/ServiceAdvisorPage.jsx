@@ -3,7 +3,7 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { Outlet, useLocation } from "react-router";
-import { normalizeOrder } from '@/utils/normalizeOrder';
+import { normalizeActiveOrderRow, normalizeBillingRow } from '@/utils/normalizeOrder';
 
 const API = 'http://localhost:8000/api.php';
 
@@ -61,7 +61,7 @@ export function ServiceAdvisorPage({ user, setUser }) {
       );
       const json = await response.json();
       if (json.status === 'success' && Array.isArray(json.data)) {
-        setActiveOrders(json.data.map(normalizeOrder));
+        setActiveOrders(json.data.map(normalizeActiveOrderRow));
       } else {
         console.error("Failed to fetch active orders:", json.error ?? json);
       }
@@ -81,7 +81,7 @@ export function ServiceAdvisorPage({ user, setUser }) {
       );
       const json = await response.json();
       if (json.status === 'success' && Array.isArray(json.data)) {
-        setBillingOrders(json.data.map(normalizeOrder));
+        setBillingOrders(json.data.map(normalizeBillingRow));
       } else {
         console.error("Failed to fetch billing orders:", json.error ?? json);
       }

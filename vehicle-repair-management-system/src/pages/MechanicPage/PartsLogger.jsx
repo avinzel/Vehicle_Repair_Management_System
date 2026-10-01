@@ -19,6 +19,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { normalizePart, normalizeLoggedPart } from "@/utils/normalizeOrder";
 
 const API = "http://localhost:8000/api.php";
 
@@ -32,33 +33,6 @@ const LOGGABLE_STATUSES = ["IN_PROGRESS", "AWAITING_PARTS"];
 // no longer go through normalizeOrder (which is shaped for repair orders).
 // MySQL/PDO often returns DECIMAL and INT columns as strings, hence Number().
 
-// sp_get_parts_inventory
-function normalizePart(raw) {
-  return {
-    part_id: Number(raw.part_id),
-    part_code: raw.part_code,
-    part_name: raw.part_name,
-    category: raw.category,
-    unit: raw.unit ?? "pc",
-    unit_price: Number(raw.unit_price ?? 0),
-    quantity_on_hand: Number(raw.quantity_on_hand ?? 0),
-    reorder_level: Number(raw.reorder_level ?? 0),
-    status: raw.status,
-  };
-}
-
-// sp_get_parts_by_repair_order — note the SP names these columns
-// unit_price_at_use and part_status.
-function normalizeLoggedPart(raw) {
-  return {
-    order_part_id: Number(raw.order_part_id),
-    part_id: Number(raw.part_id),
-    part_name: raw.part_name,
-    quantity_used: Number(raw.quantity_used ?? 0),
-    unit_price: Number(raw.unit_price_at_use ?? raw.unit_price ?? 0),
-    status: raw.part_status ?? raw.status,
-  };
-}
 
 function formatPeso(amount) {
   const n = Number(amount) || 0;

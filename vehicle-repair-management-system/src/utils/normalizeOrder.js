@@ -1,160 +1,234 @@
 // utils/normalizeOrder.js
 //
-// Every backend endpoint that returns order data (getActiveRepairOrders,
-// getRepairOrderDetails, the dashboard SP, sp_get_mechanic_work_orders,
-// etc.) uses its own column aliases, and none of them match the camelCase
-// names the frontend components read directly (OrderCard,
-// RepairOrderDetail, InvoiceDetail, OrderStages). This is the single place
-// that reconciles that gap — run every order object through this once,
-// right where it's fetched, rather than adding backend-specific fallbacks
-// inside shared components.
-//
-// NOTE: this function also normalizes part rows (getParts / logged parts),
-// which is why the part_* fields exist below. Each key appears exactly
-// once in the returned object — in a JS object literal a duplicate key
-// silently overwrites the earlier one, which is how `status` used to end
-// up as "ISSUED" on every order.
-export function normalizeOrder(raw) {
-  if (!raw) return raw;
+// One normalizer per backend source. Each reads the EXACT columns its
+// stored procedure returns (see vehicle_repair_schema.sql) — no key
+// guessing. If an SP changes, only its normalizer changes.
 
-  // A row is a part row (as opposed to an order row) if it carries any of
-  // the part identifiers. Order rows never do, so this lets `status`
-  // default to "ISSUED" for parts only.
-  const isPartRow =
-    raw.order_part_id !== undefined ||
-    raw.orderPartId !== undefined ||
-    raw.part_id !== undefined ||
-    raw.partId !== undefined ||
-    raw.part_name !== undefined ||
-    raw.partName !== undefined;
+// ---------- shared helpers ----------
 
-  // List endpoint (getActiveRepairOrders) bundles vehicle/plate/type into
-  // one display string: "Toyota Vios 2021 · ABC-1234 · CAR". The detail
-  // endpoint (getRepairOrderDetails) returns them as separate keys
-  // instead. Split the bundled string only as a fallback for whichever
-  // of the three the separate keys don't already cover.
-  const vehicleInfoParts =
-    typeof raw.vehicle_info === "string" ? raw.vehicle_info.split(" · ") : null;
+// Accepts 5 or "RO-5" (SPs disagree on which they return).
+function parseRawId(value) {
+  if (value == null) return null;
+  if (typeof value === "number") return value;
+  const n = parseInt(String(value).replace(/\D/g, ""), 10);
+  return Number.isNaN(n) ? null : n;
+}
 
-  // sp_get_mechanic_work_orders returns manufacturer / model / year_model
-  // as separate columns instead of a single vehicle name.
-  const vehicleFromParts = raw.manufacturer
-    ? `${raw.manufacturer} ${raw.model ?? ""}${raw.year_model ? " " + raw.year_model : ""}`.trim()
-    : null;
+const formatRO = (rawId) => (rawId == null ? null : `RO-${rawId}`);
 
-  // List endpoint's assigned_mechanics is a flat, comma-joined STRING
-  // ("Vinzel Mandap" or "Unassigned") — a GROUP_CONCAT of names, no ids
-  // or positions. The detail endpoint's is an ARRAY of full objects. Only
-  // the array form carries role, so team entries built from the string
-  // form are name-only; they get overwritten with the real
-  // (name + role) version once a drawer's own detail fetch resolves and
-  // merges over this row (see ActiveRepairOrder's mergeOrder).
-  const mechanicsFromSummaryString =
-    typeof raw.assigned_mechanics === "string"
-      ? raw.assigned_mechanics === "Unassigned" || !raw.assigned_mechanics.trim()
-        ? []
-        : raw.assigned_mechanics.split(",").map((name) => ({ name: name.trim(), role: null }))
-      : null;
+const num = (v) => (v == null ? null : Number(v));
 
-  const plateNumber =
-    raw.plate_number ?? raw.plateNumber ?? (vehicleInfoParts ? vehicleInfoParts[1] : null) ?? null;
+// MySQL DATETIME "2026-08-25 11:40:00" -> "Aug 25, 2026"
+function formatDate(dt) {
+  if (!dt) return null;
+  const d = new Date(String(dt).replace(" ", "T"));
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+}
 
-  const rawAmount = raw.grand_total ?? raw.invoice_amount ?? raw.total_amount ?? raw.amount ?? null;
+// Some SPs build JSON with CONCAT; the PHP model may or may not have decoded it.
+function asArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+// ---------- Active Repair Orders: list row ----------
+// sp_get_active_repair_orders
+// order_id ("RO-5"), raw_order_id, customer_name, vehicle_info
+// ("Toyota Vios 2021 · ABC-1234 · CAR"), status, priority, formatted_date,
+// assigned_mechanics (comma string of names), invoice_amount
+export function normalizeActiveOrderRow(raw) {
+  // TODO: add plate_number + vehicle_type as real columns in the SP and
+  // delete this split. vehicle_info is display text, not a data contract.
+  const [vehicle, plateNumber, vehicleType] = String(raw.vehicle_info ?? "").split(" · ");
 
   return {
-    ...raw, // keep anything not explicitly mapped below, so new/unknown backend fields aren't silently dropped
+    id: raw.order_id,
+    rawId: num(raw.raw_order_id),
+    customer: raw.customer_name,
+    vehicle: vehicle ?? null,
+    plateNumber: plateNumber ?? null,
+    plate: plateNumber ?? null, // alias: some components read `plate`
+    vehicleType: vehicleType ?? null,
+    status: raw.status,
+    priority: raw.priority,
+    date: raw.formatted_date,
+    assignedMechanicsLabel: raw.assigned_mechanics, // "Unassigned" or "A B, C D"
+    amount: num(raw.invoice_amount),
+  };
+}
 
-    // formatted_ro_number ("RO-1050") comes from the mechanic work-order
-    // SP; it has no raw_order_id, so when it's present the numeric
-    // order_id is the raw id.
-    id: raw.formatted_ro_number ?? raw.order_id ?? raw.orderId ?? raw.id ?? null,
-    rawId:
-      raw.raw_order_id ??
-      raw.rawId ??
-      (raw.formatted_ro_number ? raw.order_id : null) ??
-      null,
+// ---------- Active Repair Orders: detail ----------
+// sp_get_repair_order_details (via RepairOrder::getRepairOrderDetails,
+// which already json_decodes the three array columns)
+export function normalizeOrderDetail(raw) {
+  const mechanics = asArray(raw.assigned_mechanics);
+  const services = asArray(raw.services);
+  const parts = asArray(raw.parts);
 
-    customer: raw.customer_name ?? raw.customer ?? null,
-    vehicle:
-      raw.vehicle_name ??
-      (vehicleInfoParts ? vehicleInfoParts[0] : null) ??
-      vehicleFromParts ??
-      raw.vehicle ??
-      null,
-    plateNumber,
-    plate: plateNumber, // alias — some components read `plate`
-    vehicleType: raw.vehicle_type ?? raw.vehicleType ?? (vehicleInfoParts ? vehicleInfoParts[2] : null) ?? null,
+  return {
+    id: raw.order_id,
+    rawId: num(raw.raw_order_id),
+    date: raw.formatted_date,
+    status: raw.status,
+    complaint: raw.complaint,
+    diagnosticNotes: raw.diagnosis_notes,
+    diagnosisDate: raw.formatted_diagnosis_date,
+    customer: raw.customer_name,
+    vehicle: raw.vehicle_name,
+    plateNumber: raw.plate_number,
+    plate: raw.plate_number, // alias: some components read `plate`
+    vehicleType: raw.vehicle_type,
 
-    date: raw.formatted_date ?? raw.date ?? raw.date_received ?? null,
+    team: mechanics.map((m) => ({
+      id: m.mechanic_id,
+      assignmentId: m.assignment_id,
+      name: m.mechanic_name,
+      role: m.position_name,
+      dateAssigned: m.date_assigned,
+    })),
 
-    // order_status: sp_get_mechanic_work_orders. status: every other
-    // order endpoint. Part rows fall back to "ISSUED"; order rows stay
-    // null rather than being mislabelled.
-    status: raw.order_status ?? raw.status ?? (isPartRow ? "ISSUED" : null),
-    priority: raw.priority ?? null,
+    requiredServices: services.map((s) => s.service_name),
+    requiredServiceIds: services.map((s) => s.service_catalog_id),
+    services: services.map((s) => ({
+      id: s.service_catalog_id,
+      name: s.service_name,
+      laborCost: num(s.labor_cost),
+    })),
 
-    complaint: raw.complaint ?? null,
-    diagnosticNotes: raw.diagnosis_notes ?? raw.diagnosticNotes ?? null,
-    diagnosisDate: raw.formatted_diagnosis_date ?? null,
+    partsLogged: parts.map((p) => ({
+      id: p.order_part_id,
+      partId: p.part_id,
+      name: p.part_name,
+      qty: p.quantity_used,
+      cost: num(p.unit_price),
+      subtotal: num(p.parts_subtotal),
+      // loggedBy: not returned by the SP
+    })),
 
-    // The mechanic's own position on this order (sp_get_mechanic_work_orders
-    // only returns the viewer's position, not the whole crew).
-    assignedPosition: raw.assigned_position ?? null,
+    laborCharges: num(raw.total_labor_cost),
+    partsCharges: num(raw.total_parts_cost),
+    amount: num(raw.grand_total),
+  };
+}
 
-    // Card display total. invoice_amount (list endpoint) is legitimately
-    // null for pre-invoice statuses — that's correct data, not a bug;
-    // OrderCard already hides the amount line whenever this is null.
-    
-    amount: rawAmount !== null ? Number(rawAmount) : null,
-    laborCharges: raw.total_labor_cost ?? raw.laborCharges ?? null,
-    partsCharges: raw.total_parts_cost ?? raw.partsCharges ?? null,
+// ---------- Billing & Invoicing: list row ----------
+// sp_get_billing_and_invoicing
+// order_id ("RO-5"), raw_order_id, customer_name, vehicle_summary
+// ("Toyota Vios 2021 · Aug 27, 2026"), status, formatted_total_amount, total_amount
+export function normalizeBillingRow(raw) {
+  return {
+    id: raw.order_id,
+    rawId: num(raw.raw_order_id),
+    customer: raw.customer_name,
+    vehicle: raw.vehicle_summary, // already includes the date
+    status: raw.status,
+    amount: num(raw.total_amount),
+    amountLabel: raw.formatted_total_amount,
+  };
+}
 
-    requiredServices: Array.isArray(raw.services)
-      ? raw.services.map((s) => s.service_name)
-      : raw.requiredServices ?? [],
+// ---------- Billing & Invoicing: drawer detail ----------
+// sp_get_invoice_details via Invoice::getInvoiceDetails.
+// NOTE: order_id here is NUMERIC and status is order_status.
+export function normalizeInvoiceDetail(raw) {
+  const rawId = parseRawId(raw.order_id);
+  return {
+    id: raw.order_number ?? formatRO(rawId),
+    rawId,
+    status: raw.order_status,
+    customer: raw.customer_name,
+    vehicle: raw.vehicle_info,
+    laborCharges: num(raw.labor_charges),
+    partsCharges: num(raw.parts_charges),
+    discount: num(raw.discount),
+    taxAmount: num(raw.tax_amount),
+    amount: num(raw.total_due),
+    invoiceStatus: raw.invoice_status,
+    paymentMethod: raw.payment_method,
+    paymentReference: raw.payment_reference,
+    paymentDate: raw.payment_date,
+    team: (raw.mechanics ?? []).map((m) => ({
+      id: m.assignment_id,
+      name: m.mechanic_name,
+      role: m.position, // NOT position_name here
+    })),
+  };
+}
 
-    partsLogged: Array.isArray(raw.parts)
-      ? raw.parts.map((p) => ({
-          order_part_id: p.order_part_id,
-          part_id: p.part_id,
-          name: p.part_name,
-          quantity_used: p.quantity_used,
-          unit_price: p.unit_price,
-          // TODO: confirm whether getRepairOrderDetails actually echoes
-          // a per-row status (ISSUED/PENDING_PARTS) — this sample
-          // response didn't include one.
-          status: p.status ?? "ISSUED",
-        }))
-      : raw.partsLogged ?? [],
+// ---------- Mechanic: assigned work orders ----------
+// sp_get_mechanic_work_orders
+// NOTE: order_id NUMERIC, status is order_status, id label is formatted_ro_number.
+export function normalizeMechanicWorkOrder(raw) {
+  const rawId = parseRawId(raw.order_id);
+  return {
+    id: raw.formatted_ro_number ?? formatRO(rawId),
+    rawId,
+    status: raw.order_status,
+    priority: raw.priority,
+    complaint: raw.complaint,
+    diagnosticNotes: raw.diagnosis_notes,
+    date: formatDate(raw.date_received),
+    customer: raw.customer_name,
+    vehicle: [raw.manufacturer, raw.model, raw.year_model].filter(Boolean).join(" "),
+    plateNumber: raw.plate_number,
+    plate: raw.plate_number, // alias: some components read `plate`
+    vehicleSummary: raw.vehicle_summary,
+    assignedPosition: raw.assigned_position,
+    partsLoggedCount: num(raw.parts_logged_count),
+    totalMechanicsCount: num(raw.total_mechanics_count),
+    // The SP returns counts only, so the actual parts array is not
+    // available here. Consumers must use partsLoggedCount, or fetch
+    // category=parts-by-order when the drawer opens.
+    partsLogged: [],
+  };
+}
 
-    // Detail endpoint: array of full {mechanic_id, mechanic_name,
-    // position_name} objects -> {id, name, role}.
-    // List endpoint: falls back to the name-only array parsed from the
-    // GROUP_CONCAT string above.
-    team: Array.isArray(raw.assigned_mechanics)
-      ? raw.assigned_mechanics.map((m) => ({
-          id: m.mechanic_id,
-          name: m.mechanic_name,
-          role: m.position_name,
-        }))
-      : mechanicsFromSummaryString ?? raw.team ?? [],
+// ---------- Parts: inventory row ----------
+// sp_get_parts_inventory
+export function normalizePart(raw) {
+  return {
+    part_id: num(raw.part_id),
+    part_code: raw.part_code,
+    part_name: raw.part_name,
+    category: raw.category,
+    unit: raw.unit,
+    unit_price: num(raw.unit_price),
+    quantity_on_hand: num(raw.quantity_on_hand),
+    reorder_level: num(raw.reorder_level),
+    batch_number: raw.batch_number,
+    date_added: raw.date_added,
+    status: raw.status,
+  };
+}
 
-    // ---- part-row fields (getParts / logged parts) ----
-    // Each key once. Where the old file defined a key twice, the LAST
-    // definition was the one in effect, so that's the behaviour kept here.
-    part_id: raw.part_id ?? raw.partId,
-    part_name: raw.part_name ?? raw.partName ?? raw.name,
-    unit: raw.unit ?? null,
-    unit_price: Number(raw.unit_price ?? raw.unitPrice ?? 0),
-    quantity_on_hand: Number(raw.quantity_on_hand ?? raw.quantityOnHand ?? 0),
-    reorder_level: Number(raw.reorder_level ?? raw.reorderLevel ?? 0),
-
-    order_part_id: raw.order_part_id ?? raw.orderPartId ?? raw.id,
-    quantity_used: Number(raw.quantity_used ?? raw.quantityUsed ?? 0),
-    // NOT CONFIRMED: the original repair_order_parts schema I've seen has
-    // no "who logged this" column at all — this may just come back empty
-    // until/unless that's added on the backend. Falls back to "—" rather
-    // than showing "by null".
-    loggedBy: raw.logged_by ?? raw.loggedBy ?? raw.mechanic_name ?? null,
+// ---------- Parts: logged on an order ----------
+// sp_get_parts_by_repair_order
+// NOTE: part_status (not status), unit_price_at_use (not unit_price).
+export function normalizeLoggedPart(raw) {
+  return {
+    order_part_id: num(raw.order_part_id),
+    order_id: num(raw.order_id),
+    part_id: num(raw.part_id),
+    part_code: raw.part_code,
+    part_name: raw.part_name,
+    category: raw.category,
+    unit: raw.unit,
+    batch_number: raw.batch_number,
+    quantity_used: num(raw.quantity_used),
+    unit_price: num(raw.unit_price_at_use), // price frozen at time of use
+    current_unit_price: num(raw.current_unit_price),
+    subtotal: num(raw.subtotal),
+    status: raw.part_status, // ISSUED | PENDING_PARTS (CANCELLED filtered by SP)
+    inventory_status: raw.inventory_status,
+    // loggedBy: not returned by the SP
   };
 }

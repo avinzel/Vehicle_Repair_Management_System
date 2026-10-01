@@ -3,7 +3,7 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { Outlet, useLocation } from "react-router";
-import { normalizeOrder } from '@/utils/normalizeOrder';
+import { normalizeMechanicWorkOrder } from '@/utils/normalizeOrder';
 
 // Static title/subtitle per tab. Dashboard is excluded — it needs a
 // dynamic personalized greeting instead, same pattern as ServiceAdvisorPage.
@@ -64,7 +64,7 @@ export function MechanicPage({ user, setUser }) {
         // TODO: replace once the SP returns the full crew per order.
         setTableData(
           rows.map((row) => {
-            const order = normalizeOrder(row);
+            const order = normalizeMechanicWorkOrder(row);
             return {
               ...order,
               team: [{ name: currentUserName, role: order.assignedPosition }],
