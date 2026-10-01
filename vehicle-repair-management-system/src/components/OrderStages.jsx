@@ -216,7 +216,7 @@ function DiagnosisStage({ order }) {
       </h3>
       {diagnostician && <MechanicChip name={diagnostician.name} role={diagnostician.role} />}
 
-      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-3 text-sm">
+      <div className="flex items-start gap-2 bg-secondary/50 text-muted-foreground rounded-lg p-3 text-sm">
         <Info className="w-4 h-4 shrink-0 mt-0.5" />
         <p>
           Waiting for <strong>{diagnostician?.name ?? "the diagnostician"}</strong> to file their inspection
@@ -353,28 +353,29 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">Diagnosis</h3>
 
-        <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg p-3 text-sm">
-          <Info className="w-4 h-4 shrink-0 mt-0.5" />
-          <p>Diagnostician notes are ready — review before assigning mechanics.</p>
-        </div>
-
-        <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1.5">Required Services</p>
-          <div className="flex flex-wrap gap-1.5">
-            {serviceNames.map((service) => (
-              <Badge key={service} variant="secondary">
-                {service}
-              </Badge>
-            ))}
-            {serviceNames.length === 0 && (
-              <p className="text-sm text-muted-foreground">None recorded.</p>
-            )}
+        <div className="flex flex-col gap-2 bg-primary/5 border border-primary/15 rounded-lg p-4">
+          <div className="flex items-start gap-2 text-sm text-primary/80">
+            <Info className="w-4 h-4 shrink-0 mt-0.5" />
+            <p>Diagnostician notes are ready, review before assigning mechanics.</p>
           </div>
-        </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-1.5">Required Services</p>
+            <div className="flex flex-wrap gap-1.5">
+              {serviceNames.map((service) => (
+                <Badge key={service} variant="secondary" className="bg-primary/10 text-primary">
+                  {service}
+                </Badge>
+              ))}
+              {serviceNames.length === 0 && (
+                <p className="text-sm text-tertiary">None recorded.</p>
+              )}
+            </div>
+          </div>
 
-        <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1.5">Diagnostic Notes</p>
-          <p className="text-sm bg-secondary/50 rounded-lg p-3">{order.diagnosticNotes}</p>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-1.5">Diagnostic Notes</p>
+            <p className="text-sm text-tertiary">{order.diagnosticNotes}</p>
+          </div>
         </div>
       </div>
 
@@ -520,19 +521,26 @@ function RepairInProgressStage({ order }) {
 
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">Diagnosis</h3>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1.5">Required Services</p>
-          <div className="flex flex-wrap gap-1.5">
-            {serviceNames.map((service) => (
-              <Badge key={service} variant="secondary">
-                {service}
-              </Badge>
-            ))}
+        <div className="flex flex-col gap-2 bg-primary/5 border border-primary/15 rounded-lg p-4">
+
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-1.5">Required Services</p>
+            <div className="flex flex-wrap gap-1.5">
+              {serviceNames.map((service) => (
+                <Badge key={service} variant="secondary" className="bg-primary/10 text-primary">
+                  {service}
+                </Badge>
+              ))}
+              {serviceNames.length === 0 && (
+                <p className="text-sm text-tertiary">None recorded.</p>
+              )}
+            </div>
           </div>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1.5">Diagnostic Notes</p>
-          <p className="text-sm bg-secondary/50 rounded-lg p-3">{order.diagnosticNotes}</p>
+
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-1.5">Diagnostic Notes</p>
+            <p className="text-sm text-tertiary">{order.diagnosticNotes}</p>
+          </div>
         </div>
       </div>
 
@@ -579,7 +587,7 @@ function AwaitingPartsStage({ order }) {
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">Awaiting Parts</h3>
       <p className="text-sm text-muted-foreground">
-        This order is on hold — a required part is out of stock. It resumes automatically once the
+        This order is on hold, a required part is out of stock. It resumes automatically once the
         part is restocked.
       </p>
 
@@ -592,7 +600,7 @@ function AwaitingPartsStage({ order }) {
             {pending.map((part) => (
               <div
                 key={part.order_part_id}
-                className="flex items-center justify-between bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2 text-sm"
+                className="flex items-center justify-between bg-red-50 border border-red-200 text-red-900 rounded-lg px-3 py-2 text-sm"
               >
                 <span>{part.part_name}</span>
                 <span>Qty {part.quantity_used}</span>

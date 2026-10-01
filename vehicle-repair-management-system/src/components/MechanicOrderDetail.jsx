@@ -73,8 +73,8 @@ export function MechanicOrderDetail({ order, currentUserName, onUpdateOrder, onL
               <p className="font-medium">{order.plate ?? "—"}</p>
             </div>
             <div className="bg-secondary/50 rounded-lg p-3">
-              <p className="text-xs text-muted-foreground">Current Millage</p>
-              <p className="font-medium">{order.currentMillage ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">Current Mileage</p>
+              <p className="font-medium">{order.currentMileage ?? "—"}</p>
             </div>
              <div className="col-span-2 bg-secondary/50 rounded-lg p-3">
               <p className="text-xs text-muted-foreground">VIN Number</p>

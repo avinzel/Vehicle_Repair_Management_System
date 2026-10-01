@@ -7,7 +7,7 @@ import { OrderCard } from "@/components/OrderCard";
 import { DetailDrawer } from "@/components/DetailDrawer";
 import { RepairOrderDetail } from "@/components/RepairOrderDetail";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
-import { normalizeOrder } from "@/utils/normalizeOrder";
+import { normalizeOrderDetail } from "@/utils/normalizeOrder";
 
 // Merge helper: detail-endpoint data overwrites list-row data field by
 // field, but never with null/undefined — so a field the detail response
@@ -63,7 +63,7 @@ export function ActiveRepairOrder() {
       );
       const json = await response.json();
       if (json.status === "success") {
-        setOrderDetails(normalizeOrder(json.data));
+        setOrderDetails(normalizeOrderDetail(json.data));
       } else {
         console.error("Order details request failed:", json.error ?? json.message);
       }

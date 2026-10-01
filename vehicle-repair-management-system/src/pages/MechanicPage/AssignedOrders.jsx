@@ -23,7 +23,7 @@ export function AssignedOrders() {
   // tableData is the single source of truth for the mechanic's assigned
   // orders. MechanicPage fetches + normalizes it (and builds each order's
   // `team`), so the sidebar badge and this list can never disagree.
-  const { user, tableData, setTableData, getTableData } = useOutletContext();
+  const { user, tableData, getTableData } = useOutletContext();
   const currentUserName = `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim();
 
   const navigate = useNavigate();
@@ -36,21 +36,22 @@ export function AssignedOrders() {
   }, [getTableData]);
 
   const assignedOrders = Array.isArray(tableData) ? tableData : [];
-  const selectedOrder = assignedOrders.find((o) => o.id === selectedOrderId) ?? null;
 
   // Only the stages a mechanic can act on. Kept as a derived list rather
   // than filtering the fetch itself, so tableData stays the full set for
   // the sidebar badge and any other consumer.
   const visibleOrders = assignedOrders.filter((o) => VISIBLE_TO_MECHANIC_STATUSES.includes(o.status));
 
-  function handleUpdateOrder(orderId, updates) {
-    // TODO: backend not built yet — this only updates the shared local
-    // state so the UI reflects the change. Replace with a POST/PUT to the
-    // real endpoint once it exists, then call getTableData() to re-fetch
-    // (same pattern as ActiveRepairOrder.handleUpdateOrder).
-    setTableData((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o))
-    );
+  // Resolved from the visible list (not the full set) so that when an
+  // order leaves the actionable statuses — e.g. after Mark Job Complete
+  // moves it to READY_TO_INVOICE — its drawer closes on its own.
+  const selectedOrder = visibleOrders.find((o) => o.id === selectedOrderId) ?? null;
+
+  // The stage components call their own endpoints (e.g. mark-ready-to-invoice)
+  // and then report back here; this just re-syncs the shared state from the
+  // server instead of patching it locally.
+  function handleUpdateOrder() {
+    getTableData();
   }
 
   function handleLogParts(orderId) {

@@ -20,7 +20,7 @@ export function DiagnosticLogs() {
   // tableData is the single source of truth for the mechanic's orders.
   // MechanicPage fetches + normalizes it (and builds each order's `team`),
   // so this page, Assigned Orders, and the sidebar badge never disagree.
-  const { user, tableData, setTableData, getTableData } = useOutletContext();
+  const { user, tableData, getTableData } = useOutletContext();
   const currentUserName = `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -62,10 +62,10 @@ export function DiagnosticLogs() {
     }
   }, [visibleOrders, searchParams, setSearchParams]);
 
-  function handleUpdateOrder(orderId, updates) {
-    setTableData((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o))
-    );
+  // DiagnosisFormStage POSTs submit-diagnosis itself, then calls this.
+  // (The old body called setDiagnosticOrders / fetchDiagnosticOrders, which
+  // no longer exist since tableData moved to MechanicPage.)
+  function handleUpdateOrder() {
     getTableData();
   }
 
