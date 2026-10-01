@@ -2204,7 +2204,8 @@ BEGIN
         v.model,
         v.year_model,
         v.color,
-        v.current_mileage
+        v.current_mileage,
+        v.vin_number
     FROM vehicles v
     WHERE v.customer_id = p_customer_id
     ORDER BY v.date_registered DESC;
@@ -2230,4 +2231,3 @@ BEGIN
 END //
 
 DELIMITER ;
-
