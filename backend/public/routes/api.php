@@ -238,9 +238,14 @@
         break;
         case "customers":{
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
-               if ($auth->getRoleId() == 2 ) {
-                 $customerController->getCustomerRecordsByServiceProvider();
-               }
+                $input = json_decode(file_get_contents('php://input'), true);
+                if (isset($_GET["customer_id"]) || isset($_GET["customerId"]) || isset($input["customer_id"])) {
+                    $customerController->getCustomerDetailsWithHistory(); 
+                    exit; 
+                }
+                $customerController->getCustomerRecordsByServiceProvider();
+
+
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
                
@@ -315,8 +320,20 @@
             if ($_SERVER["REQUEST_METHOD"] === "POST"){
                 if (isset($_GET["post-method"])) {
                     $postMethod = $_GET["post-method"]; 
-                    if ($postMethod == "payment") {
-                        $invoiceController->processInvoicePayment(); 
+                    switch($postMethod){
+                        case "release-vehicle":{
+                            $invoiceController->fulfillRepairOrder(); 
+                        }
+                        break;
+                        case "payment":{
+                            $invoiceController->processInvoicePayment(); 
+                        }
+                        break;
+                        default:                                              
+                            http_response_code(404);
+                            echo json_encode(["error" => "post-method not found"]);
+                            exit();
+                        break;
                     }
                     exit(); 
                 }

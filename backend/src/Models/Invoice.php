@@ -205,5 +205,48 @@
                 ];
             }
         }
+        /**
+         * Fulfill and release a repair order by updating its status from READY_FOR_RELEASE to FULFILLED
+         * 
+         * @param int $orderId
+         * @return array
+         */
+        public function fulfillRepairOrder($orderId) {
+            try {
+                $query = "CALL sp_fulfill_repair_order(?)";
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $orderIdVal = (int)$orderId;
+                $stmt->bind_param("i", $orderIdVal);
+
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error);
+                }
+
+                $stmt->close();
+
+                // Clear stored procedure result sets from connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "message" => "Repair order fulfilled and released successfully."
+                ];
+
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error"   => "Failed to fulfill repair order: " . $e->getMessage()
+                ];
+            }
+        }
     }
 ?>

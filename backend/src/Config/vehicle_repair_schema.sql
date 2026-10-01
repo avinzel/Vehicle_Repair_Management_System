@@ -325,12 +325,12 @@ INSERT INTO service_catalog (service_catalog_id, service_name, description, stan
 -- role_id: 1=Admin, 2=Service Advisor, 3=Mechanic
 -- =====================================================================
 INSERT INTO users (user_id, username, password_hash, first_name, middle_name, last_name, contact_no, email, role_id, status, created_at) VALUES
-(1, 'mkay',       '$2y$12$L.5FB1jubPnhDH2rAGLEgerl8zDinIdj0KzBjUFQvckF4jfzyK2YG', 'Vinzel',    'Merona',   'Mandap',   '09493156781', 'vin@gmail.com',        3, 'ACTIVE', '2026-09-14 16:44:43'),
-(4, 'lean',       '$2y$12$nQu26E7giBxGxMY7/b1K4.S0TcAHxbN4MKg4Ru.3Epn2x1vKSlkgC', 'Vinzel',    'Merona',   'Mandap',   '09493156781', 'vieeen@gmail.com',     3, 'ACTIVE', '2026-09-14 16:48:02'),
-(5, 'kruu',       '$2y$12$lfqiNWlNLbvjiejTKD.VbO76nQFEqhuZb9CZTNnbM3tf/7E85EZ62', 'Vinzel',    'Merona',   'Mandap',   '09493156781', 'viee3435n@gmail.com', 3, 'ACTIVE', '2026-09-14 16:48:21'),
-(6, 'vinzel',     '$2y$12$HAw./A6cusUN2DreFRvTKeWLTzoowIQADPRg1Iwt9qsTHNqm.wVfW', 'Vincent',   'Tubice',   'Mandap',   '09423456781', 'vinzel@gmail.com',     2, 'ACTIVE', '2026-09-06 15:52:16'),
-(7, 'bananabeam', '$2y$12$Tu4T3taD14qPLjdlVUe40.E3xb.vE66opjqKzjOkLTkPOGH/Rt7Ce', 'Noel',      'Enseymada','Mercadal', '09423456781', 'bananabeam@gmail.com', 1, 'ACTIVE', '2026-09-06 15:53:07'),
-(8, 'joleks',     '$2y$12$rQUt/5Asy2zEUIF13jcDI.NLTzeyOSnAc890RV/E030FIIHTVq8yS', 'John Aleks','Wasuo',    'Lumpay',   '09423156781', 'janelle@gmail.com',    3, 'ACTIVE', '2026-09-06 15:56:46');
+(1, 'mkay',       '$2y$12$L.5FB1jubPnhDH2rAGLEgerl8zDinIdj0KzBjUFQvckF4jfzyK2YG', 'Mkay',    'Lakan',   'Malaro',   '09493156781', 'mkay@gmail.com',        3, 'ACTIVE', '2026-09-14 16:44:43'),
+(4, 'lean',       '$2y$12$nQu26E7giBxGxMY7/b1K4.S0TcAHxbN4MKg4Ru.3Epn2x1vKSlkgC', 'Leann',    'Janelle',   'Marie',   '09493156782', 'lean@gmail.com',     3, 'ACTIVE', '2026-09-14 16:48:02'),
+(5, 'kruu',       '$2y$12$lfqiNWlNLbvjiejTKD.VbO76nQFEqhuZb9CZTNnbM3tf/7E85EZ62', 'Kruu',    'Patrik',   'Malana',   '09493156783', 'kruu@gmail.com', 3, 'ACTIVE', '2026-09-14 16:48:21'),
+(6, 'vinzel',     '$2y$12$HAw./A6cusUN2DreFRvTKeWLTzoowIQADPRg1Iwt9qsTHNqm.wVfW', 'Vincent',   'Tubice',   'Mandap',   '09423456784', 'vinzel@gmail.com',     2, 'ACTIVE', '2026-09-06 15:52:16'),
+(7, 'bananabeam', '$2y$12$Tu4T3taD14qPLjdlVUe40.E3xb.vE66opjqKzjOkLTkPOGH/Rt7Ce', 'Noel',      'Enseymada','Mercadal', '09423456785', 'bananabeam@gmail.com', 1, 'ACTIVE', '2026-09-06 15:53:07'),
+(8, 'joleks',     '$2y$12$rQUt/5Asy2zEUIF13jcDI.NLTzeyOSnAc890RV/E030FIIHTVq8yS', 'John Aleks','Wasuo',    'Lumpay',   '09423156786', 'joleks@gmail.com',    3, 'ACTIVE', '2026-09-06 15:56:46');
 
 -- =====================================================================
 -- MECHANICS
@@ -637,7 +637,7 @@ BEGIN
     LEFT JOIN users u ON m.user_id = u.user_id
     LEFT JOIN invoices i ON ro.order_id = i.order_id
     
-    WHERE ro.status NOT IN ('FULFILLED', 'CANCELLED',"READY_TO_INVOICE", "READY_FOR_RELEASE" , "AWAITING_PAYMENT")
+    WHERE ro.status NOT IN ('FULFILLED', 'CANCELLED' , "AWAITING_PAYMENT")
       -- Status Filter
       AND (p_status = 'ALL' OR p_status IS NULL OR ro.status = p_status)
       -- Search Bar Filter
@@ -713,7 +713,6 @@ END //
 DELIMITER ;
 
 DELIMITER //
-
 DROP PROCEDURE IF EXISTS sp_get_billing_and_invoicing //
 
 CREATE PROCEDURE sp_get_billing_and_invoicing(
@@ -772,8 +771,6 @@ BEGIN
 
     ORDER BY ro.date_received DESC;
 END //
-
-DELIMITER ;
 
 DELIMITER //
 
@@ -1862,7 +1859,7 @@ sp_lbl: BEGIN
     -- 4. Transition Repair Order status to FULFILLED
     UPDATE repair_orders
     SET 
-        status = 'FULFILLED',
+        status = 'READY_FOR_RELEASE',
         date_completed = NOW()
     WHERE order_id = p_order_id;
 
@@ -2042,7 +2039,7 @@ BEGIN
     JOIN customers c ON v.customer_id = c.customer_id
     LEFT JOIN invoices inv ON ro.order_id = inv.order_id
     WHERE ro.order_id = p_order_id
-      AND ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', 'FULFILLED');
+      AND ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', 'FULFILLED',"READY_FOR_RELEASE");
 
 
     -- -----------------------------------------------------------------
@@ -2124,5 +2121,98 @@ END$$
 
 DELIMITER ;
 
+DELIMITER $$
 
+CREATE PROCEDURE sp_fulfill_repair_order(
+    IN p_order_id INT
+)
+BEGIN
+    DECLARE current_status VARCHAR(50);
+
+    -- Check if the repair order exists and retrieve its current status
+    SELECT status INTO current_status
+    FROM repair_orders
+    WHERE order_id = p_order_id;
+
+    IF current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+    ELSEIF current_status != 'READY_FOR_RELEASE' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Order cannot be fulfilled. It must be in READY_FOR_RELEASE status.';
+    ELSE
+        -- Update the status to FULFILLED and set date_completed
+        UPDATE repair_orders
+        SET status = 'FULFILLED',
+            date_completed = NOW()
+        WHERE order_id = p_order_id;
+
+        SELECT 
+            order_id, 
+            status, 
+            date_completed, 
+            'Order successfully fulfilled and released.' AS message
+        FROM repair_orders
+        WHERE order_id = p_order_id;
+    END IF;
+END $$
+
+DELIMITER ;
+
+DELIMITER //
+
+CREATE PROCEDURE sp_GetCustomerDetailsWithHistory(
+    IN p_customer_id INT
+)
+BEGIN
+    -- Result Set 1: Customer Info & Aggregated Summary
+    SELECT 
+        c.customer_id,
+        CONCAT(c.first_name, ' ', IFNULL(CONCAT(c.middle_name, ' '), ''), c.last_name) AS full_name,
+        c.contact_no,
+        c.email,
+        c.address,
+        COUNT(DISTINCT v.vehicle_id) AS total_vehicles,
+        MAX(ro.date_received) AS last_visit
+    FROM customers c
+    LEFT JOIN vehicles v ON c.customer_id = v.customer_id
+    LEFT JOIN repair_orders ro ON v.vehicle_id = ro.vehicle_id
+    WHERE c.customer_id = p_customer_id
+    GROUP BY c.customer_id;
+
+    -- Result Set 2: Registered Vehicles
+    SELECT 
+        v.vehicle_id,
+        v.plate_number,
+        v.vehicle_type,
+        v.manufacturer,
+        v.model,
+        v.year_model,
+        v.color,
+        v.current_mileage
+    FROM vehicles v
+    WHERE v.customer_id = p_customer_id
+    ORDER BY v.date_registered DESC;
+
+    -- Result Set 3: Repair Order History
+    SELECT 
+        ro.order_id,
+        v.vehicle_id,
+        CONCAT(v.manufacturer, ' ', v.model, ' (', v.plate_number, ')') AS vehicle_info,
+        ro.date_received,
+        ro.date_completed,
+        ro.mileage_at_service,
+        ro.complaint,
+        ro.status,
+        ro.priority,
+        i.total_amount AS invoice_total,
+        i.status AS payment_status
+    FROM repair_orders ro
+    JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
+    LEFT JOIN invoices i ON ro.order_id = i.order_id
+    WHERE v.customer_id = p_customer_id
+    ORDER BY ro.date_received DESC;
+END //
+
+DELIMITER ;
 
