@@ -2234,3 +2234,107 @@ BEGIN
 END //
 
 DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_dashboard_summary_cards //
+
+CREATE PROCEDURE sp_get_dashboard_summary_cards()
+BEGIN
+    SELECT 
+        -- Card 1: Total Revenue & Fulfilled Orders
+        IFNULL((SELECT SUM(total_amount) FROM invoices WHERE status = 'PAID'), 0.00) AS total_revenue,
+        (SELECT COUNT(*) FROM repair_orders WHERE status = 'FULFILLED') AS fulfilled_orders_count,
+
+        -- Card 2: Active Orders (pipeline)
+        (SELECT COUNT(*) FROM repair_orders 
+         WHERE status IN ('PENDING_DIAGNOSIS', 'AWAITING_DIAGNOSIS', 'PENDING_MECHANICS', 'IN_PROGRESS', 'AWAITING_PARTS', 'READY_TO_INVOICE', 'AWAITING_PAYMENT', 'READY_FOR_RELEASE')
+        ) AS active_orders_count,
+
+        -- Card 3: Active Staff & Total Staff
+        (SELECT COUNT(*) FROM users WHERE status = 'ACTIVE') AS active_staff_count,
+        (SELECT COUNT(*) FROM users) AS total_staff_count,
+
+        -- Card 4: Low Stock Alerts (quantity_on_hand < 6, i.e., <= 5)
+        (SELECT COUNT(*) FROM parts_inventory 
+         WHERE quantity_on_hand < 6 
+           AND status = 'ACTIVE'
+        ) AS low_stock_alerts_count,
+
+        -- Extra: Full Stock Breakdown for Inventory Widgets
+        (SELECT COUNT(*) FROM parts_inventory WHERE quantity_on_hand BETWEEN 6 AND 20 AND status = 'ACTIVE') AS moderate_stock_count,
+        (SELECT COUNT(*) FROM parts_inventory WHERE quantity_on_hand >= 21 AND status = 'ACTIVE') AS in_stock_count;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_pipeline_status_counts //
+
+CREATE PROCEDURE sp_get_pipeline_status_counts()
+BEGIN
+    SELECT 
+        SUM(CASE WHEN status = 'PENDING_DIAGNOSIS' THEN 1 ELSE 0 END) AS pending_diagnosis,
+        SUM(CASE WHEN status = 'AWAITING_DIAGNOSIS' THEN 1 ELSE 0 END) AS awaiting_diagnosis,
+        SUM(CASE WHEN status = 'PENDING_MECHANICS' THEN 1 ELSE 0 END) AS pending_mechanics,
+        SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
+        SUM(CASE WHEN status = 'AWAITING_PARTS' THEN 1 ELSE 0 END) AS awaiting_parts,
+        SUM(CASE WHEN status = 'READY_TO_INVOICE' THEN 1 ELSE 0 END) AS ready_to_invoice,
+        SUM(CASE WHEN status = 'AWAITING_PAYMENT' THEN 1 ELSE 0 END) AS awaiting_payment,
+        SUM(CASE WHEN status = 'READY_FOR_RELEASE' THEN 1 ELSE 0 END) AS ready_for_release
+    FROM repair_orders;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_recent_repair_orders //
+
+CREATE PROCEDURE sp_get_recent_repair_orders(
+    IN p_limit INT
+)
+BEGIN
+    -- Set default limit if NULL or invalid
+    IF p_limit IS NULL OR p_limit <= 0 THEN
+        SET p_limit = 5;
+    END IF;
+
+    SELECT 
+        CONCAT('RO-', ro.order_id) AS formatted_order_id,
+        ro.order_id AS raw_order_id,
+        CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+        ro.status,
+        ro.date_received,
+        IFNULL(
+            i.total_amount,
+            (IFNULL(sc_sum.labor_cost, 0) + IFNULL(parts_sum.parts_cost, 0))
+        ) AS estimated_or_actual_total
+    FROM repair_orders ro
+    JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
+    JOIN customers c ON v.customer_id = c.customer_id
+    LEFT JOIN invoices i ON ro.order_id = i.order_id
+    
+    -- Labor cost subquery
+    LEFT JOIN (
+        SELECT ros.order_id, SUM(sc.standard_labor_cost) AS labor_cost
+        FROM repair_order_services ros
+        JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+        GROUP BY ros.order_id
+    ) sc_sum ON ro.order_id = sc_sum.order_id
+
+    -- Active parts cost subquery (excluding cancelled parts)
+    LEFT JOIN (
+        SELECT order_id, SUM(unit_price * quantity_used) AS parts_cost
+        FROM repair_order_parts
+        WHERE status != 'CANCELLED' OR status IS NULL
+        GROUP BY order_id
+    ) parts_sum ON ro.order_id = parts_sum.order_id
+
+    WHERE ro.status != 'CANCELLED'
+    ORDER BY ro.date_received DESC
+    LIMIT p_limit;
+END //
+
+DELIMITER ;

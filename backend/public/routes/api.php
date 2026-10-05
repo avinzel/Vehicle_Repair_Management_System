@@ -49,6 +49,7 @@
     use App\Controllers\RoleController;
     use App\Controllers\PartController;
     use App\Controllers\ServiceController;
+    use App\Controllers\ReportsController;
     //instance
     $db = new Database();
     $userModel = new User($db);
@@ -66,6 +67,7 @@
     $invoiceController = new InvoiceController();
     $partController = new PartController();  
     $serviceController = new ServiceController(); 
+    $reportsController = new ReportsController();
 
     
     $action = $_GET['action'] ?? null;
@@ -227,12 +229,31 @@
         break;
         case "reports":{
             if($_SERVER["REQUEST_METHOD"] === "GET"){
-                if ($auth->getRoleId() == 2 ) {
-                    $dashboardData = (new Reports())->getServiceAdvisorCards();
-                    http_response_code(200);
-                    echo json_encode(["data" => $dashboardData]);
-                    exit();
+                if (isset($_GET["category"])) {
+                    $category = $_GET["category"];
+                    switch($category){
+                        case "admin-cards":{
+                            $reportsController->getDashboardCards();
+                        }
+                        break;
+                        case "pipeline-status":{
+                            $reportsController->getPipelineStatusCounts();
+                        }
+                        case "recent-orders":{
+                            $reportsController->getRecentRepairOrders();
+                        }   
+                        break;
+                        default:{
+                            http_response_code(404);
+                            echo json_encode(["error" => "404 not found"]);
+                            exit();
+                        }
+                    }
                 }
+                $dashboardData = (new Reports())->getServiceAdvisorCards();
+                http_response_code(200);
+                echo json_encode(["data" => $dashboardData]);
+                exit();
             }
         }
         break;

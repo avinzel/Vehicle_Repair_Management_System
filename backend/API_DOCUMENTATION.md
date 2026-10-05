@@ -251,7 +251,58 @@ Required intake values: customer first name, last name, phone; vehicle plate num
 ### Reports dashboard
 
 - `GET /api.php?action=reports`
-- Returns service-advisor dashboard cards under `data`. The route only emits this response for role ID `2`.
+- Fallback route that returns service-advisor dashboard cards under `data`.
+- `GET /api.php?action=reports&category=admin-cards`
+- Returns the admin dashboard summary metrics. The controller expects a JSON response in the shape:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "total_customers": 42,
+    "open_orders": 9,
+    "completed_orders": 27,
+    "revenue_today": 123450.75
+  }
+}
+```
+
+- `GET /api.php?action=reports&category=pipeline-status`
+- Returns the current order pipeline breakdown by status.
+
+```json
+{
+  "status": "success",
+  "data": {
+    "pending": 4,
+    "diagnosing": 3,
+    "repairing": 5,
+    "ready_to_invoice": 2,
+    "completed": 18
+  }
+}
+```
+
+- `GET /api.php?action=reports&category=recent-orders`
+- Returns the latest repair orders for the admin dashboard. Optional query parameter: `limit` (defaults to `10` in the controller; a `JSON` body `{"limit":5}` is also accepted). Response includes the number of rows returned.
+
+```json
+{
+  "status": "success",
+  "count": 5,
+  "data": [
+    {
+      "order_id": 104,
+      "customer_name": "Jane Dela Cruz",
+      "plate_number": "ABC-1234",
+      "status": "REPAIRING",
+      "created_at": "2026-10-05 14:20:00"
+    }
+  ]
+}
+```
+
+These three admin-report endpoints are the ones used by the dashboard page. The route only emits this response for role ID `2`.
 
 ### Customers
 
