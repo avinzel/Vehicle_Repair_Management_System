@@ -666,13 +666,63 @@ function CollectPaymentStage({ order }) {
 // sp_process_invoice_payment moves AWAITING_PAYMENT straight to FULFILLED,
 // so READY_FOR_RELEASE is never reached by the current backend. Kept only
 // so a stray/legacy row doesn't fall into the "Unknown status" fallback.
-function ReleaseVehicleStage({ order }) {
+function ReleaseVehicleStage({ order, onUpdateOrder }) {
+  const navigate = useNavigate();
+  const [releasing, setReleasing] = useState(false);
+  const [error, setError] = useState(null);
+
+  const orderRawId = order.rawId ?? String(order.id).replace(/\D/g, "");
+
+  async function handleRelease() {
+    setReleasing(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API}?action=invoices&post-method=release-vehicle`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: Number(orderRawId) }),
+      });
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok || json.status !== "success") {
+        throw new Error(json.error ?? json.message ?? `Request failed (HTTP ${response.status})`);
+      }
+      // Parent refetches everything; the updates object is ignored.
+      onUpdateOrder(order.id, {});
+    } catch (err) {
+      setError(err.message || "Failed to release vehicle");
+    } finally {
+      setReleasing(false);
+    }
+  }
+
   return (
-    <InvoicingStub
-      order={order}
-      title="Ready for Release"
-      description="Payment received. Review the invoice record."
-    />
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">Ready for Release</h3>
+      <p className="text-sm text-muted-foreground">
+        Payment received. Release the vehicle to the customer to close out this order.
+      </p>
+
+      {error && (
+        <p role="alert" className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+          {error}
+        </p>
+      )}
+
+      <Button type="button" className="w-full" disabled={releasing} onClick={handleRelease}>
+        {releasing ? "Releasing..." : "Release Vehicle"}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        disabled={releasing}
+        onClick={() => navigate(`/service-advisor/billing?order_id=${encodeURIComponent(orderRawId)}`)}
+      >
+        View Invoice →
+      </Button>
+    </div>
   );
 }
 

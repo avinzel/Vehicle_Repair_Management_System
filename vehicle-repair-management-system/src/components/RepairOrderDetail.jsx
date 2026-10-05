@@ -66,7 +66,7 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
             </div>
             <div className="bg-secondary/50 rounded-lg p-3">
               <p className="text-xs text-muted-foreground">Plate</p>
-              <p className="font-medium">{order.plate_number}</p>
+              <p className="font-medium">{order.plateNumber}</p>
             </div>
             <div className="bg-secondary/50 rounded-lg p-3">
               <p className="text-xs text-muted-foreground">Type</p>
@@ -77,8 +77,8 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
               <p className="font-medium">{order.vinNumber ?? '—'}</p>
             </div>
             <div className="bg-secondary/50 rounded-lg p-3">
-              <p className="text-xs text-muted-foreground">Current Millage</p>
-              <p className="font-medium">{order.currentMileage ?? order.currentMillage ?? '—'}</p>
+              <p className="text-xs text-muted-foreground">Current Mileage</p>
+              <p className="font-medium">{order.currentMileage == 0 ? '—' : order.currentMileage}</p>
             </div>
           </div>
         </div>

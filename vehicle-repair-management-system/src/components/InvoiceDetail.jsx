@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { normalizeInvoiceDetail } from "@/utils/normalizeOrder";
 
 const API = "http://localhost:8000/api.php";
 
@@ -23,45 +24,41 @@ function methodLabel(value) {
   return PAYMENT_METHODS.find((m) => m.value === value)?.label ?? value ?? "—";
 }
 
-// GET action=invoices&order_id=X -> sp_get_invoice_details, which returns
-// TWO result sets: (1) the invoice/order summary row, (2) mechanics on job.
-// InvoiceController just forwards `data` from the model, and the model
-// isn't in the uploaded files — so accept the plausible envelopes.
-// TODO: tighten once a real response is pasted.
-function normalizeInvoiceDetails(data) {
-  let main = null;
-  let mechanics = [];
 
-  if (Array.isArray(data)) {
-    if (Array.isArray(data[0])) {
-      main = data[0][0] ?? null;
-      mechanics = Array.isArray(data[1]) ? data[1] : [];
-    } else {
-      main = data[0] ?? null;
-    }
-  } else if (data && typeof data === "object") {
-    main = data.invoice ?? data.summary ?? data.order ?? data;
-    mechanics = data.mechanics ?? [];
-  }
+// function normalizeInvoiceDetail(data) {
+//   let main = null;
+//   let mechanics = [];
 
-  if (!main) return null;
-  return {
-    laborCharges: Number(main.labor_charges ?? 0),
-    partsCharges: Number(main.parts_charges ?? 0),
-    discount: Number(main.discount ?? 0),
-    taxAmount: Number(main.tax_amount ?? 0),
-    totalDue: Number(main.total_due ?? 0),
-    invoiceStatus: main.invoice_status ?? null,
-    paymentMethod: main.payment_method ?? null,
-    paymentReference: main.payment_reference ?? null,
-    paymentDate: main.payment_date ?? null,
-    team: mechanics.map((m) => ({
-      id: m.assignment_id,
-      name: m.mechanic_name,
-      role: m.position,
-    })),
-  };
-}
+//   if (Array.isArray(data)) {
+//     if (Array.isArray(data[0])) {
+//       main = data[0][0] ?? null;
+//       mechanics = Array.isArray(data[1]) ? data[1] : [];
+//     } else {
+//       main = data[0] ?? null;
+//     }
+//   } else if (data && typeof data === "object") {
+//     main = data.invoice ?? data.summary ?? data.order ?? data;
+//     mechanics = data.mechanics ?? [];
+//   }
+
+//   if (!main) return null;
+//   return {
+//     laborCharges: Number(main.labor_charges ?? 0),
+//     partsCharges: Number(main.parts_charges ?? 0),
+//     discount: Number(main.discount ?? 0),
+//     taxAmount: Number(main.tax_amount ?? 0),
+//     totalDue: Number(main.total_due ?? 0),
+//     invoiceStatus: main.invoice_status ?? null,
+//     paymentMethod: main.payment_method ?? null,
+//     paymentReference: main.payment_reference ?? null,
+//     paymentDate: main.payment_date ?? null,
+//     team: mechanics.map((m) => ({
+//       id: m.assignment_id,
+//       name: m.mechanic_name,
+//       role: m.position,
+//     })),
+//   };
+//}
 
 // Distinct from RepairOrderDetail/ORDER_STAGES on purpose: the generic
 // drawer only shows an amount + "Open Invoice →" link, while this richer
@@ -96,7 +93,7 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
       });
       const json = await response.json();
       if (json.status === "success") {
-        setDetails(normalizeInvoiceDetails(json.data));
+        setDetails(normalizeInvoiceDetail(json.data));
       } else {
         console.error("Failed to fetch invoice details:", json.error ?? json);
         setDetails(null);
@@ -128,6 +125,7 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
 
   const isReadyToInvoice = status === "READY_TO_INVOICE";
   const isAwaitingPayment = status === "AWAITING_PAYMENT";
+  const isReadyForRelease = status === "READY_FOR_RELEASE"; // new
   const isClosed = status === "FULFILLED" || status === "READY_FOR_RELEASE";
 
   const labor = details?.laborCharges ?? 0;
@@ -192,6 +190,12 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
     post(`${API}?action=invoices&post-method=payment`, body);
   }
 
+  function handleReleaseVehicle() {
+  post(`${API}?action=invoices&post-method=release-vehicle`, {
+    order_id: Number(rawId),
+  });
+}
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-start justify-between p-6 border-b border-border">
@@ -213,7 +217,7 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-3 uppercase">
+          <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
             Invoice Breakdown
           </h3>
           <div className="border border-border rounded-lg overflow-hidden">
@@ -267,7 +271,7 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
         </div>
 
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-3 uppercase">
+          <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
             Mechanics on Job
           </h3>
           {team.length > 0 ? (
@@ -295,7 +299,7 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
 
         {isReadyToInvoice && (
           <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
+            <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">
               Invoice Adjustments
             </h3>
             <div className="grid grid-cols-2 gap-3">
@@ -337,7 +341,7 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
 
         {isAwaitingPayment && (
           <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
+            <h3 className="text-xs font-semibold text-muted-foreground tracking-wide">
               Payment Method
             </h3>
             <div className="grid grid-cols-3 gap-2">
@@ -376,6 +380,25 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
             <p>Paid via {methodLabel(details?.paymentMethod ?? order.paymentMethod)}</p>
             {details?.paymentReference && <p>Reference: {details.paymentReference}</p>}
             {details?.paymentDate && <p>Paid on: {details.paymentDate}</p>}
+          </div>
+        )}
+
+        {isReadyForRelease && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold text-muted-foreground tracking-wide">
+              Vehicle Release
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Payment received. Hand the vehicle back to the customer, then release it to close this order.
+            </p>
+            <Button
+              type="button"
+              className="w-full"
+              disabled={submitting}
+              onClick={handleReleaseVehicle}
+            >
+              {submitting ? "Releasing..." : "Release Vehicle"}
+            </Button>
           </div>
         )}
       </div>

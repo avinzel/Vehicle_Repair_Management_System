@@ -16,7 +16,7 @@ export const DEFAULT_VEHICLE_VALUES = {
   year: "",
   color: "",
   vinNumber: "",
-  currentMillage: "",
+  currentMileage: "",
 };
 
 // Pure validation function so it's easy to unit test / reuse
@@ -45,6 +45,9 @@ function validateField(name, value) {
       return "";
     case "color":
       if (!trimmed) return "Color is required";
+      return "";
+    case "currentMileage":
+      if (trimmed && !/^\d+$/.test(trimmed)) return "Numbers only (no commas)";
       return "";
     default:
       return "";
@@ -209,17 +212,18 @@ export const VehicleForm = forwardRef(function VehicleForm(
           )}
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="currentMillage">Current Millage (optional)</Label>
+          <Label htmlFor="currentMileage">Current Mileage (optional)</Label>
           <Input
-            id="currentMillage"
-            placeholder="e.g., 10,000"
-            value={values.currentMillage}
-            onChange={handleChange("currentMillage")}
-            aria-invalid={!!showError("currentMillage")}
-            maxlength="6" 
+            id="currentMileage"
+            placeholder="e.g., 10000"
+            inputMode="numeric"
+            value={values.currentMileage}   // was values.currentMillage
+            onChange={handleChange("currentMileage")}
+            aria-invalid={!!showError("currentMileage")}
+            maxLength={6}
           />
-          {showError("currentMillage") && (
-            <p className="text-sm text-destructive">{errors.currentMillage}</p>
+          {showError("currentMileage") && (
+            <p className="text-sm text-destructive">{errors.currentMileage}</p>
           )}
         </div>
       </form>

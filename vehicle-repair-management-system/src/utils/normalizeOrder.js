@@ -46,9 +46,17 @@ function asArray(value) {
 // ("Toyota Vios 2021 · ABC-1234 · CAR"), status, priority, formatted_date,
 // assigned_mechanics (comma string of names), invoice_amount
 export function normalizeActiveOrderRow(raw) {
-  // TODO: add plate_number + vehicle_type as real columns in the SP and
+ 
   // delete this split. vehicle_info is display text, not a data contract.
   const [vehicle, plateNumber, vehicleType] = String(raw.vehicle_info ?? "").split(" · ");
+
+  // sp_get_active_repair_orders returns GROUP_CONCAT(... SEPARATOR ', ')
+  // or the literal "Unassigned". Names only, no ids or positions.
+  const label = raw.assigned_mechanics;
+  const team =
+    !label || label === "Unassigned"
+      ? []
+      : label.split(", ").map((name) => ({ name: name.trim(), role: null }));
 
   return {
     id: raw.order_id,
@@ -61,7 +69,8 @@ export function normalizeActiveOrderRow(raw) {
     status: raw.status,
     priority: raw.priority,
     date: raw.formatted_date,
-    assignedMechanicsLabel: raw.assigned_mechanics, // "Unassigned" or "A B, C D"
+    assignedMechanicsLabel: label,
+    team,
     amount: num(raw.invoice_amount),
   };
 }
@@ -86,6 +95,9 @@ export function normalizeOrderDetail(raw) {
     vehicle: raw.vehicle_name,
     plateNumber: raw.plate_number,
     plate: raw.plate_number, // alias: some components read `plate`
+    currentMileage: raw.mileage_at_service ?? null,
+    vinNumber: raw.vin_number ?? null,
+
     vehicleType: raw.vehicle_type,
 
     team: mechanics.map((m) => ({
@@ -129,7 +141,11 @@ export function normalizeBillingRow(raw) {
     id: raw.order_id,
     rawId: num(raw.raw_order_id),
     customer: raw.customer_name,
-    vehicle: raw.vehicle_summary, // already includes the date
+    vehicle: raw.vehicle_name,
+    plateNumber: raw.plate_number,
+    plate: raw.plate_number, // alias: some components read `plate`
+    vehicleType: raw.vehicle_type,
+    date: raw.formatted_date,
     status: raw.status,
     amount: num(raw.total_amount),
     amountLabel: raw.formatted_total_amount,
@@ -181,6 +197,8 @@ export function normalizeMechanicWorkOrder(raw) {
     vehicle: [raw.manufacturer, raw.model, raw.year_model].filter(Boolean).join(" "),
     plateNumber: raw.plate_number,
     plate: raw.plate_number, // alias: some components read `plate`
+    currentMileage: num(raw.mileage_at_service),
+    vinNumber: raw.vin_number ?? null,
     vehicleSummary: raw.vehicle_summary,
     assignedPosition: raw.assigned_position,
     partsLoggedCount: num(raw.parts_logged_count),
