@@ -17,6 +17,12 @@ import { BillingInvoicing } from './pages/ServiceAdvisorPage/BillingInvoicing';
 import { AssignedOrders } from './pages/MechanicPage/AssignedOrders';
 import { DiagnosticLogs } from './pages/MechanicPage/DiagnosticLogs';
 import { PartsLogger } from './pages/MechanicPage/PartsLogger';
+import { AdminDashboardTab } from "./pages/AdminPage/AdminDashboardTab";
+import { Staffs } from "./pages/AdminPage/Staffs";
+import { MechanicsPage } from "./pages/AdminPage/Mechanics";
+import { PartsInventory } from "./pages/AdminPage/PartsInventory";
+import { Reports } from "./pages/AdminPage/Reports";
+
 
 function App() {
   const [user, setUser] = useState(null)
@@ -62,7 +68,13 @@ function App() {
               <Navigate to="/" replace />
             )
           }
-        />
+        >
+          <Route index element={<AdminDashboardTab />} />
+          <Route path='staff' element={<Staffs />} />
+          <Route path='mechanics' element={<MechanicsPage />} />
+          <Route path='parts' element={<PartsInventory />} />
+          <Route path='reports' element={<Reports />} />
+        </Route>
 
         <Route
           path="/service-advisor"

@@ -16,7 +16,7 @@ import {
     MoreVertical,
     LogOut,
     X,
-    Menu,
+    SquareUser,
 } from 'lucide-react';
 
 import {
@@ -36,11 +36,11 @@ import { useNavigate } from 'react-router';
 // access rules change, rather than editing the render logic below.
 const ROLE_LINKS = {
     Admin: [
-        { name: 'Dashboard', icon: LayoutDashboard, href: '#dashboard' },
-        { name: 'Staff', icon: LayoutDashboard, href: '#staff' },
-        { name: 'Mechanics', icon: MechanicIcon, href: '#mechanics' },
-        { name: 'Parts Inventory', icon: Boxes, href: '#parts', badgeKey: 'lowStock' },
-        { name: 'Reports', icon: BarChart3, href: '#reports' },
+        { name: 'Dashboard', icon: LayoutDashboard, href: '/admin'},
+        { name: 'Staffs', icon: SquareUser, href: '/admin/staff'},
+        { name: 'Mechanics', icon: MechanicIcon, href: '/admin/mechanics' },
+        { name: 'Parts Inventory', icon: Boxes, href: '/admin/parts', badgeKey: 'lowStock' },
+        { name: 'Reports', icon: BarChart3, href: '/admin/reports' },
     ],
     'Service Advisor': [
         { name: 'Dashboard', icon: LayoutDashboard, href: '/service-advisor' },
