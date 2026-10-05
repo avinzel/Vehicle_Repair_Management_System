@@ -83,10 +83,10 @@ export function CustomerRecords() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="px-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contact</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vehicles</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Last Visit</TableHead>
+                <TableHead className="px-6 text-sm font-semibold tracking-wide text-muted-foreground">Customer</TableHead>
+                <TableHead className="text-sm font-semibold tracking-wide text-muted-foreground">Contact</TableHead>
+                <TableHead className="text-sm font-semibold tracking-wide text-muted-foreground">Vehicles</TableHead>
+                <TableHead className="text-sm font-semibold tracking-wide text-muted-foreground">Last Visit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

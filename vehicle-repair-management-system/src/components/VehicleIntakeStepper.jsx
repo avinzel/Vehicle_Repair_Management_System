@@ -103,8 +103,8 @@ export function VehicleIntakeStepper({getTableData, getCardData}) {
     return (
       <div className="w-full max-w-5xl mx-auto p-6 flex justify-center">
         <div className="w-full max-w-md rounded-2xl border border-border bg-card p-10 text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
-            <Check className="h-9 w-9 text-green-600" strokeWidth={2.5} />
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+            <Check className="h-9 w-9 text-primary" strokeWidth={2.5} />
           </div>
 
           <h2 className="mt-4 text-xl font-bold">Repair Order Created!</h2>

@@ -23,7 +23,7 @@ function Tile({ label, children, className = "" }) {
 
 function SectionTitle({ children }) {
   return (
-    <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-3 uppercase">
+    <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
       {children}
     </h3>
   );

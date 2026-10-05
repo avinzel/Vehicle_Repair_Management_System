@@ -5,6 +5,16 @@ import { Header } from '@/components/Header';
 import { Outlet, useLocation } from "react-router";
 import { normalizeActiveOrderRow, normalizeBillingRow } from '@/utils/normalizeOrder';
 
+// Statuses that belong on Active Repair Orders. Everything from
+// READY_TO_INVOICE onward lives on Billing & Invoicing.
+const ACTIVE_STATUSES = [
+  'PENDING_DIAGNOSIS',
+  'AWAITING_DIAGNOSIS',
+  'PENDING_MECHANICS',
+  'IN_PROGRESS',
+  'AWAITING_PARTS',
+];
+
 const API = 'http://localhost:8000/api.php';
 
 // Static title/subtitle per tab. Dashboard is intentionally excluded here
@@ -61,7 +71,10 @@ export function ServiceAdvisorPage({ user, setUser }) {
       );
       const json = await response.json();
       if (json.status === 'success' && Array.isArray(json.data)) {
-        setActiveOrders(json.data.map(normalizeActiveOrderRow));
+        setActiveOrders(json.data
+          .map(normalizeActiveOrderRow)
+          .filter((o) => ACTIVE_STATUSES.includes(o.status))
+        );
       } else {
         console.error("Failed to fetch active orders:", json.error ?? json);
       }

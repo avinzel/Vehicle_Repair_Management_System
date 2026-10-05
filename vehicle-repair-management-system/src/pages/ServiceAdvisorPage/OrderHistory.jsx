@@ -103,12 +103,12 @@ export function OrderHistory() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="px-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Order</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vehicle</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mechanics</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Completed</TableHead>
-                <TableHead className="px-6 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Paid</TableHead>
+                <TableHead className="px-6 text-sm font-semibold tracking-wide text-muted-foreground">Order</TableHead>
+                <TableHead className="text-sm font-semibold tracking-wide text-muted-foreground">Customer</TableHead>
+                <TableHead className="text-sm font-semibold tracking-wide text-muted-foreground">Vehicle</TableHead>
+                <TableHead className="text-sm font-semibold tracking-wide text-muted-foreground">Mechanics</TableHead>
+                <TableHead className="text-sm font-semibold tracking-wide text-muted-foreground">Completed</TableHead>
+                <TableHead className="px-6 text-right text-sm font-semibold tracking-wide text-muted-foreground">Total Paid</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

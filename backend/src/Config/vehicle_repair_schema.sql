@@ -728,7 +728,7 @@ BEGIN
         CONCAT('RO-', ro.order_id) AS order_id,
         ro.order_id AS raw_order_id,
         CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
-        CONCAT(v.manufacturer, ' ', v.model, ' ', IFNULL(v.year_model, '')) AS vehicle_name,
+        TRIM(CONCAT(v.manufacturer, ' ', v.model, ' ', IFNULL(v.year_model, ''))) AS vehicle_name,
         v.plate_number,
         v.vehicle_type,
         DATE_FORMAT(ro.date_received, '%b %d, %Y') AS formatted_date,
@@ -858,13 +858,14 @@ BEGIN
         DATE_FORMAT(ro.date_received, '%b %d, %Y') AS formatted_date,
         ro.status,
         ro.complaint,
+		ro.mileage_at_service, 
         ro.diagnosis_notes,
         DATE_FORMAT(ro.diagnosis_completed_at, '%b %d, %Y %h:%i %p') AS formatted_diagnosis_date,
         CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
         CONCAT(v.manufacturer, ' ', v.model, ' ', IFNULL(v.year_model, '')) AS vehicle_name,
         v.plate_number,
         v.vehicle_type,
-
+		v.vin_number,    
         -- 1. Assigned Mechanics Array
         -- position joined via rom.position_id — position is chosen per
         -- assignment again, not fixed on the mechanic.
@@ -2088,6 +2089,7 @@ BEGIN
         ro.status AS order_status,
         ro.priority,
         ro.complaint,
+        ro.mileage_at_service,
         ro.diagnosis_notes,
         ro.date_received,
         
@@ -2099,6 +2101,7 @@ BEGIN
         v.model,
         v.year_model,
         v.plate_number,
+        v.vin_number,
         CONCAT(v.manufacturer, ' ', v.model, 
             IF(v.year_model IS NOT NULL, CONCAT(' ', v.year_model), ''), 
             ' · ', v.plate_number) AS vehicle_summary,
