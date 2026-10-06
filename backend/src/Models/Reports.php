@@ -65,7 +65,7 @@
 
                 $stmt->execute();
                 $result = $stmt->get_result();
-                $row = $result ? $result->fetch_assoc() : null;
+                $data = $result ? $result->fetch_assoc() : null;
                 $stmt->close();
 
                 // Clear connection buffer
@@ -75,32 +75,9 @@
                     }
                 }
 
-                $keys = [
-                    'pending_diagnosis',
-                    'awaiting_diagnosis',
-                    'pending_mechanics',
-                    'in_progress',
-                    'awaiting_parts',
-                    'ready_to_invoice',
-                    'awaiting_payment',
-                    'ready_for_release'
-                ];
-
-                $statuses = [];
-                foreach ($keys as $key) {
-                    $statuses[$key] = [
-                        "label"      => ucwords(str_replace('_', ' ', $key)),
-                        "count"      => (int)($row[$key] ?? 0),
-                        "percentage" => (float)($row[$key . '_pct'] ?? 0)
-                    ];
-                }
-
                 return [
                     "success" => true,
-                    "data"    => [
-                        "total"    => (int)($row['total'] ?? 0),
-                        "statuses" => $statuses
-                    ]
+                    "data"    => $data
                 ];
 
             } catch (Exception $e) {

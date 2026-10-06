@@ -2403,40 +2403,22 @@ END //
 
 DELIMITER ;
 
-USE VehicleRepair;
-
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS sp_get_pipeline_status_counts //
 
 CREATE PROCEDURE sp_get_pipeline_status_counts()
 BEGIN
-    SELECT
-        c.*,
-        COALESCE(ROUND(c.pending_diagnosis  / NULLIF(c.total, 0) * 100, 1), 0) AS pending_diagnosis_pct,
-        COALESCE(ROUND(c.awaiting_diagnosis / NULLIF(c.total, 0) * 100, 1), 0) AS awaiting_diagnosis_pct,
-        COALESCE(ROUND(c.pending_mechanics  / NULLIF(c.total, 0) * 100, 1), 0) AS pending_mechanics_pct,
-        COALESCE(ROUND(c.in_progress        / NULLIF(c.total, 0) * 100, 1), 0) AS in_progress_pct,
-        COALESCE(ROUND(c.awaiting_parts     / NULLIF(c.total, 0) * 100, 1), 0) AS awaiting_parts_pct,
-        COALESCE(ROUND(c.ready_to_invoice   / NULLIF(c.total, 0) * 100, 1), 0) AS ready_to_invoice_pct,
-        COALESCE(ROUND(c.awaiting_payment   / NULLIF(c.total, 0) * 100, 1), 0) AS awaiting_payment_pct,
-        COALESCE(ROUND(c.ready_for_release  / NULLIF(c.total, 0) * 100, 1), 0) AS ready_for_release_pct
-    FROM (
-        SELECT
-            COALESCE(SUM(status = 'PENDING_DIAGNOSIS'),  0) AS pending_diagnosis,
-            COALESCE(SUM(status = 'AWAITING_DIAGNOSIS'), 0) AS awaiting_diagnosis,
-            COALESCE(SUM(status = 'PENDING_MECHANICS'),  0) AS pending_mechanics,
-            COALESCE(SUM(status = 'IN_PROGRESS'),        0) AS in_progress,
-            COALESCE(SUM(status = 'AWAITING_PARTS'),     0) AS awaiting_parts,
-            COALESCE(SUM(status = 'READY_TO_INVOICE'),   0) AS ready_to_invoice,
-            COALESCE(SUM(status = 'AWAITING_PAYMENT'),   0) AS awaiting_payment,
-            COALESCE(SUM(status = 'READY_FOR_RELEASE'),  0) AS ready_for_release,
-            COALESCE(SUM(status IN (
-                'PENDING_DIAGNOSIS','AWAITING_DIAGNOSIS','PENDING_MECHANICS','IN_PROGRESS',
-                'AWAITING_PARTS','READY_TO_INVOICE','AWAITING_PAYMENT','READY_FOR_RELEASE'
-            )), 0) AS total
-        FROM repair_orders
-    ) AS c;
+    SELECT 
+        SUM(CASE WHEN status = 'PENDING_DIAGNOSIS' THEN 1 ELSE 0 END) AS pending_diagnosis,
+        SUM(CASE WHEN status = 'AWAITING_DIAGNOSIS' THEN 1 ELSE 0 END) AS awaiting_diagnosis,
+        SUM(CASE WHEN status = 'PENDING_MECHANICS' THEN 1 ELSE 0 END) AS pending_mechanics,
+        SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
+        SUM(CASE WHEN status = 'AWAITING_PARTS' THEN 1 ELSE 0 END) AS awaiting_parts,
+        SUM(CASE WHEN status = 'READY_TO_INVOICE' THEN 1 ELSE 0 END) AS ready_to_invoice,
+        SUM(CASE WHEN status = 'AWAITING_PAYMENT' THEN 1 ELSE 0 END) AS awaiting_payment,
+        SUM(CASE WHEN status = 'READY_FOR_RELEASE' THEN 1 ELSE 0 END) AS ready_for_release
+    FROM repair_orders;
 END //
 
 DELIMITER ;
