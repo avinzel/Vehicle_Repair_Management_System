@@ -21,6 +21,7 @@ import { AdminDashboardTab } from "./pages/AdminPage/AdminDashboardTab";
 import { Staffs } from "./pages/AdminPage/Staffs";
 import { MechanicsPage } from "./pages/AdminPage/Mechanics";
 import { PartsInventory } from "./pages/AdminPage/PartsInventory";
+import { Services } from "./pages/AdminPage/Services";
 import { Reports } from "./pages/AdminPage/Reports";
 
 
@@ -73,6 +74,7 @@ function App() {
           <Route path='staff' element={<Staffs />} />
           <Route path='mechanics' element={<MechanicsPage />} />
           <Route path='parts' element={<PartsInventory />} />
+          <Route path='services' element={<Services />} />
           <Route path='reports' element={<Reports />} />
         </Route>
 

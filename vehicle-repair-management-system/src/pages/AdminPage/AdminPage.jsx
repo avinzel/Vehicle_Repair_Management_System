@@ -11,6 +11,7 @@ const PAGE_META = {
   '/admin/staff': { title: 'Staff Management', subtitle: 'Manage staff accounts, roles, and access' },
   '/admin/mechanics': { title: 'Mechanic Management', subtitle: 'Manage mechanic profiles, specializations, and availability' },
   '/admin/parts': { title: 'Parts Inventory', subtitle: 'Monitor stock levels and restock parts' },
+  '/admin/services': { title: 'Service Catalouge', subtitle: 'Define and manage the services offered by the workshop' },
   '/admin/reports': { title: 'Reports & Analytics', subtitle: 'View revenue, service trends, and inventory usage' },
 };
 

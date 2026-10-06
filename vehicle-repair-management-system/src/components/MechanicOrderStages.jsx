@@ -194,14 +194,14 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
       </div>
       {order.complaint && (
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-2 uppercase">
+          <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-2">
             Customer Complaint
           </h3>
           <p className="text-sm bg-secondary/50 rounded-lg p-3">{order.complaint}</p>
         </div>
       )}
       <div className="space-y-2">
-        <h3 className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
+        <h3 className="text-xs font-semibold text-muted-foreground tracking-wide ">
           Required Services
         </h3>
         <Select value="" onValueChange={addService} disabled={formLoading || submitting}>
@@ -211,8 +211,8 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
                 formLoading
                   ? "Loading services..."
                   : selectedServices.length > 0
-                  ? `${selectedServices.length} service${selectedServices.length === 1 ? "" : "s"} selected`
-                  : "Select applicable services..."
+                    ? `${selectedServices.length} service${selectedServices.length === 1 ? "" : "s"} selected`
+                    : "Select applicable services..."
               }
             />
           </SelectTrigger>
@@ -249,7 +249,7 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
       </div>
 
       <div className="space-y-2">
-        <h3 className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
+        <h3 className="text-sm font-semibold text-muted-foreground tracking-wide ">
           Diagnostic Notes
         </h3>
         <Textarea
@@ -281,15 +281,41 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
   );
 }
 
+const API = "http://localhost:8000/api.php";
+
+function useOrderParts(orderRawId, enabled) {
+  const [parts, setParts] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || orderRawId == null) return;
+    let cancelled = false;
+    setLoading(true);
+    fetch(
+      `${API}?action=repair-orders&category=parts-by-order&order_id=${encodeURIComponent(orderRawId)}`,
+      { credentials: "include" }
+    )
+      .then((r) => r.json())
+      .then((json) => {
+        if (cancelled) return;
+        setParts(json.status === "success" && Array.isArray(json.data) ? json.data : []);
+      })
+      .catch(() => !cancelled && setParts([]))
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [orderRawId, enabled]);
+
+  return { parts, loading };
+}
+
+
 // --- Repair-team view: everyone else (Lead Mechanic, Assistant, or the
 // Diagnostician once the job has moved past their own stage — or, on
 // pages that force the team view via allowDiagnosisForm=false, the
 // Diagnostician too). Shows the crew roster, diagnosis (or a prompt to go
 // file it), and parts logging. ---
-function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnThisJob, onLogParts, onOpenDiagnosticLog }) {
+function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnThisJob, onLogParts, onOpenDiagnosticLog, onRequestComplete }) {
   const statusLabel = formatStatusLabel(order.status);
-  const parts = order.partsLogged ?? [];
-  const partsTotal = parts.reduce((sum, p) => sum + (p.cost ?? 0) * (p.qty ?? 1), 0);
 
   // Only an in-progress job can be marked complete from here; later
   // stages (Awaiting Payment, Ready for Release, Completed) are read-only
@@ -301,52 +327,16 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
   const canMarkComplete = statusLabel === "In Progress" && isLeadMechanic;
   const showLeadOnlyHint = statusLabel === "In Progress" && !isLeadMechanic;
 
-  const [confirmingComplete, setConfirmingComplete] = useState(false);
-  const [completing, setCompleting] = useState(false);
-  const [completeError, setCompleteError] = useState(null);
-  const numericOrderId = order.rawId ?? order.id;
-
-  // POST action=repair-orders&post-method=mark-ready-to-invoice
-  // -> RepairOrderController::markReadyToInvoice -> sp_mark_ready_to_invoice.
-  // The SP rejects the call while any part is still PENDING_PARTS, and
-  // stamps date_completed on success.
-  async function handleMarkComplete() {
-    setCompleting(true);
-    setCompleteError(null);
-    try {
-      const response = await fetch(
-        "http://localhost:8000/api.php?action=repair-orders&post-method=mark-ready-to-invoice",
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order_id: Number(numericOrderId) }),
-        }
-      );
-      const json = await response.json().catch(() => ({}));
-
-      if (!response.ok || (json.status && json.status !== "success")) {
-        throw new Error(json.error ?? json.message ?? `Request failed (HTTP ${response.status})`);
-      }
-
-      setConfirmingComplete(false);
-      // Parent re-fetches the assigned orders; the updates object is only
-      // a hint. The order drops off the mechanic's list once it leaves
-      // the actionable statuses.
-      onUpdateOrder(order.id, { status: "READY_TO_INVOICE" });
-    } catch (err) {
-      console.error("Failed to mark job complete:", err);
-      setCompleteError(err.message || "Something went wrong. Please try again.");
-    } finally {
-      setCompleting(false);
-    }
-  }
-  
   // Parts only make sense once a diagnosis has scoped the job and repair
   // work has actually started — showing this on Awaiting Diagnosis or
   // Pending Mechanics would let someone log parts for work that hasn't
   // been defined yet.
   const canLogParts = statusLabel === "In Progress" || statusLabel === "Awaiting Parts";
+
+  // The parts endpoint needs the numeric order id, not "RO-1050".
+  const numericOrderId = order.rawId ?? order.id;
+  const { parts, loading: partsLoading } = useOrderParts(numericOrderId, canLogParts);
+  const partsTotal = parts.reduce((sum, p) => sum + Number(p.subtotal ?? 0), 0);
 
 
   // If I'm the Diagnostician on this job and no notes exist yet, this
@@ -357,9 +347,9 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
 
   return (
     <div className="space-y-6">
-      
+
       <div>
-        <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-3 uppercase">
+        <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3 ">
           Team on this Job
         </h3>
         <div className="space-y-2">
@@ -368,9 +358,8 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
             return (
               <div
                 key={member.id ?? member.name}
-                className={`flex items-center justify-between rounded-lg p-3 border ${
-                  isYou ? "bg-primary/5 border-primary/30" : "bg-secondary/50 border-transparent"
-                }`}
+                className={`flex items-center justify-between rounded-lg p-3 border ${isYou ? "bg-primary/5 border-primary/30" : "bg-secondary/50 border-transparent"
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
@@ -392,7 +381,7 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-3 uppercase">
+        <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
           Diagnostic Notes
         </h3>
         {order.diagnosticNotes ? (
@@ -415,34 +404,37 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
         )}
       </div>
 
-      {canLogParts && (
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-3 uppercase">
-            Parts Logged
-          </h3>
-          {parts.length > 0 ? (
-            <div className="space-y-2">
-              {parts.map((part, i) => (
-                <div key={i} className="flex items-center justify-between text-sm">
-                  <div>
-                    <p className="font-medium">{part.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Logged by {part.loggedBy} · qty {part.qty}
-                    </p>
-                  </div>
-                  <span className="font-medium">₱{(part.cost ?? 0).toLocaleString("en-PH")}</span>
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
+          Repair Parts
+        </h3>
+        {partsLoading ? (
+          <p className="text-sm text-muted-foreground">Loading parts...</p>
+        ) : parts.length > 0 ? (
+          <div className="space-y-2">
+            {parts.map((part) => (
+              <div key={part.order_part_id} className="flex items-center justify-between text-sm">
+                <div>
+                  <p className="font-medium">{part.part_name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    qty {part.quantity_used}
+                    {part.part_status === "PENDING_PARTS" && " · pending stock"}
+                  </p>
                 </div>
-              ))}
-              <div className="flex items-center justify-between text-sm font-semibold pt-2 border-t border-border">
-                <span>Parts Total</span>
-                <span>₱{partsTotal.toLocaleString("en-PH")}</span>
+                <span className="font-medium">
+                  ₱{Number(part.subtotal ?? 0).toLocaleString("en-PH")}
+                </span>
               </div>
+            ))}
+            <div className="flex items-center justify-between text-sm font-semibold pt-2 border-t border-border">
+              <span>Parts Total</span>
+              <span>₱{partsTotal.toLocaleString("en-PH")}</span>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No parts logged yet.</p>
-          )}
-        </div>
-      )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No parts logged yet.</p>
+        )}
+      </div>
 
       {canLogParts && (
         <Button
@@ -455,51 +447,14 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
         </Button>
       )}
 
-      {completeError && (
-        <p role="alert" className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-          {completeError}
-        </p>
-      )}
-
-      {canMarkComplete && !confirmingComplete && (
+      {canMarkComplete && (
         <Button
           type="button"
           className="w-full bg-primary text-white"
-          onClick={() => {
-            setCompleteError(null);
-            setConfirmingComplete(true);
-          }}
+          onClick={() => onRequestComplete?.(order.id)}
         >
           ✓ Mark Job Complete — Ready for Billing
         </Button>
-      )}
-
-      {canMarkComplete && confirmingComplete && (
-        <div className="space-y-2 border border-primary/30 bg-primary/5 rounded-lg p-3">
-          <p className="text-sm">
-            Hand this job over for billing? It leaves your list and can't be moved back to
-            In Progress from here.
-          </p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              disabled={completing}
-              onClick={() => setConfirmingComplete(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="flex-1 bg-primary text-white"
-              disabled={completing}
-              onClick={handleMarkComplete}
-            >
-              {completing ? "Marking..." : "Confirm"}
-            </Button>
-          </div>
-        </div>
       )}
 
       {showLeadOnlyHint && (

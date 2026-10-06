@@ -239,7 +239,7 @@ export function PartsLogger() {
               {selectedOrderId === order.id && selectedOrder && (
                 <div className="space-y-4 border border-border rounded-xl p-4">
                   <div>
-                    <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-2 uppercase">
+                    <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-2 ">
                       Select Part from Inventory
                     </h3>
                     <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
@@ -310,7 +310,7 @@ export function PartsLogger() {
                       </div>
 
                       <div>
-                        <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-2 uppercase">
+                        <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-2">
                           Quantity Used
                         </h3>
                         <div className="flex items-center gap-2">
@@ -398,7 +398,7 @@ export function PartsLogger() {
         <div className="space-y-4 sticky top-[73px] max-h-[calc(100vh-97px)] overflow-y-auto pr-1">
           {selectedOrder && (
             <div className="border border-border rounded-xl p-4 space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
+              <h3 className="text-sm font-semibold text-muted-foreground tracking-wide ">
                 Parts Logged on {selectedOrder.id}
               </h3>
               {visibleLogged.length > 0 ? (
@@ -460,7 +460,7 @@ export function PartsLogger() {
           )}
 
           <div className="border border-border rounded-xl p-4 space-y-2">
-            <h3 className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">
+            <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">
               Inventory Snapshot
             </h3>
             {inventory.map((part) => {

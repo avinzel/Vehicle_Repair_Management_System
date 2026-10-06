@@ -17,6 +17,7 @@ import {
     LogOut,
     X,
     SquareUser,
+    Toolbox
 } from 'lucide-react';
 
 import {
@@ -40,6 +41,7 @@ const ROLE_LINKS = {
         { name: 'Staffs', icon: SquareUser, href: '/admin/staff'},
         { name: 'Mechanics', icon: MechanicIcon, href: '/admin/mechanics' },
         { name: 'Parts Inventory', icon: Boxes, href: '/admin/parts', badgeKey: 'lowStock' },
+        { name: 'Services', icon: Toolbox, href: '/admin/services' },
         { name: 'Reports', icon: BarChart3, href: '/admin/reports' },
     ],
     'Service Advisor': [

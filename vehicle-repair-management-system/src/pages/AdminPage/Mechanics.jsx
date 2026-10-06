@@ -211,6 +211,7 @@ export function MechanicsPage() {
                           variant="ghost"
                           size="icon-sm"
                           aria-label={`Edit ${m.name}`}
+                          className="hover:text-muted-foreground"
                           onClick={() => openEdit(m)}
                         >
                           <Pencil className="w-4 h-4" />
