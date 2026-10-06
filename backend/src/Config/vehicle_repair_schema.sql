@@ -443,15 +443,39 @@ INSERT INTO maintenance_history (history_id, order_id, service_date, service_sum
 -- =====================================================================
 INSERT INTO invoices (invoice_id, order_id, invoice_date, labor_total, parts_total, discount, tax_amount, total_amount, payment_method, payment_reference, payment_date, status, issued_by, received_by) VALUES
 (2, 5, '2026-08-23 17:05:00', 1000.00, 920.00, 0.00, 0.00, 1920.00, 'CASH', NULL, '2026-08-23 17:10:00', 'PAID', 6, 6);
-
-
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS get_all_mechanics //
 
-CREATE PROCEDURE get_all_mechanics()
+CREATE PROCEDURE get_all_mechanics(
+    IN p_search VARCHAR(255),
+    IN p_status VARCHAR(20),
+    IN p_sort_by VARCHAR(50),
+    IN p_sort_order VARCHAR(4)
+)
 BEGIN
+    -- Sanitize search input
+    IF p_search IS NOT NULL THEN
+        SET p_search = TRIM(p_search);
+        IF p_search = '' THEN SET p_search = NULL; END IF;
+    END IF;
+
+    -- Sanitize status filter (Default to 'ACTIVE' if empty/ALL)
+    IF p_status IS NOT NULL THEN
+        SET p_status = TRIM(p_status);
+        IF p_status = '' OR p_status = 'ALL' THEN SET p_status = NULL; END IF;
+    END IF;
+
+    -- Sanitize sort parameters
+    SET p_sort_by = LOWER(IFNULL(TRIM(p_sort_by), 'mechanic_id'));
+    SET p_sort_order = UPPER(IFNULL(TRIM(p_sort_order), 'ASC'));
+
+    IF p_sort_order NOT IN ('ASC', 'DESC') THEN
+        SET p_sort_order = 'ASC';
+    END IF;
+
     SELECT 
+        CONCAT('M-', LPAD(m.mechanic_id, 3, '0')) AS formatted_mechanic_id,
         m.mechanic_id,
         CONCAT(u.first_name, ' ', IFNULL(CONCAT(u.middle_name, ' '), ''), u.last_name) AS full_name,
         u.username,
@@ -464,14 +488,38 @@ BEGIN
     FROM mechanics m
     JOIN users u ON m.user_id = u.user_id
     JOIN roles r ON u.role_id = r.role_id
-    WHERE m.status = "ACTIVE";
+    WHERE 
+        -- Status Filter
+        (p_status IS NULL OR m.status = p_status)
+
+        -- Search Filter (Matches exact mechanic_id, formatted M-001 ID, name, email, phone, username, or specialization)
+        AND (
+            p_search IS NULL
+            OR CAST(m.mechanic_id AS CHAR) = p_search
+            OR CONCAT('M-', LPAD(m.mechanic_id, 3, '0')) LIKE CONCAT('%', p_search, '%')
+            OR CONCAT(u.first_name, ' ', IFNULL(CONCAT(u.middle_name, ' '), ''), u.last_name) LIKE CONCAT('%', p_search, '%')
+            OR u.username LIKE CONCAT('%', p_search, '%')
+            OR u.email LIKE CONCAT('%', p_search, '%')
+            OR u.contact_no LIKE CONCAT('%', p_search, '%')
+            OR m.specialization LIKE CONCAT('%', p_search, '%')
+        )
+    ORDER BY 
+        -- Sort by Full Name
+        CASE WHEN p_sort_by = 'full_name' AND p_sort_order = 'ASC' THEN CONCAT(u.first_name, ' ', u.last_name) END ASC,
+        CASE WHEN p_sort_by = 'full_name' AND p_sort_order = 'DESC' THEN CONCAT(u.first_name, ' ', u.last_name) END DESC,
+
+        -- Sort by Date Hired
+        CASE WHEN (p_sort_by = 'date_hired' OR p_sort_by = 'date') AND p_sort_order = 'ASC' THEN m.date_hired END ASC,
+        CASE WHEN (p_sort_by = 'date_hired' OR p_sort_by = 'date') AND p_sort_order = 'DESC' THEN m.date_hired END DESC,
+
+        -- Default Fallback
+        m.mechanic_id ASC;
 END //
 
 DELIMITER ;
-
 DELIMITER //
 	CREATE PROCEDURE sp_populate_dashboard_cards()
-	BEGIN
+	BEGIN	
 		SELECT 
 			SUM(status = 'PENDING_DIAGNOSIS') AS needs_diagnostician,
 			SUM(status = 'AWAITING_DIAGNOSIS') AS awaiting_diagnosis,
@@ -1974,10 +2022,45 @@ END$$
 DELIMITER ;
 
 DELIMITER $$
+DELIMITER $$
 
-CREATE PROCEDURE sp_GetStaffMembers()
+DROP PROCEDURE IF EXISTS sp_GetStaffMembers $$
+
+CREATE PROCEDURE sp_GetStaffMembers(
+    IN p_search VARCHAR(255),
+    IN p_role_id INT,
+    IN p_status VARCHAR(20),
+    IN p_sort_by VARCHAR(50),
+    IN p_sort_order VARCHAR(4)
+)
 BEGIN
+    -- Sanitize search input
+    IF p_search IS NOT NULL THEN
+        SET p_search = TRIM(p_search);
+        IF p_search = '' THEN SET p_search = NULL; END IF;
+    END IF;
+
+    -- Sanitize status filter
+    IF p_status IS NOT NULL THEN
+        SET p_status = TRIM(p_status);
+        IF p_status = '' OR p_status = 'ALL' THEN SET p_status = NULL; END IF;
+    END IF;
+
+    -- Sanitize role_id (0 or negative means ALL)
+    IF p_role_id IS NOT NULL AND p_role_id <= 0 THEN
+        SET p_role_id = NULL;
+    END IF;
+
+    -- Sanitize sort parameters
+    SET p_sort_by = LOWER(IFNULL(TRIM(p_sort_by), 'user_id'));
+    SET p_sort_order = UPPER(IFNULL(TRIM(p_sort_order), 'ASC'));
+
+    IF p_sort_order NOT IN ('ASC', 'DESC') THEN
+        SET p_sort_order = 'ASC';
+    END IF;
+
     SELECT 
+        CONCAT('STF-', LPAD(u.user_id, 3, '0')) AS formatted_staff_id,
         u.user_id,
         CONCAT(u.first_name, ' ', u.last_name) AS full_name,
         u.email,
@@ -1988,7 +2071,41 @@ BEGIN
         r.role_name AS role
     FROM users u
     INNER JOIN roles r ON u.role_id = r.role_id
-    ORDER BY u.user_id ASC;
+    WHERE 
+        -- Search Filter (ID, formatted STF-001 ID, name, email, phone, role)
+        (
+            p_search IS NULL
+            OR CAST(u.user_id AS CHAR) = p_search
+            OR CONCAT('STF-', LPAD(u.user_id, 3, '0')) LIKE CONCAT('%', p_search, '%')
+            OR CONCAT(u.first_name, ' ', u.last_name) LIKE CONCAT('%', p_search, '%')
+            OR u.email LIKE CONCAT('%', p_search, '%')
+            OR u.contact_no LIKE CONCAT('%', p_search, '%')
+            OR r.role_name LIKE CONCAT('%', p_search, '%')
+        )
+        -- Specific Role Filter
+        AND (p_role_id IS NULL OR u.role_id = p_role_id)
+        
+        -- Status Filter
+        AND (p_status IS NULL OR u.status = p_status)
+    ORDER BY 
+        -- Sort by Full Name
+        CASE WHEN p_sort_by = 'full_name' AND p_sort_order = 'ASC' THEN CONCAT(u.first_name, ' ', u.last_name) END ASC,
+        CASE WHEN p_sort_by = 'full_name' AND p_sort_order = 'DESC' THEN CONCAT(u.first_name, ' ', u.last_name) END DESC,
+
+        -- Sort by Role Name
+        CASE WHEN p_sort_by = 'role_name' AND p_sort_order = 'ASC' THEN r.role_name END ASC,
+        CASE WHEN p_sort_by = 'role_name' AND p_sort_order = 'DESC' THEN r.role_name END DESC,
+
+        -- Sort by Status
+        CASE WHEN p_sort_by = 'status' AND p_sort_order = 'ASC' THEN u.status END ASC,
+        CASE WHEN p_sort_by = 'status' AND p_sort_order = 'DESC' THEN u.status END DESC,
+
+        -- Sort by Date Joined / Created At
+        CASE WHEN (p_sort_by = 'date' OR p_sort_by = 'since') AND p_sort_order = 'ASC' THEN u.created_at END ASC,
+        CASE WHEN (p_sort_by = 'date' OR p_sort_by = 'since') AND p_sort_order = 'DESC' THEN u.created_at END DESC,
+
+        -- Default Fallback
+        u.user_id ASC;
 END $$
 
 DELIMITER ;
@@ -2234,7 +2351,6 @@ BEGIN
 END //
 
 DELIMITER ;
-
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS sp_get_dashboard_summary_cards //
@@ -2261,6 +2377,25 @@ BEGIN
            AND status = 'ACTIVE'
         ) AS low_stock_alerts_count,
 
+        -- Card 5: Average Order Value (per completed/fulfilled repair)
+        IFNULL(
+            (SELECT AVG(total_amount) 
+             FROM invoices 
+             WHERE status = 'PAID'), 0.00
+        ) AS avg_order_value,
+
+        -- Card 6: Inventory Value & Total SKUs on Hand
+        IFNULL(
+            (SELECT SUM(unit_price * quantity_on_hand) 
+             FROM parts_inventory 
+             WHERE status = 'ACTIVE'), 0.00
+        ) AS total_inventory_value,
+        
+        (SELECT COUNT(*) 
+         FROM parts_inventory 
+         WHERE status = 'ACTIVE' AND quantity_on_hand > 0
+        ) AS total_part_skus,
+
         -- Extra: Full Stock Breakdown for Inventory Widgets
         (SELECT COUNT(*) FROM parts_inventory WHERE quantity_on_hand BETWEEN 6 AND 20 AND status = 'ACTIVE') AS moderate_stock_count,
         (SELECT COUNT(*) FROM parts_inventory WHERE quantity_on_hand >= 21 AND status = 'ACTIVE') AS in_stock_count;
@@ -2268,22 +2403,40 @@ END //
 
 DELIMITER ;
 
+USE VehicleRepair;
+
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS sp_get_pipeline_status_counts //
 
 CREATE PROCEDURE sp_get_pipeline_status_counts()
 BEGIN
-    SELECT 
-        SUM(CASE WHEN status = 'PENDING_DIAGNOSIS' THEN 1 ELSE 0 END) AS pending_diagnosis,
-        SUM(CASE WHEN status = 'AWAITING_DIAGNOSIS' THEN 1 ELSE 0 END) AS awaiting_diagnosis,
-        SUM(CASE WHEN status = 'PENDING_MECHANICS' THEN 1 ELSE 0 END) AS pending_mechanics,
-        SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
-        SUM(CASE WHEN status = 'AWAITING_PARTS' THEN 1 ELSE 0 END) AS awaiting_parts,
-        SUM(CASE WHEN status = 'READY_TO_INVOICE' THEN 1 ELSE 0 END) AS ready_to_invoice,
-        SUM(CASE WHEN status = 'AWAITING_PAYMENT' THEN 1 ELSE 0 END) AS awaiting_payment,
-        SUM(CASE WHEN status = 'READY_FOR_RELEASE' THEN 1 ELSE 0 END) AS ready_for_release
-    FROM repair_orders;
+    SELECT
+        c.*,
+        COALESCE(ROUND(c.pending_diagnosis  / NULLIF(c.total, 0) * 100, 1), 0) AS pending_diagnosis_pct,
+        COALESCE(ROUND(c.awaiting_diagnosis / NULLIF(c.total, 0) * 100, 1), 0) AS awaiting_diagnosis_pct,
+        COALESCE(ROUND(c.pending_mechanics  / NULLIF(c.total, 0) * 100, 1), 0) AS pending_mechanics_pct,
+        COALESCE(ROUND(c.in_progress        / NULLIF(c.total, 0) * 100, 1), 0) AS in_progress_pct,
+        COALESCE(ROUND(c.awaiting_parts     / NULLIF(c.total, 0) * 100, 1), 0) AS awaiting_parts_pct,
+        COALESCE(ROUND(c.ready_to_invoice   / NULLIF(c.total, 0) * 100, 1), 0) AS ready_to_invoice_pct,
+        COALESCE(ROUND(c.awaiting_payment   / NULLIF(c.total, 0) * 100, 1), 0) AS awaiting_payment_pct,
+        COALESCE(ROUND(c.ready_for_release  / NULLIF(c.total, 0) * 100, 1), 0) AS ready_for_release_pct
+    FROM (
+        SELECT
+            COALESCE(SUM(status = 'PENDING_DIAGNOSIS'),  0) AS pending_diagnosis,
+            COALESCE(SUM(status = 'AWAITING_DIAGNOSIS'), 0) AS awaiting_diagnosis,
+            COALESCE(SUM(status = 'PENDING_MECHANICS'),  0) AS pending_mechanics,
+            COALESCE(SUM(status = 'IN_PROGRESS'),        0) AS in_progress,
+            COALESCE(SUM(status = 'AWAITING_PARTS'),     0) AS awaiting_parts,
+            COALESCE(SUM(status = 'READY_TO_INVOICE'),   0) AS ready_to_invoice,
+            COALESCE(SUM(status = 'AWAITING_PAYMENT'),   0) AS awaiting_payment,
+            COALESCE(SUM(status = 'READY_FOR_RELEASE'),  0) AS ready_for_release,
+            COALESCE(SUM(status IN (
+                'PENDING_DIAGNOSIS','AWAITING_DIAGNOSIS','PENDING_MECHANICS','IN_PROGRESS',
+                'AWAITING_PARTS','READY_TO_INVOICE','AWAITING_PAYMENT','READY_FOR_RELEASE'
+            )), 0) AS total
+        FROM repair_orders
+    ) AS c;
 END //
 
 DELIMITER ;
@@ -2338,3 +2491,431 @@ BEGIN
 END //
 
 DELIMITER ;
+	DELIMITER //
+
+	DROP PROCEDURE IF EXISTS sp_get_parts_inventory_admin //
+
+	CREATE PROCEDURE sp_get_parts_inventory_admin(
+		IN p_search VARCHAR(255),
+		IN p_stock_level VARCHAR(20),
+		IN p_sort_by VARCHAR(50),
+		IN p_sort_order VARCHAR(4)
+	)
+	BEGIN
+		-- Sanitize search input
+		IF p_search IS NOT NULL THEN
+			SET p_search = TRIM(p_search);
+			IF p_search = '' THEN SET p_search = NULL; END IF;
+		END IF;
+
+		-- Sanitize stock level filter
+		IF p_stock_level IS NOT NULL THEN
+			SET p_stock_level = TRIM(p_stock_level);
+			IF p_stock_level = '' OR p_stock_level = 'ALL' THEN SET p_stock_level = NULL; END IF;
+		END IF;
+
+		-- Sanitize sort parameters
+		SET p_sort_by = LOWER(IFNULL(TRIM(p_sort_by), 'part_id'));
+		SET p_sort_order = UPPER(IFNULL(TRIM(p_sort_order), 'ASC'));
+
+		IF p_sort_order NOT IN ('ASC', 'DESC') THEN
+			SET p_sort_order = 'ASC';
+		END IF;
+
+		SELECT 
+			CONCAT('P-', LPAD(part_id, 3, '0')) AS formatted_part_id,
+			part_id,
+			part_code,
+			part_name,
+			category,
+			unit,
+			unit_price,
+			quantity_on_hand,
+			reorder_level,
+			batch_number,
+			CASE 
+				WHEN quantity_on_hand <= 5 THEN 'Low Stock'
+				WHEN quantity_on_hand BETWEEN 6 AND 20 THEN 'Moderate'
+				ELSE 'In Stock'
+			END AS stock_level,
+			status,
+			date_added
+		FROM parts_inventory
+		WHERE status = 'ACTIVE'
+		  -- Search Filter (Matches raw part_id, formatted P-001 ID, part_code, part_name, and category)
+		  AND (
+				p_search IS NULL
+				OR CAST(part_id AS CHAR) = p_search
+				OR CONCAT('P-', LPAD(part_id, 3, '0')) LIKE CONCAT('%', p_search, '%')
+				OR part_code LIKE CONCAT('%', p_search, '%')
+				OR part_name LIKE CONCAT('%', p_search, '%')
+				OR category LIKE CONCAT('%', p_search, '%')
+		  )
+		  -- Stock Level Filter
+		  AND (
+				p_stock_level IS NULL
+				OR (p_stock_level = 'LOW_STOCK' AND quantity_on_hand <= 5)
+				OR (p_stock_level = 'MODERATE' AND quantity_on_hand BETWEEN 6 AND 20)
+				OR (p_stock_level = 'IN_STOCK' AND quantity_on_hand >= 21)
+		  )
+		ORDER BY 
+			-- Sorting by Part Name
+			CASE WHEN p_sort_by = 'name' AND p_sort_order = 'ASC' THEN part_name END ASC,
+			CASE WHEN p_sort_by = 'name' AND p_sort_order = 'DESC' THEN part_name END DESC,
+
+			-- Sorting by Quantity On Hand
+			CASE WHEN p_sort_by = 'qty' AND p_sort_order = 'ASC' THEN quantity_on_hand END ASC,
+			CASE WHEN p_sort_by = 'qty' AND p_sort_order = 'DESC' THEN quantity_on_hand END DESC,
+
+			-- Sorting by Unit Cost
+			CASE WHEN p_sort_by = 'cost' AND p_sort_order = 'ASC' THEN unit_price END ASC,
+			CASE WHEN p_sort_by = 'cost' AND p_sort_order = 'DESC' THEN unit_price END DESC,
+
+			-- Sorting by Stock Level Rank (Low Stock -> Moderate -> In Stock)
+			CASE WHEN p_sort_by = 'stock_level' AND p_sort_order = 'ASC' THEN 
+				CASE 
+					WHEN quantity_on_hand <= 5 THEN 1
+					WHEN quantity_on_hand BETWEEN 6 AND 20 THEN 2
+					ELSE 3
+				END
+			END ASC,
+			CASE WHEN p_sort_by = 'stock_level' AND p_sort_order = 'DESC' THEN 
+				CASE 
+					WHEN quantity_on_hand <= 5 THEN 1
+					WHEN quantity_on_hand BETWEEN 6 AND 20 THEN 2
+					ELSE 3
+				END
+			END DESC,
+
+			-- Default Fallback
+			part_id ASC;
+	END //
+
+	DELIMITER ;
+    
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_revenue_by_order //
+
+CREATE PROCEDURE sp_get_revenue_by_order(
+    IN p_limit INT,
+    IN p_status VARCHAR(50)
+)
+BEGIN
+    DECLARE v_max_amount DECIMAL(10,2);
+
+    -- Enforce limit boundaries (Default 10, Maximum 100)
+    IF p_limit IS NULL OR p_limit <= 0 THEN
+        SET p_limit = 10;
+    ELSEIF p_limit > 100 THEN
+        SET p_limit = 100;
+    END IF;
+
+    -- Sanitize status filter
+    IF p_status IS NOT NULL THEN
+        SET p_status = TRIM(p_status);
+        IF p_status = '' OR p_status = 'ALL' THEN 
+            SET p_status = NULL; 
+        END IF;
+    END IF;
+
+    -- Step 1: Find the maximum total amount across matching orders for relative progress bar calculation
+    SELECT MAX(calculated_total) INTO v_max_amount
+    FROM (
+        SELECT 
+            ro.order_id,
+            COALESCE(
+                inv.total_amount,
+                (
+                    IFNULL((SELECT SUM(sc.standard_labor_cost) 
+                            FROM repair_order_services ros 
+                            JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id 
+                            WHERE ros.order_id = ro.order_id), 0)
+                    +
+                    IFNULL((SELECT SUM(rop.quantity_used * rop.unit_price) 
+                            FROM repair_order_parts rop 
+                            WHERE rop.order_id = ro.order_id AND rop.status = 'ISSUED'), 0)
+                )
+            ) AS calculated_total
+        FROM repair_orders ro
+        LEFT JOIN invoices inv ON ro.order_id = inv.order_id
+        WHERE (p_status IS NULL OR ro.status = p_status)
+    ) AS sub;
+
+    -- Fallback to avoid division by zero
+    IF v_max_amount IS NULL OR v_max_amount = 0 THEN
+        SET v_max_amount = 1.00;
+    END IF;
+
+    -- Step 2: Fetch repair orders with real-time calculated total revenue
+    SELECT 
+        CONCAT('RO-', LPAD(ro.order_id, 4, '0')) AS formatted_order_id,
+        ro.order_id,
+        CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+        COALESCE(
+            inv.total_amount,
+            (
+                IFNULL((SELECT SUM(sc.standard_labor_cost) 
+                        FROM repair_order_services ros 
+                        JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id 
+                        WHERE ros.order_id = ro.order_id), 0)
+                +
+                IFNULL((SELECT SUM(rop.quantity_used * rop.unit_price) 
+                        FROM repair_order_parts rop 
+                        WHERE rop.order_id = ro.order_id AND rop.status = 'ISSUED'), 0)
+            )
+        ) AS billed_amount,
+        ro.status,
+        -- Calculate relative weight for progress bar display (0.00% to 100.00%)
+        LEAST(100.00, ROUND((
+            COALESCE(
+                inv.total_amount,
+                (
+                    IFNULL((SELECT SUM(sc.standard_labor_cost) 
+                            FROM repair_order_services ros 
+                            JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id 
+                            WHERE ros.order_id = ro.order_id), 0)
+                    +
+                    IFNULL((SELECT SUM(rop.quantity_used * rop.unit_price) 
+                            FROM repair_order_parts rop 
+                            WHERE rop.order_id = ro.order_id AND rop.status = 'ISSUED'), 0)
+                )
+            ) / v_max_amount
+        ) * 100, 2)) AS bar_percentage
+    FROM repair_orders ro
+    JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
+    JOIN customers c ON v.customer_id = c.customer_id
+    LEFT JOIN invoices inv ON ro.order_id = inv.order_id
+    WHERE (p_status IS NULL OR ro.status = p_status)
+    ORDER BY billed_amount DESC, ro.date_received DESC
+    LIMIT p_limit;
+
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_revenue_split //
+
+CREATE PROCEDURE sp_get_revenue_split()
+BEGIN
+    DECLARE v_labor_total DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_parts_total DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_grand_total DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_labor_pct DECIMAL(5,2) DEFAULT 0.00;
+    DECLARE v_parts_pct DECIMAL(5,2) DEFAULT 0.00;
+
+    -- Calculate Labor/Services Total from non-cancelled repair orders
+    SELECT IFNULL(SUM(sc.standard_labor_cost), 0.00) INTO v_labor_total
+    FROM repair_order_services ros
+    JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+    JOIN repair_orders ro ON ros.order_id = ro.order_id
+    WHERE ro.status != 'CANCELLED';
+
+    -- Calculate Parts Total from issued parts in non-cancelled repair orders
+    SELECT IFNULL(SUM(rop.quantity_used * rop.unit_price), 0.00) INTO v_parts_total
+    FROM repair_order_parts rop
+    JOIN repair_orders ro ON rop.order_id = ro.order_id
+    WHERE ro.status != 'CANCELLED' AND rop.status = 'ISSUED';
+
+    -- Compute Grand Total
+    SET v_grand_total = v_labor_total + v_parts_total;
+
+    -- Compute percentages (handling division by zero fallback)
+    IF v_grand_total > 0 THEN
+        SET v_labor_pct = ROUND((v_labor_total / v_grand_total) * 100, 2);
+        SET v_parts_pct = ROUND((v_parts_total / v_grand_total) * 100, 2);
+    END IF;
+
+    -- Return single object result set
+    SELECT 
+        v_labor_total AS labor_total,
+        v_labor_pct AS labor_percentage,
+        v_parts_total AS parts_total,
+        v_parts_pct AS parts_percentage,
+        v_grand_total AS total_revenue;
+
+END //
+
+DELIMITER ;
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_get_pipeline_status_counts_overall //
+
+CREATE PROCEDURE sp_get_pipeline_status_counts_overall()
+BEGIN
+    SELECT 
+        s.status_code,
+        s.display_label,
+        s.short_label,
+        s.display_order,
+        IFNULL(COUNT(ro.order_id), 0) AS count,
+        CASE 
+            WHEN (SELECT COUNT(*) FROM repair_orders) > 0 
+            THEN ROUND((IFNULL(COUNT(ro.order_id), 0) / (SELECT COUNT(*) FROM repair_orders)) * 100, 2)
+            ELSE 0.00
+        END AS share_percentage
+    FROM (
+        SELECT 'PENDING_DIAGNOSIS'  AS status_code, 'Pending Diagnosis'  AS display_label, 'Pending Dx'   AS short_label, 1 AS display_order UNION ALL
+        SELECT 'AWAITING_DIAGNOSIS' AS status_code, 'Awaiting Diagnosis' AS display_label, 'Awaiting Dx'  AS short_label, 2 AS display_order UNION ALL
+        SELECT 'PENDING_MECHANICS'  AS status_code, 'Pending Mechanics'  AS display_label, 'Pending Mech' AS short_label, 3 AS display_order UNION ALL
+        SELECT 'IN_PROGRESS'        AS status_code, 'In Progress'        AS display_label, 'In Progress'  AS short_label, 4 AS display_order UNION ALL
+        SELECT 'AWAITING_PARTS'     AS status_code, 'Awaiting Parts'     AS display_label, 'Parts'        AS short_label, 5 AS display_order UNION ALL
+        SELECT 'READY_TO_INVOICE'   AS status_code, 'Ready to Invoice'   AS display_label, 'To Invoice'   AS short_label, 6 AS display_order UNION ALL
+        SELECT 'AWAITING_PAYMENT'   AS status_code, 'Awaiting Payment'   AS display_label, 'Payment'      AS short_label, 7 AS display_order UNION ALL
+        SELECT 'READY_FOR_RELEASE'  AS status_code, 'Ready for Release'  AS display_label, 'Release'      AS short_label, 8 AS display_order UNION ALL
+        SELECT 'FULFILLED'          AS status_code, 'Fulfilled'          AS display_label, 'Fulfilled'    AS short_label, 9 AS display_order UNION ALL
+        SELECT 'CANCELLED'          AS status_code, 'Cancelled'          AS display_label, 'Cancelled'    AS short_label, 10 AS display_order
+    ) s
+    LEFT JOIN repair_orders ro ON ro.status = s.status_code
+    GROUP BY s.status_code, s.display_label, s.short_label, s.display_order
+    ORDER BY s.display_order ASC;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+	
+DROP PROCEDURE IF EXISTS sp_get_parts_inventory_cards //
+
+CREATE PROCEDURE sp_get_parts_inventory_cards()
+BEGIN
+    SELECT 
+        COUNT(*) AS total_skus,
+        IFNULL(SUM(quantity_on_hand * unit_price), 0.00) AS inventory_value,
+        COUNT(CASE WHEN quantity_on_hand BETWEEN 0 AND 5 THEN 1 END) AS low_stock_count
+    FROM parts_inventory;
+END //
+
+DELIMITER ;
+
+
+
+DROP PROCEDURE IF EXISTS sp_top_parts_used;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_top_parts_used(IN p_limit INT)
+BEGIN
+    DECLARE v_limit INT;
+
+    -- NULL or invalid -> 100, anything above 100 gets capped at 100
+    SET v_limit = IF(p_limit IS NULL OR p_limit < 1, 100, LEAST(p_limit, 100));
+
+    SELECT
+        p.part_id,
+        p.part_name,
+        SUM(rop.quantity_used) AS total_used
+    FROM repair_order_parts rop
+    JOIN parts_inventory p  ON p.part_id  = rop.part_id
+    JOIN repair_orders   ro ON ro.order_id = rop.order_id
+    WHERE rop.status = 'ISSUED'
+      AND ro.status <> 'CANCELLED'
+    GROUP BY p.part_id, p.part_name
+    ORDER BY total_used DESC, p.part_name ASC
+    LIMIT v_limit;
+END$$
+
+DELIMITER ;
+
+
+
+DROP PROCEDURE IF EXISTS sp_mechanic_order_load;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_mechanic_order_load()
+BEGIN
+    SELECT
+        m.mechanic_id,
+        u.first_name,
+        CONCAT(u.first_name, ' ', u.last_name) AS full_name,
+        COALESCE(
+            (SELECT mp.position_name
+             FROM repair_order_mechanics rom2
+             JOIN mechanic_positions mp ON mp.position_id = rom2.position_id
+             WHERE rom2.mechanic_id = m.mechanic_id
+             ORDER BY rom2.date_assigned DESC, rom2.assignment_id DESC
+             LIMIT 1),
+            m.specialization
+        ) AS position_name,
+        COUNT(DISTINCT CASE
+            WHEN ro.status IN ('PENDING_DIAGNOSIS','AWAITING_DIAGNOSIS','PENDING_MECHANICS',
+                               'IN_PROGRESS','AWAITING_PARTS')
+            THEN ro.order_id END) AS active_orders,
+        COUNT(DISTINCT CASE
+            WHEN ro.status IN ('READY_TO_INVOICE','AWAITING_PAYMENT',
+                               'READY_FOR_RELEASE','FULFILLED')
+            THEN ro.order_id END) AS completed_orders
+    FROM mechanics m
+    JOIN users u ON u.user_id = m.user_id
+    LEFT JOIN repair_order_mechanics rom ON rom.mechanic_id = m.mechanic_id
+    LEFT JOIN repair_orders ro ON ro.order_id = rom.order_id
+                              AND ro.status <> 'CANCELLED'
+    WHERE m.status <> 'INACTIVE'
+    GROUP BY m.mechanic_id, u.first_name, u.last_name, m.specialization
+    ORDER BY active_orders DESC, u.first_name ASC;
+END$$
+
+DELIMITER ;
+
+
+DROP PROCEDURE IF EXISTS sp_mechanic_order_cards;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_mechanic_order_cards(IN p_limit INT)
+BEGIN
+    DECLARE v_limit INT;
+
+    -- NULL or invalid -> 10, anything above 100 gets capped at 100
+    SET v_limit = IF(p_limit IS NULL OR p_limit < 1, 10, LEAST(p_limit, 100));
+
+    WITH mech_orders AS (
+        SELECT DISTINCT rom.mechanic_id, ro.order_id, ro.vehicle_id, ro.status, ro.date_received
+        FROM repair_order_mechanics rom
+        JOIN repair_orders ro ON ro.order_id = rom.order_id
+        WHERE ro.status <> 'CANCELLED'
+    ),
+    ranked AS (
+        SELECT
+            mo.*,
+            ROW_NUMBER() OVER (PARTITION BY mo.mechanic_id
+                               ORDER BY mo.date_received DESC, mo.order_id DESC) AS rn,
+            COUNT(*) OVER (PARTITION BY mo.mechanic_id) AS total_orders,
+            SUM(mo.status = 'FULFILLED') OVER (PARTITION BY mo.mechanic_id) AS completed_orders
+        FROM mech_orders mo
+    )
+    SELECT
+        m.mechanic_id,
+        CONCAT(u.first_name, ' ', u.last_name) AS full_name,
+        COALESCE(
+            (SELECT mp.position_name
+             FROM repair_order_mechanics rom2
+             JOIN mechanic_positions mp ON mp.position_id = rom2.position_id
+             WHERE rom2.mechanic_id = m.mechanic_id
+             ORDER BY rom2.date_assigned DESC, rom2.assignment_id DESC
+             LIMIT 1),
+            m.specialization
+        ) AS position_name,
+        COALESCE(r.total_orders, 0)     AS total_orders,
+        COALESCE(r.completed_orders, 0) AS completed_orders,
+        ROUND(COALESCE(r.completed_orders, 0) / NULLIF(r.total_orders, 0) * 100) AS completion_rate,
+        r.order_id,
+        CONCAT('RO-', r.order_id)       AS order_code,
+        CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+        r.status                        AS order_status
+    FROM mechanics m
+    JOIN users u ON u.user_id = m.user_id
+    LEFT JOIN ranked r    ON r.mechanic_id = m.mechanic_id AND r.rn <= v_limit
+    LEFT JOIN vehicles v  ON v.vehicle_id  = r.vehicle_id
+    LEFT JOIN customers c ON c.customer_id = v.customer_id
+    WHERE m.status <> 'INACTIVE'
+    ORDER BY u.first_name ASC, m.mechanic_id ASC, r.rn ASC;
+END$$
+
+DELIMITER ;
+
+
+

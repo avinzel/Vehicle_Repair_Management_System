@@ -9,33 +9,70 @@
         {
             self::$conn =  Database::getConnection();
         }
-
-        public static function getAllMechanics() {
-            $query = "CALL get_all_mechanics()"; 
-
-            $stmt = self::$conn->prepare($query); 
+        public static function getAllMechanics(
+            $search = null, 
+            $status = null, 
+            $sortBy = 'mechanic_id', 
+            $sortOrder = 'ASC'
+        ) {
+            $query = "CALL get_all_mechanics(?, ?, ?, ?)";
 
             try {
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new \Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                // Sanitize parameters
+                $searchVal    = empty($search) ? null : $search;
+                $statusVal    = empty($status) || $status === 'ALL' ? null : $status;
+                $sortByVal    = empty($sortBy) ? 'mechanic_id' : $sortBy;
+                $sortOrderVal = strtoupper($sortOrder) === 'DESC' ? 'DESC' : 'ASC';
+
+                $stmt->bind_param(
+                    "ssss", 
+                    $searchVal, 
+                    $statusVal, 
+                    $sortByVal, 
+                    $sortOrderVal
+                );
+
                 $stmt->execute();
                 $result = $stmt->get_result();
 
                 $mechanics = [];
-                while ($row = $result->fetch_assoc()) {
-                    $mechanics[] = $row;
+                if ($result) {
+                    while ($row = $result->fetch_assoc()) {
+                        $mechanics[] = $row;
+                    }
+                    $result->free();
                 }
 
                 $stmt->close();
-                // Clear any stored procedure multi-result sets to prevent "Commands out of sync" errors
-                self::$conn->next_result();
+
+                // Clear stored procedure multi-result sets to prevent "Commands out of sync" errors
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+        // Calculate active mechanics count from retrieved dataset (using 'mechanic_status')
+                $activeCount = count(array_filter($mechanics, function ($mechanic) {
+                    return isset($mechanic['mechanic_status']) && strtoupper($mechanic['mechanic_status']) === 'ACTIVE';
+                }));
 
                 return [
-                    "success" => true,
-                    "data" => $mechanics
+                    "success"      => true,
+                    "active_count" => $activeCount,
+                    "data"         => $mechanics
                 ];
+
             } catch (\Exception $e) {
                 return [
                     "success" => false,
-                    "error" => "Error fetching mechanics: " . $e->getMessage()
+                    "error"   => "Error fetching mechanics: " . $e->getMessage()
                 ];
             }
         }

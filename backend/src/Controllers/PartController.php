@@ -93,5 +93,54 @@
                 ]);
             }
         }
+        /**
+         * Endpoint handler to retrieve inventory parts with search, stock level filtering, and dynamic sorting.
+         * Accepts query parameters (GET) or JSON body payload (POST/PUT).
+         */
+        public function getPartsInventoryAdmin() {
+            header('Content-Type: application/json');
+
+            // Parse request body if available
+            $input = $this->getInputData();
+
+            // Fallback: Check $_GET params first, then $input body, then set default values
+            $search     = $_GET['search']      ?? $input['search']      ?? null;
+            $stockLevel = $_GET['stock_level'] ?? $input['stock_level'] ?? null;
+            $sortBy     = $_GET['sort_by']     ?? $input['sort_by']     ?? 'name';
+            $sortOrder  = $_GET['sort_order']  ?? $input['sort_order']  ?? 'ASC';
+
+            // Sanitize sorting inputs
+            $validSortBy    = ['name', 'qty', 'cost', 'stock_level'];
+            $sortByVal      = in_array(strtolower($sortBy), $validSortBy) ? strtolower($sortBy) : 'name';
+            $sortOrderVal   = strtoupper($sortOrder) === 'DESC' ? 'DESC' : 'ASC';
+
+            try {
+                // Call static Model method
+                $result = self::$model::getPartsInventoryAdmin($search, $stockLevel, $sortByVal, $sortOrderVal);
+
+                if (isset($result['success']) && $result['success']) {
+                    http_response_code(200);
+                    echo json_encode([
+                        "status" => "success",
+                        "count"  => count($result['data']),
+                        "low_stock_count" => $result['low_stock_count'] ?? 0,
+                        "data"   => $result['data']
+                    ]);
+                } else {
+                    http_response_code(500);
+                    echo json_encode([
+                        "status" => "error",
+                        "error"  => $result['error'] ?? "Failed to fetch parts inventory."
+                    ]);
+                }
+
+            } catch (\Exception $e) {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Controller error: " . $e->getMessage()
+                ]);
+            }
+        }
     }
 ?>

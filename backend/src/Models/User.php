@@ -167,14 +167,75 @@ use Exception;
                 ];
             }
         }
-        public static function getAllStaffs() {
-            $query = "CALL sp_GetStaffMembers()";
-            $stmt = self::$conn->prepare($query);
+/**
+         * Fetches staff members with support for searching, filtering (role, status), and dynamic sorting (including date).
+         * 
+         * @param string|null $search    Search keyword
+         * @param int|null    $roleId    Filter by role_id
+         * @param string|null $status    Filter by status ('ACTIVE', 'INACTIVE', or 'ALL')
+         * @param string      $sortBy    Field to sort by ('full_name', 'role_name', 'status', 'date')
+         * @param string      $sortOrder Sort direction ('ASC' or 'DESC')
+         * @return array|false
+         */
+    public static function getStaffMembers(
+            $search = null, 
+            $roleId = null, 
+            $status = null, 
+            $sortBy = 'user_id', 
+            $sortOrder = 'ASC'
+        ) {
+            $query = "CALL sp_GetStaffMembers(?, ?, ?, ?, ?)";
+
             try {
+                $stmt = self::$conn->prepare($query);
+
+                if (!$stmt) {
+                    throw new \Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                // Sanitize parameters
+                $searchVal    = empty($search) ? null : $search;
+                $roleIdVal    = (!empty($roleId) && is_numeric($roleId) && (int)$roleId > 0) ? (int)$roleId : null;
+                $statusVal    = empty($status) || $status === 'ALL' ? null : $status;
+                $sortByVal    = empty($sortBy) ? 'user_id' : $sortBy;
+                $sortOrderVal = strtoupper($sortOrder) === 'DESC' ? 'DESC' : 'ASC';
+
+                $stmt->bind_param(
+                    "sisss", 
+                    $searchVal, 
+                    $roleIdVal, 
+                    $statusVal, 
+                    $sortByVal, 
+                    $sortOrderVal
+                );
+
                 $stmt->execute();
                 $result = $stmt->get_result();
-                $data = $result->fetch_all(MYSQLI_ASSOC);
-                return $data;
+                $data = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+
+                if ($result) {
+                    $result->free();
+                }
+
+                $stmt->close();
+
+                // Clear result set buffer for stored procedures
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extraResult = self::$conn->use_result()) {
+                        $extraResult->free();
+                    }
+                }
+
+                // Count active members in the returned result set
+                $activeCount = count(array_filter($data, function ($member) {
+                    return isset($member['status']) && strtoupper($member['status']) === 'ACTIVE';
+                }));
+
+                return [
+                    'active_count' => $activeCount,
+                    'data'         => $data
+                ];
+
             } catch (\Exception $e) {
                 return false;
             }

@@ -88,34 +88,49 @@
                 }
             }
         }
-        public function getAllStaffs() {
-            header('Content-Type: application/json');
+/**
+         * Endpoint handler to retrieve staff members with search, filters (role, status), and dynamic sorting (date, full_name, status, role_name).
+         * Accepts query parameters (GET) or JSON body payload.
+         */
+    public function getStaffMembers() {
+        header('Content-Type: application/json');
 
-            try {
-                $staffs = $this->userModel->getAllStaffs();
+        try {
+            $input = $this->getInputData();
 
-                if ($staffs !== false) {
-                    http_response_code(200);
-                    echo json_encode([
-                        "status" => "success",
-                        "data"   => $staffs
-                    ]);
-                } else {
-                    http_response_code(500);
-                    echo json_encode([
-                        "status" => "error",
-                        "error"  => "Failed to retrieve staff members"
-                    ]);
-                }
-            } catch (Exception $e) {
+            $search    = $_GET['search']     ?? $input['search']     ?? null;
+            $roleId    = $_GET['role_id']    ?? $input['role_id']    ?? null;
+            $status    = $_GET['status']     ?? $input['status']     ?? null;
+            $sortBy    = $_GET['sort_by']    ?? $input['sort_by']    ?? 'user_id';
+            $sortOrder = $_GET['sort_order'] ?? $input['sort_order'] ?? 'ASC';
+
+            $response = User::getStaffMembers($search, $roleId, $status, $sortBy, $sortOrder);
+
+            if ($response !== false) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"       => "success",
+                    "active_count" => $response['active_count'] ?? 0,
+                    "count"        => count($response['data']   ?? []),
+                    "data"         => $response['data']         ?? []
+                ]);
+            } else {
                 http_response_code(500);
                 echo json_encode([
                     "status" => "error",
-                    "error"  => "Server error: " . $e->getMessage()
+                    "error"  => "Failed to fetch staff members"
                 ]);
             }
-        }
 
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Server error: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
         public function getInputData(){
             $input = json_decode(file_get_contents('php://input'), true);
             return $input;
