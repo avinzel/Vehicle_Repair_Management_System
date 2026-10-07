@@ -64,6 +64,14 @@ const ROLE_LINKS = {
 // stay role-agnostic and just reference sidebar tokens.
 const DARK_SIDEBAR_ROLES = ['Mechanic'];
 
+const ROOT_HREFS = ['/admin', '/service-advisor', '/mechanic'];
+
+function isLinkActive(href, pathname) {
+    const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+    if (ROOT_HREFS.includes(href)) return path === href;
+    return path === href || path.startsWith(href + '/');
+}
+
 export function AppSidebar({
     role = 'Service Advisor',
     userName = 'Juan Dela Cruz',//name should be dynamic 
@@ -150,7 +158,7 @@ export function AppSidebar({
                             <SidebarMenu className="space-y-2">
                                 {links.map((link) => {
                                     const Icon = link.icon;
-                                    const isActive = link.href === location.pathname;
+                                    const isActive = isLinkActive(link.href, location.pathname);
                                     const badgeValue = link.badgeKey ? badges[link.badgeKey] : null;
                                     return (
                                         <SidebarMenuItem key={link.name}>

@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ServiceFormDialog } from "@/components/dialogs/ServiceFormDialog";
+import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
 
 const API = "http://localhost:8000/api.php";
 
@@ -44,6 +45,8 @@ export function Services() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
+  const [search, setSearch] = useState("");
+
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // service row or null (= add)
 
@@ -67,6 +70,11 @@ export function Services() {
   useEffect(() => {
     getServices();
   }, [getServices]);
+
+  const filteredServices = useMemo(
+    () => services.filter((s) => matchesSearch(search, s.id, s.name, s.description)),
+    [services, search]
+  );
 
   function openAdd() {
     setEditing(null);
@@ -114,112 +122,130 @@ export function Services() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="font-bold pb-1">Service Catalogue</CardTitle>
-            <CardDescription>
-              {services.length} service{services.length === 1 ? "" : "s"}
-            </CardDescription>
-          </div>
-          <Button onClick={openAdd} className="gap-1.5">
-            <Plus className="w-4 h-4" />
-            Add Service
-          </Button>
-        </CardHeader>
+    <div className="w-full">
+      <div className="sticky top-[73px] z-10 bg-card -mx-6 -mt-6 border-b border-border">
+        <FilterBar
+          search={search}
+          onSearchChange={setSearch}
+          placeholder="Search by service name or description..."
+          showTabs={false}
+        />
+      </div>
 
-        <CardContent>
-          {loadError && (
-            <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-              {loadError}
-            </p>
-          )}
+      <div className="pt-6 space-y-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="font-bold pb-1">Service Catalogue</CardTitle>
+              <CardDescription>
+                {services.length} service{services.length === 1 ? "" : "s"}
+              </CardDescription>
+            </div>
+            <Button onClick={openAdd} className="gap-1.5">
+              <Plus className="w-4 h-4" />
+              Add Service
+            </Button>
+          </CardHeader>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-sm font-medium text-tertiary">ID</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Service Name</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Description</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Standard Labor Cost</TableHead>
-                <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {services.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="text-xs text-muted-foreground">{s.id}</TableCell>
-                  <TableCell className="font-medium">{s.name}</TableCell>
-                  <TableCell className="text-muted-foreground max-w-sm whitespace-normal">
-                    <span className="line-clamp-2">{s.description || "—"}</span>
-                  </TableCell>
-                  <TableCell className="font-medium">{formatPeso(s.laborCost)}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Edit ${s.name}`}
-                        className="hover:text-muted-foreground"
-                        onClick={() => openEdit(s)}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Delete ${s.name}`}
-                        className="hover:text-destructive"
-                        onClick={() => {
-                          setDeleteError(null);
-                          setDeleting(s);
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+          <CardContent>
+            {loadError && (
+              <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                {loadError}
+              </p>
+            )}
 
-              {!loading && services.length === 0 && !loadError && (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-10">
-                    No services yet. Add one so diagnosticians can pick it on repair orders.
-                  </TableCell>
+                  <TableHead className="text-sm font-medium text-tertiary">ID</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Service Name</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Description</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Standard Labor Cost</TableHead>
+                  <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
                 </TableRow>
-              )}
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-10">
-                    Loading services...
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {filteredServices.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="text-xs text-muted-foreground">{s.id}</TableCell>
+                    <TableCell className="font-medium">{s.name}</TableCell>
+                    <TableCell className="text-muted-foreground max-w-sm whitespace-normal">
+                      <span className="line-clamp-2">{s.description || "—"}</span>
+                    </TableCell>
+                    <TableCell className="font-medium">{formatPeso(s.laborCost)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Edit ${s.name}`}
+                          className="hover:text-muted-foreground"
+                          onClick={() => openEdit(s)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Delete ${s.name}`}
+                          className="hover:text-destructive"
+                          onClick={() => {
+                            setDeleteError(null);
+                            setDeleting(s);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
 
-      <ServiceFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        service={editing}
-        onSubmit={handleSubmit}
-      />
+                {!loading && services.length > 0 && filteredServices.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-10">
+                      No services match your search.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!loading && services.length === 0 && !loadError && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-10">
+                      No services yet. Add one so diagnosticians can pick it on repair orders.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {loading && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-10">
+                      Loading services...
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-      <ConfirmDialog
-        open={!!deleting}
-        onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}
-        title="Delete service?"
-        description={`"${deleting?.name ?? "This service"}" will be removed from the catalogue and can no longer be selected in diagnoses. Existing repair orders keep their history.`}
-        confirmLabel="Delete"
-        destructive
-        loading={deleteBusy}
-        error={deleteError}
-        onConfirm={handleDelete}
-      />
+        <ServiceFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          service={editing}
+          onSubmit={handleSubmit}
+        />
+
+        <ConfirmDialog
+          open={!!deleting}
+          onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}
+          title="Delete service?"
+          description={`"${deleting?.name ?? "This service"}" will be removed from the catalogue and can no longer be selected in diagnoses. Existing repair orders keep their history.`}
+          confirmLabel="Delete"
+          destructive
+          loading={deleteBusy}
+          error={deleteError}
+          onConfirm={handleDelete}
+        />
+      </div>
     </div>
   );
 }

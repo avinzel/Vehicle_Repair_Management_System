@@ -24,6 +24,10 @@ import { PartsInventory } from "./pages/AdminPage/PartsInventory";
 import { Services } from "./pages/AdminPage/Services";
 import { Reports } from "./pages/AdminPage/Reports";
 
+import { OverviewTab } from "./pages/AdminPage/reports/OverviewTab";
+import { PipelineTab } from "./pages/AdminPage/reports/PipelineTab";
+import { MechanicsTab } from "./pages/AdminPage/reports/MechanicsTab";
+import { PartsUsageTab } from "./pages/AdminPage/reports/PartsUsage";
 
 function App() {
   const [user, setUser] = useState(null)
@@ -69,13 +73,21 @@ function App() {
               <Navigate to="/" replace />
             )
           }
+
         >
           <Route index element={<AdminDashboardTab />} />
           <Route path='staff' element={<Staffs />} />
           <Route path='mechanics' element={<MechanicsPage />} />
           <Route path='parts' element={<PartsInventory />} />
           <Route path='services' element={<Services />} />
-          <Route path='reports' element={<Reports />} />
+
+          <Route path="reports" element={<Reports />}>
+            <Route index element={<OverviewTab />} />
+            <Route path="pipeline" element={<PipelineTab />} />
+            <Route path="parts-usage" element={<PartsUsageTab />} />
+            <Route path="mechanics" element={<MechanicsTab />} />
+          </Route>
+
         </Route>
 
         <Route
@@ -100,7 +112,7 @@ function App() {
           <Route path="order-history" element={<OrderHistory />} />
         </Route>
 
-         {/* Sub-routes now nested as children of /mechanic instead of
+        {/* Sub-routes now nested as children of /mechanic instead of
             declared as siblings at the top level — MechanicPage renders
             an <Outlet />, so its children have to actually be registered
             as children of this Route for the Outlet to have anything to

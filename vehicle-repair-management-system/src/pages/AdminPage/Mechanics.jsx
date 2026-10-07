@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MechanicFormDialog } from "@/components/dialogs/MechanicFormDialog";
+import { FilterBar, matchesSearch, buildTabCounts } from "@/components/OrderSearchFilter";
 
 const API = "http://localhost:8000/api.php";
 
@@ -16,6 +17,8 @@ const STATUS_STYLES = {
   ON_LEAVE: { label: "On Leave", cls: "bg-amber-100 text-amber-800 hover:bg-amber-100" },
   INACTIVE: { label: "Inactive", cls: "bg-muted text-muted-foreground hover:bg-muted" },
 };
+
+const STATUS_TABS = ["All", ...Object.values(STATUS_STYLES).map((s) => s.label)];
 
 const AVATAR_COLORS = [
   "bg-blue-600", "bg-green-600", "bg-purple-600", "bg-orange-600", "bg-teal-600", "bg-rose-600",
@@ -61,6 +64,9 @@ export function MechanicsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // mechanic row or null (= add)
 
@@ -90,6 +96,18 @@ export function MechanicsPage() {
     () => mechanics.map((m) => Number(m.userId)).filter(Number.isFinite),
     [mechanics]
   );
+
+  const statusLabel = (m) => (STATUS_STYLES[m.status] ?? STATUS_STYLES.INACTIVE).label;
+  const filteredMechanics = useMemo(
+    () =>
+      mechanics.filter(
+        (m) =>
+          (statusFilter === "All" || statusLabel(m) === statusFilter) &&
+          matchesSearch(search, m.name, m.code, m.email, m.phone, m.specialization)
+      ),
+    [mechanics, search, statusFilter]
+  );
+  const statusCounts = useMemo(() => buildTabCounts(mechanics, statusLabel), [mechanics]);
 
   function openAdd() {
     setEditing(null);
@@ -137,141 +155,162 @@ export function MechanicsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="font-bold pb-1">Manage Mechanics</CardTitle>
-            <CardDescription>
-              {mechanics.length} mechanic{mechanics.length === 1 ? "" : "s"} · {activeCount} active
-            </CardDescription>
-          </div>
-          <Button onClick={openAdd} className="gap-1.5">
-            <Plus className="w-4 h-4" />
-            Add Mechanic
-          </Button>
-        </CardHeader>
+    <div className="w-full">
+      <div className="sticky top-[73px] z-10 bg-card -mx-6 -mt-6 border-b border-border">
+        <FilterBar
+          search={search}
+          onSearchChange={setSearch}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          placeholder="Search by name, email, phone, or specialization..."
+          tabs={STATUS_TABS}
+          counts={statusCounts}
+        />
+      </div>
 
-        <CardContent>
-          {loadError && (
-            <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-              {loadError}
-            </p>
-          )}
+      <div className="pt-6 space-y-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="font-bold pb-1">Manage Mechanics</CardTitle>
+              <CardDescription>
+                {mechanics.length} mechanic{mechanics.length === 1 ? "" : "s"} · {activeCount} active
+              </CardDescription>
+            </div>
+            <Button onClick={openAdd} className="gap-1.5">
+              <Plus className="w-4 h-4" />
+              Add Mechanic
+            </Button>
+          </CardHeader>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-sm font-medium text-tertiary">ID</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Mechanic</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Specialization</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Email</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Phone</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Status</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Since</TableHead>
-                <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mechanics.map((m) => {
-                const status = STATUS_STYLES[m.status] ?? STATUS_STYLES.INACTIVE;
-                return (
-                  <TableRow key={m.id}>
-                    <TableCell className="text-xs text-muted-foreground">{m.code}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold shrink-0 ${
-                            AVATAR_COLORS[m.id % AVATAR_COLORS.length]
-                          }`}
-                        >
-                          {initials(m.name)}
+          <CardContent>
+            {loadError && (
+              <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                {loadError}
+              </p>
+            )}
+
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-sm font-medium text-tertiary">ID</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Mechanic</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Specialization</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Email</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Phone</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Status</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Since</TableHead>
+                  <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredMechanics.map((m) => {
+                  const status = STATUS_STYLES[m.status] ?? STATUS_STYLES.INACTIVE;
+                  return (
+                    <TableRow key={m.id}>
+                      <TableCell className="text-xs text-muted-foreground">{m.code}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold shrink-0 ${
+                              AVATAR_COLORS[m.id % AVATAR_COLORS.length]
+                            }`}
+                          >
+                            {initials(m.name)}
+                          </div>
+                          <span className="font-medium">{m.name}</span>
                         </div>
-                        <span className="font-medium">{m.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {m.specialization ? (
-                        <Badge variant="secondary">{m.specialization}</Badge>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{m.email}</TableCell>
-                    <TableCell className="text-muted-foreground">{m.phone}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={status.cls}>
-                        {status.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{formatSince(m.dateHired)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Edit ${m.name}`}
-                          className="hover:text-muted-foreground"
-                          onClick={() => openEdit(m)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Remove ${m.name}`}
-                          className="hover:text-destructive"
-                          onClick={() => {
-                            setDeleteError(null);
-                            setDeleting(m);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      </TableCell>
+                      <TableCell>
+                        {m.specialization ? (
+                          <Badge variant="secondary">{m.specialization}</Badge>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{m.email}</TableCell>
+                      <TableCell className="text-muted-foreground">{m.phone}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className={status.cls}>
+                          {status.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{formatSince(m.dateHired)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Edit ${m.name}`}
+                            className="hover:text-muted-foreground"
+                            onClick={() => openEdit(m)}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Remove ${m.name}`}
+                            className="hover:text-destructive"
+                            onClick={() => {
+                              setDeleteError(null);
+                              setDeleting(m);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+
+                {!loading && mechanics.length > 0 && filteredMechanics.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
+                      No mechanics match your filters.
                     </TableCell>
                   </TableRow>
-                );
-              })}
+                )}
+                {!loading && mechanics.length === 0 && !loadError && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
+                      No mechanics yet. Add one to start assigning jobs.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {loading && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
+                      Loading mechanics...
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-              {!loading && mechanics.length === 0 && !loadError && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
-                    No mechanics yet. Add one to start assigning jobs.
-                  </TableCell>
-                </TableRow>
-              )}
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
-                    Loading mechanics...
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        <MechanicFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          mechanic={editing}
+          takenUserIds={takenUserIds}
+          onSubmit={handleSubmit}
+        />
 
-      <MechanicFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        mechanic={editing}
-        takenUserIds={takenUserIds}
-        onSubmit={handleSubmit}
-      />
-
-      <ConfirmDialog
-        open={!!deleting}
-        onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}
-        title="Remove mechanic?"
-        description={`${deleting?.name ?? "This mechanic"} will be marked inactive and can no longer be assigned to repair orders. Past orders keep their history.`}
-        confirmLabel="Remove"
-        destructive
-        loading={deleteBusy}
-        error={deleteError}
-        onConfirm={handleDelete}
-      />
+        <ConfirmDialog
+          open={!!deleting}
+          onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}
+          title="Remove mechanic?"
+          description={`${deleting?.name ?? "This mechanic"} will be marked inactive and can no longer be assigned to repair orders. Past orders keep their history.`}
+          confirmLabel="Remove"
+          destructive
+          loading={deleteBusy}
+          error={deleteError}
+          onConfirm={handleDelete}
+        />
+      </div>
     </div>
   );
 }

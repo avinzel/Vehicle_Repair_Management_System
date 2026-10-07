@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StaffFormDialog } from "@/components/dialogs/StaffFormDialog";
+import { FilterBar, matchesSearch, buildTabCounts } from "@/components/OrderSearchFilter";
 
 const API = "http://localhost:8000/api.php";
 
@@ -22,6 +23,8 @@ const ROLE_STYLES = {
   "Service Advisor": "bg-blue-100 text-blue-800 hover:bg-blue-100",
   Mechanic: "bg-orange-100 text-orange-800 hover:bg-orange-100",
 };
+
+const ROLE_TABS = ["All", ...Object.keys(ROLE_STYLES)];
 
 const AVATAR_COLORS = [
   "bg-blue-600", "bg-green-600", "bg-purple-600", "bg-orange-600", "bg-teal-600", "bg-rose-600",
@@ -86,6 +89,9 @@ export function Staffs() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("All");
+
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // staff row or null (= add)
 
@@ -111,6 +117,17 @@ export function Staffs() {
   }, [getStaff]);
 
   const activeCount = useMemo(() => staff.filter((s) => s.status === "ACTIVE").length, [staff]);
+
+  const filteredStaff = useMemo(
+    () =>
+      staff.filter(
+        (m) =>
+          (roleFilter === "All" || m.role === roleFilter) &&
+          matchesSearch(search, m.name, m.code, m.email, m.phone, m.role, m.username)
+      ),
+    [staff, search, roleFilter]
+  );
+  const roleCounts = useMemo(() => buildTabCounts(staff, (m) => m.role), [staff]);
 
   function openAdd() {
     setEditing(null);
@@ -158,143 +175,164 @@ export function Staffs() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="font-bold pb-1">Staff Members</CardTitle>
-            <CardDescription>
-              {staff.length} member{staff.length === 1 ? "" : "s"} · {activeCount} active
-            </CardDescription>
-          </div>
-          <Button onClick={openAdd} className="gap-1.5">
-            <Plus className="w-4 h-4" />
-            Add Staff
-          </Button>
-        </CardHeader>
+    <div className="w-full">
+      <div className="sticky top-[73px] z-10 bg-card -mx-6 -mt-6 border-b border-border">
+        <FilterBar
+          search={search}
+          onSearchChange={setSearch}
+          statusFilter={roleFilter}
+          onStatusFilterChange={setRoleFilter}
+          placeholder="Search by name, email, phone, or role..."
+          tabs={ROLE_TABS}
+          counts={roleCounts}
+        />
+      </div>
 
-        <CardContent>
-          {loadError && (
-            <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-              {loadError}
-            </p>
-          )}
+      <div className="pt-6 space-y-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="font-bold pb-1">Staff Members</CardTitle>
+              <CardDescription>
+                {staff.length} member{staff.length === 1 ? "" : "s"} · {activeCount} active
+              </CardDescription>
+            </div>
+            <Button onClick={openAdd} className="gap-1.5">
+              <Plus className="w-4 h-4" />
+              Add Staff
+            </Button>
+          </CardHeader>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-sm font-medium text-tertiary">ID</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Name</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Role</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Email</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Phone</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Status</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Since</TableHead>
-                <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {staff.map((m) => {
-                const status = STATUS_STYLES[m.status] ?? STATUS_STYLES.INACTIVE;
-                const isSelf = currentUserId != null && Number(m.id) === currentUserId;
-                return (
-                  <TableRow key={m.id}>
-                    <TableCell className="text-xs text-muted-foreground">{m.code}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold shrink-0 ${
-                            AVATAR_COLORS[m.id % AVATAR_COLORS.length]
-                          }`}
-                        >
-                          {initials(m.name)}
+          <CardContent>
+            {loadError && (
+              <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                {loadError}
+              </p>
+            )}
+
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-sm font-medium text-tertiary">ID</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Name</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Role</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Email</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Phone</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Status</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Since</TableHead>
+                  <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredStaff.map((m) => {
+                  const status = STATUS_STYLES[m.status] ?? STATUS_STYLES.INACTIVE;
+                  const isSelf = currentUserId != null && Number(m.id) === currentUserId;
+                  return (
+                    <TableRow key={m.id}>
+                      <TableCell className="text-xs text-muted-foreground">{m.code}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold shrink-0 ${
+                              AVATAR_COLORS[m.id % AVATAR_COLORS.length]
+                            }`}
+                          >
+                            {initials(m.name)}
+                          </div>
+                          <span className="font-medium">
+                            {m.name}
+                            {isSelf && <span className="ml-1.5 text-xs text-muted-foreground font-normal">(you)</span>}
+                          </span>
                         </div>
-                        <span className="font-medium">
-                          {m.name}
-                          {isSelf && <span className="ml-1.5 text-xs text-muted-foreground font-normal">(you)</span>}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={ROLE_STYLES[m.role] ?? ""}>
-                        {m.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{m.email || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{m.phone || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={status.cls}>
-                        {status.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{formatSince(m.since)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Edit ${m.name}`}
-                          onClick={() => openEdit(m)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Remove ${m.name}`}
-                          className="hover:text-destructive"
-                          disabled={isSelf}
-                          title={isSelf ? "You can't remove your own account" : undefined}
-                          onClick={() => {
-                            setDeleteError(null);
-                            setDeleting(m);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className={ROLE_STYLES[m.role] ?? ""}>
+                          {m.role}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{m.email || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{m.phone || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className={status.cls}>
+                          {status.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{formatSince(m.since)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Edit ${m.name}`}
+                            onClick={() => openEdit(m)}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Remove ${m.name}`}
+                            className="hover:text-destructive"
+                            disabled={isSelf}
+                            title={isSelf ? "You can't remove your own account" : undefined}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setDeleting(m);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+
+                {!loading && staff.length > 0 && filteredStaff.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
+                      No staff members match your filters.
                     </TableCell>
                   </TableRow>
-                );
-              })}
+                )}
+                {!loading && staff.length === 0 && !loadError && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
+                      No staff members yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {loading && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
+                      Loading staff...
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-              {!loading && staff.length === 0 && !loadError && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
-                    No staff members yet.
-                  </TableCell>
-                </TableRow>
-              )}
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
-                    Loading staff...
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        <StaffFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          staff={editing}
+          onSubmit={handleSubmit}
+        />
 
-      <StaffFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        staff={editing}
-        onSubmit={handleSubmit}
-      />
-
-      <ConfirmDialog
-        open={!!deleting}
-        onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}
-        title="Remove staff member?"
-        description={`${deleting?.name ?? "This staff member"} will be marked inactive and can no longer sign in. Past records keep their history.`}
-        confirmLabel="Remove"
-        destructive
-        loading={deleteBusy}
-        error={deleteError}
-        onConfirm={handleDelete}
-      />
+        <ConfirmDialog
+          open={!!deleting}
+          onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}
+          title="Remove staff member?"
+          description={`${deleting?.name ?? "This staff member"} will be marked inactive and can no longer sign in. Past records keep their history.`}
+          confirmLabel="Remove"
+          destructive
+          loading={deleteBusy}
+          error={deleteError}
+          onConfirm={handleDelete}
+        />
+      </div>
     </div>
   );
 }
