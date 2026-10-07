@@ -13,34 +13,37 @@
         }
 
         public function deleteUser() {
+            header('Content-Type: application/json');
             $data = $this->getInputData();
 
-            // Validate Input
-            if (empty($data["user_id"])) {
-                http_response_code(400); // Bad Request
-                echo json_encode(["error" => "User ID is required"]);
+            $userId = $data["user_id"] ?? null;
+            if (filter_var($userId, FILTER_VALIDATE_INT) === false || (int)$userId <= 0) {
+                http_response_code(400);
+                echo json_encode(["error" => "A valid user_id is required"]);
                 return;
             }
-            $id = $data["user_id"];
-            if ($data["user_id"] == Auth::getUserId() ) {
-                http_response_code(400); // Bad Request
-                echo json_encode(["error" => "This action is not expected"]);
+            if ((int)$userId === (int)Auth::getUserId()) {
+                http_response_code(400);
+                echo json_encode(["error" => "You cannot deactivate your own account"]);
                 return;
             }
 
             try {
-                $affectedRows = $this->userModel->softDeleteUser($id);
-
-                if ($affectedRows > 0) {
-                    http_response_code(204); // Success: No Content
-                    // Note: HTTP 204 responses do not send a response body
+                if ($this->userModel->softDeleteUser((int)$userId) > 0) {
+                    http_response_code(204);
                 } else {
-                    http_response_code(404); // Not Found
+                    http_response_code(404);
                     echo json_encode(["error" => "User not found or already inactive"]);
                 }
             } catch (Exception $e) {
-                http_response_code(500); // Internal Server Error
-                echo json_encode(["error" => "Database operation failed: " . $e->getMessage()]);
+                error_log($e->getMessage());
+                if ((int)$e->getCode() === 1644) {
+                    http_response_code(409);
+                    echo json_encode(["error" => $e->getMessage()]);
+                    return;
+                }
+                http_response_code(500);
+                echo json_encode(["error" => "Failed to deactivate user"]);
             }
         }
         public function updateUser() {
@@ -101,7 +104,11 @@
                     break;
 
                 case "invalid":
-                    http_response_code(400);
+                    $hasActiveMechanicOrders = strpos(
+                        $response["message"] ?? '',
+                        "mechanic still has active orders"
+                    ) !== false;
+                    http_response_code($hasActiveMechanicOrders ? 409 : 400);
                     echo json_encode(["error" => $response["message"] ?? "Invalid data"]);
                     break;
 

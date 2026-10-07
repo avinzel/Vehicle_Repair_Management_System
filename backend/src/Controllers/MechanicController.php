@@ -20,11 +20,21 @@ class MechanicController {
         $userId         = $data['user_id'] ?? null;
         $specialization = isset($data['specialization']) ? trim($data['specialization']) : null;
         $dateHired      = isset($data['date_hired']) ? trim($data['date_hired']) : null;
-        $status         = isset($data['status']) ? trim($data['status']) : 'ACTIVE';
+        $status         = strtoupper(trim($data['status'] ?? 'ACTIVE'));
 
         if (!$userId || !$specialization || !$dateHired) {
             http_response_code(400); // Bad Request
             echo json_encode(["error" => "user_id, specialization, and date_hired are required"]);
+            return;
+        }
+        if (filter_var($userId, FILTER_VALIDATE_INT) === false || (int)$userId <= 0 || !$this->isValidDate($dateHired)) {
+            http_response_code(400);
+            echo json_encode(["error" => "A valid user_id and date_hired (YYYY-MM-DD) are required"]);
+            return;
+        }
+        if (!in_array($status, ['ACTIVE', 'INACTIVE'], true)) {
+            http_response_code(400);
+            echo json_encode(["error" => "Status must be ACTIVE or INACTIVE"]);
             return;
         }
 
@@ -71,21 +81,24 @@ class MechanicController {
         $data = $this->getInputData();
 
         $mechanicId     = $data['mechanic_id'] ?? null;
-        $userId         = $data['user_id'] ?? null;
         $specialization = isset($data['specialization']) ? trim($data['specialization']) : null;
         $dateHired      = isset($data['date_hired']) ? trim($data['date_hired']) : null;
-        $status         = isset($data['status']) ? trim($data['status']) : 'ACTIVE';
+        $status         = strtoupper(trim($data['status'] ?? 'ACTIVE'));
 
-        if (!$mechanicId || !$userId || !$specialization || !$dateHired) {
+        if (filter_var($mechanicId, FILTER_VALIDATE_INT) === false || (int)$mechanicId <= 0 || !$specialization || !$dateHired || !$this->isValidDate($dateHired)) {
             http_response_code(400);
-            echo json_encode(["error" => "Missing required fields for update"]);
+            echo json_encode(["error" => "mechanic_id, specialization, and a valid date_hired (YYYY-MM-DD) are required"]);
+            return;
+        }
+        if (!in_array($status, ['ACTIVE', 'INACTIVE'], true)) {
+            http_response_code(400);
+            echo json_encode(["error" => "Status must be ACTIVE or INACTIVE"]);
             return;
         }
 
         try {
             $affectedRows = $this->mechanicModel->updateMechanic(
                 (int)$mechanicId,
-                (int)$userId,
                 $specialization,
                 $dateHired,
                 $status
@@ -93,43 +106,53 @@ class MechanicController {
 
             if ($affectedRows > 0) {
                 http_response_code(200);
-                echo json_encode(["message" => "Mechanic updated successfully"]);
+                echo json_encode([
+                    "status" => "success",
+                    "message" => "Mechanic and linked staff account updated successfully"
+                ]);
             } else {
                 http_response_code(404);
-                echo json_encode(["error" => "Mechanic not found or no changes made"]);
+                echo json_encode(["error" => "Mechanic not found"]);
             }
         } catch (Exception $e) {
+            error_log($e->getMessage());
+            if ((int)$e->getCode() === 1644) {
+                http_response_code(409);
+                echo json_encode(["error" => $e->getMessage()]);
+                return;
+            }
             http_response_code(500);
-            echo json_encode(["error" => "Database operation failed: " . $e->getMessage()]);
+            echo json_encode(["error" => "Failed to update mechanic"]);
         }
     }
 
     // DELETE: Soft Delete Mechanic
     public function deleteMechanic() {
+        header('Content-Type: application/json');
         $data = $this->getInputData();
-
-        if (empty($data['mechanic_id'])) {
+        $mechanicId = $data['mechanic_id'] ?? null;
+        if (filter_var($mechanicId, FILTER_VALIDATE_INT) === false || (int)$mechanicId <= 0) {
             http_response_code(400);
-            echo json_encode(["error" => "Mechanic ID is required"]);
+            echo json_encode(["error" => "A valid mechanic_id is required"]);
             return;
         }
 
-        $mechanicId = $data['mechanic_id'];
-
         try {
-            $affectedRows = $this->mechanicModel->softDeleteMechanic((int)$mechanicId);
-
-            if ($affectedRows > 0) {
-                if (ob_get_length()) ob_clean(); // Prevent output body from breaking 204
-                http_response_code(204); // Success: No Content
-                exit();
+            if ($this->mechanicModel->softDeleteMechanic((int)$mechanicId) > 0) {
+                http_response_code(204);
             } else {
                 http_response_code(404);
-                echo json_encode(["error" => "Mechanic not found or already inactive"]);
+                echo json_encode(["error" => "Mechanic not found"]);
             }
         } catch (Exception $e) {
+            error_log($e->getMessage());
+            if ((int)$e->getCode() === 1644) {
+                http_response_code(409);
+                echo json_encode(["error" => $e->getMessage()]);
+                return;
+            }
             http_response_code(500);
-            echo json_encode(["error" => "Database operation failed: " . $e->getMessage()]);
+            echo json_encode(["error" => "Failed to deactivate mechanic and linked account"]);
         }
     }
     // GET: Fetch available mechanics not yet assigned to a given repair order
@@ -215,5 +238,10 @@ class MechanicController {
     public function getInputData() {
         $input = json_decode(file_get_contents('php://input'), true);
         return $input ?? [];
+    }
+
+    private function isValidDate($value) {
+        $date = \DateTime::createFromFormat('!Y-m-d', $value);
+        return $date && $date->format('Y-m-d') === $value;
     }
 }

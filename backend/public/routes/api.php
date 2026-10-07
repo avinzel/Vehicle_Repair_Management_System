@@ -336,7 +336,7 @@
                 $partController->getParts();
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
-
+                $partController->updatePart();
             }
             if ($_SERVER["REQUEST_METHOD"] === "POST"){
                 if (isset($_GET["post-method"])) {
@@ -352,10 +352,17 @@
                             exit();
                         break;
                     }  
+                } else {
+                    if (Auth::getRoleId() !== 1) {
+                            http_response_code(403);
+                            echo json_encode(["error" => "Access denied. Only administrators can create inventory parts."]);
+                            exit();
+                    }
+                    $partController->createPart();
                 }
             }
             if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
-
+                $partController->deletePart();
             }
         }
         break;
@@ -403,13 +410,13 @@
                 $serviceController->getServices();
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
-               
+               $serviceController->updateService();
             }
             if ($_SERVER["REQUEST_METHOD"] === "POST"){
-
+                $serviceController->addService();
             }
             if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
-              
+                $serviceController->deleteService();
             }
         }
         break;

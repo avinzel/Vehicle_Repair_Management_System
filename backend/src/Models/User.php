@@ -137,23 +137,95 @@ use Exception;
             }
         }
         public static function softDeleteUser($id) {
-            $query = "UPDATE users SET status = 'INACTIVE' WHERE user_id = ?";
-            
-            $stmt = self::$conn->prepare($query);
-            if (!$stmt) {
-                throw new Exception("Failed to prepare statement: " . self::$conn->error);
+            $userId = (int)$id;
+            $stmt = null;
+
+            try {
+                self::$conn->begin_transaction();
+
+                $stmt = self::$conn->prepare("SELECT mechanic_id FROM mechanics WHERE user_id = ? FOR UPDATE");
+                if (!$stmt) {
+                    throw new Exception("Failed to prepare linked mechanic lookup: " . self::$conn->error);
+                }
+                $stmt->bind_param("i", $userId);
+                $stmt->execute();
+                $mechanicResult = $stmt->get_result();
+                if ($mechanicResult) {
+                    $mechanicResult->free();
+                }
+                $stmt->close();
+                $stmt = null;
+
+                $stmt = self::$conn->prepare("SELECT user_id FROM users WHERE user_id = ? FOR UPDATE");
+                if (!$stmt) {
+                    throw new Exception("Failed to prepare user lookup: " . self::$conn->error);
+                }
+                $stmt->bind_param("i", $userId);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $userExists = $result && $result->num_rows > 0;
+                $stmt->close();
+                $stmt = null;
+
+                if (!$userExists) {
+                    self::$conn->rollback();
+                    return 0;
+                }
+
+                $stmt = self::$conn->prepare(
+                    "SELECT COUNT(DISTINCT ro.order_id) AS active_order_count
+                     FROM mechanics m
+                     JOIN repair_order_mechanics rom ON rom.mechanic_id = m.mechanic_id
+                     JOIN repair_orders ro ON ro.order_id = rom.order_id
+                     WHERE m.user_id = ?
+                       AND ro.status IN (
+                           'PENDING_DIAGNOSIS', 'AWAITING_DIAGNOSIS', 'PENDING_MECHANICS',
+                           'IN_PROGRESS', 'AWAITING_PARTS'
+                       )"
+                );
+                if (!$stmt) {
+                    throw new Exception("Failed to prepare active-order check: " . self::$conn->error);
+                }
+                $stmt->bind_param("i", $userId);
+                $stmt->execute();
+                $activeOrderCount = (int)$stmt->get_result()->fetch_assoc()['active_order_count'];
+                $stmt->close();
+                $stmt = null;
+
+                if ($activeOrderCount > 0) {
+                    self::$conn->rollback();
+                    throw new Exception(
+                        "Cannot deactivate user: the associated mechanic still has active orders. Complete or reassign them first.",
+                        1644
+                    );
+                }
+
+                $stmt = self::$conn->prepare("UPDATE users SET status = 'INACTIVE' WHERE user_id = ?");
+                if (!$stmt) {
+                    throw new Exception("Failed to prepare user deactivation: " . self::$conn->error);
+                }
+                $stmt->bind_param("i", $userId);
+                $stmt->execute();
+                $stmt->close();
+                $stmt = null;
+
+                $stmt = self::$conn->prepare("UPDATE mechanics SET status = 'INACTIVE' WHERE user_id = ?");
+                if (!$stmt) {
+                    throw new Exception("Failed to prepare mechanic deactivation: " . self::$conn->error);
+                }
+                $stmt->bind_param("i", $userId);
+                $stmt->execute();
+                $stmt->close();
+
+                self::$conn->commit();
+                return 1;
+            } catch (\Throwable $e) {
+                if ($stmt) {
+                    $stmt->close();
+                }
+                self::$conn->rollback();
+                throw new Exception("Failed to deactivate user and linked mechanic: " . $e->getMessage(), (int)$e->getCode(), $e);
             }
-
-            // Use "s" if user_id is a string/UUID, otherwise "i" for integer
-            $bindType = is_numeric($id) ? "i" : "s";
-            $stmt->bind_param($bindType, $id);
-            
-            $stmt->execute();
-            $affectedRows = $stmt->affected_rows;
-            $stmt->close();
-
-            return $affectedRows;
-
         }
        public static function updateUser(
             int $user_id,
