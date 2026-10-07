@@ -44,17 +44,23 @@
             }
         }
         public function updateUser() {
-            $data = $this->getInputData();  
-     
+            header('Content-Type: application/json');
+
+            $data = $this->getInputData();
+
             $user_id     = $data['user_id'] ?? null;
-            $username    = isset($data['username']) ? trim($data['username']) : null;
+            $username    = isset($data['username'])   ? trim($data['username'])   : null;
             $first_name  = isset($data['first_name']) ? trim($data['first_name']) : null;
-            $middle_name = isset($data['middle_name']) ? trim($data['middle_name']) : null;
-            $last_name   = isset($data['last_name']) ? trim($data['last_name']) : null;
+            $last_name   = isset($data['last_name'])  ? trim($data['last_name'])  : null;
             $contact_no  = isset($data['contact_no']) ? trim($data['contact_no']) : null;
-            $email       = isset($data['email']) ? trim($data['email']) : null;
-            $role_id     = $data['role_id'] ?? null; 
-            $status      = isset($data['status']) ? trim($data['status']) : 'ACTIVE';
+            $email       = isset($data['email'])      ? trim($data['email'])      : null;
+            $role_id     = $data['role_id'] ?? null;
+            $status      = isset($data['status'])     ? trim($data['status'])     : 'ACTIVE';
+
+            // Blank or null middle name -> null (stored as real NULL)
+            $middle_name = (isset($data['middle_name']) && trim($data['middle_name']) !== '')
+                ? trim($data['middle_name'])
+                : null;
 
             if (!$user_id || !$username || !$first_name || !$last_name || !$contact_no || !$email || !$role_id) {
                 http_response_code(400);
@@ -62,60 +68,92 @@
                 return;
             }
 
-            // Call the model to update the user
             $response = $this->userModel->updateUser(
-                (int)$user_id, 
-                $username, 
-                $first_name, 
-                $middle_name, 
-                $last_name, 
-                $contact_no, 
-                $email, 
-                (int)$role_id, 
+                (int)$user_id,
+                $username,
+                $first_name,
+                $middle_name,
+                $last_name,
+                $contact_no,
+                $email,
+                (int)$role_id,
                 $status
             );
 
             if ($response["success"]) {
                 http_response_code(200);
                 echo json_encode(["message" => "User updated successfully"]);
-            } else {
-                if ($response["error"] == "duplicate") {
-                    http_response_code(409);
-                    echo json_encode(["error" => "Username or Email already exists"]);
-                } else {
+                return;
+            }
+
+            switch ($response["error"]) {
+                case "duplicate":
+                    http_response_code(409); // Conflict
+                    echo json_encode([
+                        "error" => $response["message"] ?? "Duplicate entry",
+                        "field" => $response["field"] ?? null
+                    ]);
+                    break;
+
+                case "not_found":
+                    http_response_code(404);
+                    echo json_encode(["error" => $response["message"] ?? "User not found"]);
+                    break;
+
+                case "invalid":
+                    http_response_code(400);
+                    echo json_encode(["error" => $response["message"] ?? "Invalid data"]);
+                    break;
+
+                default:
+                    error_log($response["error"]); // raw error stays server-side
                     http_response_code(500);
                     echo json_encode(["error" => "Failed to update user"]);
-                }
             }
         }
-        public function getAllStaffs() {
-            header('Content-Type: application/json');
+/**
+         * Endpoint handler to retrieve staff members with search, filters (role, status), and dynamic sorting (date, full_name, status, role_name).
+         * Accepts query parameters (GET) or JSON body payload.
+         */
+    public function getStaffMembers() {
+        header('Content-Type: application/json');
 
-            try {
-                $staffs = $this->userModel->getAllStaffs();
+        try {
+            $input = $this->getInputData();
 
-                if ($staffs !== false) {
-                    http_response_code(200);
-                    echo json_encode([
-                        "status" => "success",
-                        "data"   => $staffs
-                    ]);
-                } else {
-                    http_response_code(500);
-                    echo json_encode([
-                        "status" => "error",
-                        "error"  => "Failed to retrieve staff members"
-                    ]);
-                }
-            } catch (Exception $e) {
+            $search    = $_GET['search']     ?? $input['search']     ?? null;
+            $roleId    = $_GET['role_id']    ?? $input['role_id']    ?? null;
+            $status    = $_GET['status']     ?? $input['status']     ?? null;
+            $sortBy    = $_GET['sort_by']    ?? $input['sort_by']    ?? 'user_id';
+            $sortOrder = $_GET['sort_order'] ?? $input['sort_order'] ?? 'ASC';
+
+            $response = User::getStaffMembers($search, $roleId, $status, $sortBy, $sortOrder);
+
+            if ($response !== false) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"       => "success",
+                    "active_count" => $response['active_count'] ?? 0,
+                    "count"        => count($response['data']   ?? []),
+                    "data"         => $response['data']         ?? []
+                ]);
+            } else {
                 http_response_code(500);
                 echo json_encode([
                     "status" => "error",
-                    "error"  => "Server error: " . $e->getMessage()
+                    "error"  => "Failed to fetch staff members"
                 ]);
             }
-        }
 
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Server error: " . $e->getMessage()
+            ]);
+        }
+        exit();
+    }
         public function getInputData(){
             $input = json_decode(file_get_contents('php://input'), true);
             return $input;

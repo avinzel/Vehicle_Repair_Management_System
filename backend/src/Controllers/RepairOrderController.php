@@ -389,7 +389,6 @@ class RepairOrderController {
         }
         exit();
     }
-    // POST: Log part to repair order (handles ISSUED vs PENDING_PARTS)
     public function logPart() {
         header('Content-Type: application/json');
 
@@ -411,7 +410,6 @@ class RepairOrderController {
         }
 
         try {
-            // Call RepairOrder model logPart method
             $response = $this->repairOrderModel->logPart((int)$orderId, (int)$partId, (int)$quantity);
 
             if (isset($response['success']) && $response['success']) {
@@ -420,18 +418,28 @@ class RepairOrderController {
                     "status"  => "success",
                     "message" => $response['message'] ?? "Part logged successfully"
                 ]);
-            } else {
+            } elseif (($response['code'] ?? 0) === 1644) {
+                // Business rule rejected it: wrong status, incompatible vehicle type, inactive part, etc.
                 http_response_code(400);
                 echo json_encode([
                     "status" => "error",
-                    "error"  => $response['error'] ?? "Failed to log part"
+                    "error"  => $response['error']
+                ]);
+            } else {
+                // Unexpected database error: log it, don't expose it
+                error_log($response['error'] ?? 'logPart failed');
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Failed to log part"
                 ]);
             }
         } catch (Exception $e) {
+            error_log($e->getMessage());
             http_response_code(500);
             echo json_encode([
                 "status" => "error",
-                "error"  => "Controller operation failed: " . $e->getMessage()
+                "error"  => "Controller operation failed"
             ]);
         }
         exit();

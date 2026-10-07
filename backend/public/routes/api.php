@@ -49,6 +49,7 @@
     use App\Controllers\RoleController;
     use App\Controllers\PartController;
     use App\Controllers\ServiceController;
+    use App\Controllers\ReportsController;
     //instance
     $db = new Database();
     $userModel = new User($db);
@@ -66,6 +67,7 @@
     $invoiceController = new InvoiceController();
     $partController = new PartController();  
     $serviceController = new ServiceController(); 
+    $reportsController = new ReportsController();
 
     
     $action = $_GET['action'] ?? null;
@@ -215,7 +217,7 @@
         break;
         case "users": {
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
-               echo json_encode(["users" => User::getAllStaffs()]);
+                $userController->getStaffMembers();
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
                $userController->updateUser();
@@ -227,12 +229,60 @@
         break;
         case "reports":{
             if($_SERVER["REQUEST_METHOD"] === "GET"){
-                if ($auth->getRoleId() == 2 ) {
-                    $dashboardData = (new Reports())->getServiceAdvisorCards();
-                    http_response_code(200);
-                    echo json_encode(["data" => $dashboardData]);
-                    exit();
+                if (isset($_GET["category"])) {
+                    $category = $_GET["category"];
+                    switch($category){
+                        case "admin-cards":{
+                            $reportsController->getAdminCards();
+                        }
+                        break;
+                        case "pipeline-status":{
+                            $reportsController->getPipelineStatusCounts();
+                        }
+                        break;
+                        case "recent-orders":{
+                            $reportsController->getRecentRepairOrders();
+                        }   
+                        break;
+                        case "top-revenue-by-order":{
+                            $reportsController->getRevenueByOrder();
+                        }
+                        break;
+                        case "revenue-split":{
+                            $reportsController->getRevenueSplit();
+                        }
+                        break;
+                        case "pipeline-status-analytics":{
+                            $reportsController->getPipelineStatusCountsOverall();
+                        }
+                        break;
+                        case "parts-inventory-cards":{
+                            $reportsController->getPartsInventoryCards();
+                        }
+                        break;
+                        case "top-parts-used":{
+                            $reportsController->getTopPartsUsed();
+                        }
+                        break;
+                        case "mechanics-order-load":{
+                            $reportsController->getMechanicOrderLoad();
+                        }
+                        break;
+                        case "mechanics-cards":{
+                            $reportsController->getMechanicOrderCards();
+                        }
+                        break;
+                        default:{
+                            http_response_code(404);
+                            echo json_encode(["error" => "404 not found"]);
+                            exit();
+                        }   
+                    }
                 }
+                $dashboardData = (new Reports())->getServiceAdvisorCards();
+                http_response_code(200);
+                echo json_encode(["data" => $dashboardData]);
+                exit();
             }
         }
         break;
@@ -264,7 +314,7 @@
                    $mechanicsController->getAvailableMechanics(); 
                    exit();
                 }
-               echo json_encode(["mechanics" => Mechanic::getAllMechanics()]);
+               $mechanicsController->getAllMechanics();
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
                $mechanicsController->updateMechanics();
@@ -279,6 +329,10 @@
         break;
         case "parts": {
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                if(Auth::getRoleId() === 1){
+                    $partController->getPartsInventoryAdmin(); 
+                    exit();
+                }
                 $partController->getParts();
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){

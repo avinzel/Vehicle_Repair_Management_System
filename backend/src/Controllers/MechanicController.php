@@ -13,6 +13,8 @@ class MechanicController {
 
     // POST: Create Mechanic
     public function createMechanic() {
+        header('Content-Type: application/json');
+
         $data = $this->getInputData();
 
         $userId         = $data['user_id'] ?? null;
@@ -37,7 +39,7 @@ class MechanicController {
             if ($newId) {
                 http_response_code(201); // Created
                 echo json_encode([
-                    "message" => "Mechanic created successfully",
+                    "message"     => "Mechanic created successfully",
                     "mechanic_id" => $newId
                 ]);
             } else {
@@ -45,8 +47,22 @@ class MechanicController {
                 echo json_encode(["error" => "Failed to create mechanic"]);
             }
         } catch (Exception $e) {
-            http_response_code(500); // Internal Server Error
-            echo json_encode(["error" => "Database operation failed: " . $e->getMessage()]);
+            // Map the error codes raised by sp_create_mechanic to proper HTTP statuses
+            switch ((int)$e->getCode()) {
+                case 1062: // user is already a mechanic
+                    http_response_code(409); // Conflict
+                    break;
+                case 1452: // user_id doesn't exist
+                    http_response_code(404); // Not Found
+                    break;
+                case 1644: // invalid status
+                    http_response_code(400); // Bad Request
+                    break;
+                default:
+                    http_response_code(500); // Internal Server Error
+            }
+
+            echo json_encode(["error" => $e->getMessage()]);
         }
     }
 
@@ -150,7 +166,51 @@ class MechanicController {
             echo json_encode(["error" => "Database operation failed: " . $e->getMessage()]);
         }
     }
+    // GET/POST: Fetch all mechanics with search, status filter, and dynamic sorting
+    public function getAllMechanics() {
+        header('Content-Type: application/json');
 
+        try {
+            // Parse request body if available
+            $input = $this->getInputData();
+
+            // Capture query params first, fallback to JSON body params
+            $search    = $_GET['search']     ?? $input['search']     ?? null;
+            $status    = $_GET['status']     ?? $input['status']     ?? null;
+            $sortBy    = $_GET['sort_by']    ?? $input['sort_by']    ?? 'mechanic_id';
+            $sortOrder = $_GET['sort_order'] ?? $input['sort_order'] ?? 'ASC';
+
+            // Call model method passing all parameters
+            $response = Mechanic::getAllMechanics(
+                $search, 
+                $status, 
+                $sortBy, 
+                $sortOrder
+            );
+
+            if (isset($response['success']) && $response['success']) {
+                http_response_code(200);
+                echo json_encode([
+                    "status"       => "success",
+                    "active_count" => $response['active_count'] ?? 0,
+                    "count"        => count($response['data']), // Kept for backward compatibility
+                    "data"         => $response['data']
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => $response['error'] ?? "Failed to fetch mechanics"
+                ]);
+            }
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Server error: " . $e->getMessage()
+            ]);
+        }
+    }
     // Helper method to parse input stream safely
     public function getInputData() {
         $input = json_decode(file_get_contents('php://input'), true);

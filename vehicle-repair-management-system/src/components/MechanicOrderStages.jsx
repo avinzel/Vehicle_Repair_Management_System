@@ -57,7 +57,7 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
     let cancelled = false;
     setLoadingCatalog(true);
 
-    fetch(`http://localhost:8000/api.php?action=services`, { credentials: "include" })
+    fetch(`http://localhost:8000/api.php?action=services&status=ACTIVE`, { credentials: "include" })
       .then((res) => res.json())
       .then((json) => {
         if (cancelled) return;

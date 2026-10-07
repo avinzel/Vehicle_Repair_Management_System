@@ -57,7 +57,7 @@ export function Services() {
   const getServices = useCallback(async () => {
     setLoadError(null);
     try {
-      const json = await request(`${API}?action=services`);
+      const json = await request(`${API}?action=services&`);
       const rows = json.data ?? json.services ?? (Array.isArray(json) ? json : []);
       setServices(rows.map(normalizeService));
     } catch (err) {
