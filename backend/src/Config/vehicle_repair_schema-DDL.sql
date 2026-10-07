@@ -1,4 +1,5 @@
-CREATE DATABASE IF NOT EXISTS VehicleRepair;
+DROP DATABASE IF EXISTS VehicleRepair;
+	CREATE DATABASE IF NOT EXISTS VehicleRepair;
 	USE VehicleRepair;
 
 	-- =====================================================================
@@ -52,7 +53,7 @@ CREATE DATABASE IF NOT EXISTS VehicleRepair;
         user_id         INT NOT NULL UNIQUE,
         specialization  VARCHAR(100),
         date_hired      DATE,
-        status          ENUM('ACTIVE','ON_LEAVE','INACTIVE') DEFAULT 'ACTIVE',
+        status          ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE',
         CONSTRAINT fk_mechanics_user FOREIGN KEY (user_id) REFERENCES users(user_id)
     );
 
@@ -91,21 +92,24 @@ CREATE DATABASE IF NOT EXISTS VehicleRepair;
 
 	-- =====================================================================
 	-- PARTS_INVENTORY
+	-- vehicle_types: which vehicle types the part fits (one or more).
 	-- =====================================================================
 	CREATE TABLE parts_inventory (
 		part_id          INT PRIMARY KEY AUTO_INCREMENT,
 		part_code        VARCHAR(30) NOT NULL UNIQUE,
 		part_name        VARCHAR(150) NOT NULL,
 		category         VARCHAR(50),
+		vehicle_types    SET('CAR','MOTORCYCLE','TRICYCLE') NOT NULL
+						 DEFAULT 'CAR,MOTORCYCLE,TRICYCLE',
 		unit             VARCHAR(20) DEFAULT 'pc',
 		unit_price       DECIMAL(10,2) NOT NULL,
 		quantity_on_hand INT NOT NULL DEFAULT 0,
 		reorder_level    INT DEFAULT 5,
 		batch_number     VARCHAR(50) NOT NULL,
 		date_added       DATETIME DEFAULT CURRENT_TIMESTAMP,
-		status           ENUM('ACTIVE','DISCONTINUED') DEFAULT 'ACTIVE'
+		status           ENUM('ACTIVE','DISCONTINUED') DEFAULT 'ACTIVE',
+		CONSTRAINT chk_parts_vehicle_types CHECK (vehicle_types <> '')
 	);
-
 	-- =====================================================================
 	-- REPAIR_ORDERS
 	-- =====================================================================
@@ -139,13 +143,16 @@ CREATE DATABASE IF NOT EXISTS VehicleRepair;
 	-- =====================================================================
 	-- SERVICE_CATALOG
 	-- =====================================================================
+-- =====================================================================
+-- SERVICE_CATALOG
+-- =====================================================================
 	CREATE TABLE service_catalog (
-		service_catalog_id INT PRIMARY KEY AUTO_INCREMENT,
+		service_catalog_id  INT PRIMARY KEY AUTO_INCREMENT,
 		service_name        VARCHAR(150) NOT NULL UNIQUE,
 		description         VARCHAR(255),
-		standard_labor_cost DECIMAL(10,2) NOT NULL
+		standard_labor_cost DECIMAL(10,2) NOT NULL,
+		status              ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE'
 	);
-
 	-- =====================================================================
 	-- REPAIR_ORDER_SERVICES
 	-- =====================================================================
@@ -223,4 +230,4 @@ CREATE DATABASE IF NOT EXISTS VehicleRepair;
 		CONSTRAINT fk_invoice_issuer   FOREIGN KEY (issued_by)   REFERENCES users(user_id),
 		CONSTRAINT fk_invoice_receiver FOREIGN KEY (received_by) REFERENCES users(user_id)
 	);
-    
+

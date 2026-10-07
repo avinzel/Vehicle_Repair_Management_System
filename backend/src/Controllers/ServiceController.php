@@ -12,21 +12,34 @@ class ServiceController {
         self::$model = new Service();
     }
 
-    /**
-     * GET: Retrieve service catalog items
-     */
     public function getServices() {
         header('Content-Type: application/json');
 
         $search = $_GET['search'] ?? null;
+        $status = $_GET['status'] ?? null;
 
-        if ($search === null) {
-            $input = $this->getInputData();
-            $search = $input['search'] ?? null;
+        if ($search === null || $status === null) {
+            $input  = $this->getInputData();
+            $search = $search ?? ($input['search'] ?? null);
+            $status = $status ?? ($input['status'] ?? null);
+        }
+
+        // Whitelist the status, default to ACTIVE
+        $status = strtoupper(trim($status ?? 'ACTIVE'));
+        if ($status === '') {
+            $status = 'ACTIVE';
+        }
+        if (!in_array($status, ['ACTIVE', 'INACTIVE', 'ALL'], true)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error"  => "Invalid status filter. Use ACTIVE, INACTIVE or ALL."
+            ]);
+            exit();
         }
 
         try {
-            $response = self::$model->getAllServices($search);
+            $response = self::$model->getAllServices($search, $status);
 
             if (isset($response['success']) && $response['success']) {
                 http_response_code(200);
@@ -36,23 +49,24 @@ class ServiceController {
                     "data"   => $response['data']
                 ]);
             } else {
+                error_log($response['error'] ?? 'getAllServices failed');
                 http_response_code(500);
                 echo json_encode([
                     "status" => "error",
-                    "error"  => $response['error'] ?? "Failed to fetch service catalog"
+                    "error"  => "Failed to fetch service catalog"
                 ]);
             }
 
         } catch (Exception $e) {
+            error_log($e->getMessage());
             http_response_code(500);
             echo json_encode([
                 "status" => "error",
-                "error"  => "Controller operation failed: " . $e->getMessage()
+                "error"  => "Controller operation failed"
             ]);
         }
         exit();
     }
-
     /**
      * POST: Add a new service catalog entry
      */

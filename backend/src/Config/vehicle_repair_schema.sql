@@ -92,21 +92,24 @@
 
 	-- =====================================================================
 	-- PARTS_INVENTORY
+	-- vehicle_types: which vehicle types the part fits (one or more).
 	-- =====================================================================
 	CREATE TABLE parts_inventory (
 		part_id          INT PRIMARY KEY AUTO_INCREMENT,
 		part_code        VARCHAR(30) NOT NULL UNIQUE,
 		part_name        VARCHAR(150) NOT NULL,
 		category         VARCHAR(50),
+		vehicle_types    SET('CAR','MOTORCYCLE','TRICYCLE') NOT NULL
+						 DEFAULT 'CAR,MOTORCYCLE,TRICYCLE',
 		unit             VARCHAR(20) DEFAULT 'pc',
 		unit_price       DECIMAL(10,2) NOT NULL,
 		quantity_on_hand INT NOT NULL DEFAULT 0,
 		reorder_level    INT DEFAULT 5,
 		batch_number     VARCHAR(50) NOT NULL,
 		date_added       DATETIME DEFAULT CURRENT_TIMESTAMP,
-		status           ENUM('ACTIVE','DISCONTINUED') DEFAULT 'ACTIVE'
+		status           ENUM('ACTIVE','DISCONTINUED') DEFAULT 'ACTIVE',
+		CONSTRAINT chk_parts_vehicle_types CHECK (vehicle_types <> '')
 	);
-
 	-- =====================================================================
 	-- REPAIR_ORDERS
 	-- =====================================================================
@@ -140,13 +143,16 @@
 	-- =====================================================================
 	-- SERVICE_CATALOG
 	-- =====================================================================
+-- =====================================================================
+-- SERVICE_CATALOG
+-- =====================================================================
 	CREATE TABLE service_catalog (
-		service_catalog_id INT PRIMARY KEY AUTO_INCREMENT,
+		service_catalog_id  INT PRIMARY KEY AUTO_INCREMENT,
 		service_name        VARCHAR(150) NOT NULL UNIQUE,
 		description         VARCHAR(255),
-		standard_labor_cost DECIMAL(10,2) NOT NULL
+		standard_labor_cost DECIMAL(10,2) NOT NULL,
+		status              ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE'
 	);
-
 	-- =====================================================================
 	-- REPAIR_ORDER_SERVICES
 	-- =====================================================================
@@ -378,15 +384,15 @@ INSERT INTO vehicles (vehicle_id, customer_id, plate_number, vehicle_type, manuf
 (4, 4, 'GHI-3456', 'CAR',        'Toyota',   'Vios',        2019, 'White',  'VIN-GHI3456XX', 51200, '2026-08-24 13:50:00'),
 (5, 5, 'JKL-7890', 'MOTORCYCLE', 'Kawasaki', 'Barako 175',  2021, 'Black',  'VIN-JKL7890XX', 15300, '2026-08-23 08:25:00');
 
-INSERT INTO parts_inventory (part_id, part_code, part_name, category, unit, unit_price, quantity_on_hand, reorder_level, batch_number, date_added, status) VALUES
-(1, 'PRT-001', 'Engine Oil (1L)',       'Engine',     'liter', 380.00,  48, 10, 'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
-(2, 'PRT-002', 'Brake Pads (set)',      'Brake',      'set',   1200.00, 12, 5,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
-(3, 'PRT-003', 'Air Filter',            'Engine',     'pc',    380.00,  20, 8,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
-(4, 'PRT-004', 'Spark Plugs (set of 4)','Engine',     'set',   950.00,  18, 6,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
-(5, 'PRT-005', 'Car Battery (12V)',     'Electrical', 'pc',    3800.00, 8,  5,  'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE'),
-(6, 'PRT-006', 'Wiper Blade (pair)',    'Body',       'pair',  650.00,  22, 8,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
-(7, 'PRT-007', 'Coolant (1L)',          'Engine',     'liter', 280.00,  30, 10, 'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE'),
-(8, 'PRT-008', 'Timing Belt',           'Engine',     'pc',    1850.00, 6,  5,  'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE');
+INSERT INTO parts_inventory (part_id, part_code, part_name, category, vehicle_types, unit, unit_price, quantity_on_hand, reorder_level, batch_number, date_added, status) VALUES
+(1, 'PRT-001', 'Engine Oil (1L)',        'Engine',     'CAR,MOTORCYCLE,TRICYCLE', 'liter', 380.00,  48, 10, 'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
+(2, 'PRT-002', 'Brake Pads (set)',       'Brake',      'CAR',                     'set',   1200.00, 12, 5,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
+(3, 'PRT-003', 'Air Filter',             'Engine',     'CAR,MOTORCYCLE,TRICYCLE', 'pc',    380.00,  20, 8,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
+(4, 'PRT-004', 'Spark Plugs (set of 4)', 'Engine',     'CAR',                     'set',   950.00,  18, 6,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
+(5, 'PRT-005', 'Car Battery (12V)',      'Electrical', 'CAR',                     'pc',    3800.00, 8,  5,  'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE'),
+(6, 'PRT-006', 'Wiper Blade (pair)',     'Body',       'CAR',                     'pair',  650.00,  22, 8,  'BATCH-2026-01', '2026-07-01 09:00:00', 'ACTIVE'),
+(7, 'PRT-007', 'Coolant (1L)',           'Engine',     'CAR',                     'liter', 280.00,  30, 10, 'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE'),
+(8, 'PRT-008', 'Timing Belt',            'Engine',     'CAR',                     'pc',    1850.00, 6,  5,  'BATCH-2026-02', '2026-07-15 09:00:00', 'ACTIVE');
 
 INSERT INTO repair_orders (order_id, vehicle_id, date_received, date_completed, mileage_at_service, complaint, status, diagnosis_notes, diagnosis_completed_at, priority, created_by) VALUES
 (1, 1, '2026-08-27 09:10:00', NULL, 32000, 'Engine makes knocking noise when accelerating.', 'PENDING_DIAGNOSIS', NULL, NULL, 'STANDARD', 6),
@@ -472,34 +478,31 @@ INSERT INTO customers (customer_id, first_name, middle_name, last_name, contact_
 (49, 'Camila', 'Jose', 'Tan', '0979-600-5114', 'camila.tan49@email.com', 'Brgy. Banay-banay, Cabuyao, Laguna', '2026-08-07 04:24:50'),
 (50, 'Leo', NULL, 'Ramos', '0996-533-5533', 'leo.ramos50@email.com', 'Brgy. Banay-banay, Cabuyao, Laguna', '2026-08-12 06:55:17');
 
--- =====================================================================
--- PARTS_INVENTORY
--- =====================================================================
-INSERT INTO parts_inventory (part_id, part_code, part_name, category, unit, unit_price, quantity_on_hand, reorder_level, batch_number, date_added, status) VALUES
-(9, 'PRT-009', 'Oil Filter', 'Engine', 'pc', 250.00, 60, 15, 'BATCH-2026-03', '2026-08-01 09:00:00', 'ACTIVE'),
-(10, 'PRT-010', 'Brake Fluid (500ml)', 'Brake', 'bottle', 320.00, 40, 10, 'BATCH-2026-03', '2026-08-01 09:00:00', 'ACTIVE'),
-(11, 'PRT-011', 'Brake Disc Rotor', 'Brake', 'pc', 1800.00, 10, 4, 'BATCH-2026-03', '2026-08-01 09:00:00', 'ACTIVE'),
-(12, 'PRT-012', 'Motorcycle Brake Pads (set)', 'Brake', 'set', 450.00, 25, 8, 'BATCH-2026-03', '2026-08-01 09:00:00', 'ACTIVE'),
-(13, 'PRT-013', 'Motorcycle Battery (12V)', 'Electrical', 'pc', 1500.00, 14, 5, 'BATCH-2026-03', '2026-08-05 09:00:00', 'ACTIVE'),
-(14, 'PRT-014', 'Drive Chain Kit', 'Drivetrain', 'set', 2200.00, 9, 4, 'BATCH-2026-03', '2026-08-05 09:00:00', 'ACTIVE'),
-(15, 'PRT-015', 'CVT Drive Belt', 'Drivetrain', 'pc', 900.00, 16, 6, 'BATCH-2026-03', '2026-08-05 09:00:00', 'ACTIVE'),
-(16, 'PRT-016', 'Clutch Disc Set', 'Drivetrain', 'set', 2600.00, 6, 4, 'BATCH-2026-04', '2026-08-05 09:00:00', 'ACTIVE'),
-(17, 'PRT-017', 'Car Tire 14in', 'Tires', 'pc', 3200.00, 12, 6, 'BATCH-2026-04', '2026-08-09 09:00:00', 'ACTIVE'),
-(18, 'PRT-018', 'Motorcycle Tire', 'Tires', 'pc', 1400.00, 18, 6, 'BATCH-2026-04', '2026-08-09 09:00:00', 'ACTIVE'),
-(19, 'PRT-019', 'Headlight Bulb', 'Electrical', 'pc', 350.00, 30, 10, 'BATCH-2026-04', '2026-08-09 09:00:00', 'ACTIVE'),
-(20, 'PRT-020', 'Fuse Assortment Box', 'Electrical', 'box', 180.00, 35, 10, 'BATCH-2026-04', '2026-08-09 09:00:00', 'ACTIVE'),
-(21, 'PRT-021', 'Radiator Hose', 'Engine', 'pc', 520.00, 12, 5, 'BATCH-2026-04', '2026-08-13 09:00:00', 'ACTIVE'),
-(22, 'PRT-022', 'Fuel Filter', 'Engine', 'pc', 420.00, 15, 6, 'BATCH-2026-04', '2026-08-13 09:00:00', 'ACTIVE'),
-(23, 'PRT-023', 'Shock Absorber', 'Suspension', 'pc', 2100.00, 8, 4, 'BATCH-2026-04', '2026-08-13 09:00:00', 'ACTIVE'),
-(24, 'PRT-024', 'Ball Joint', 'Suspension', 'pc', 750.00, 10, 4, 'BATCH-2026-04', '2026-08-13 09:00:00', 'ACTIVE'),
-(25, 'PRT-025', 'Tie Rod End', 'Suspension', 'pc', 680.00, 3, 4, 'BATCH-2026-04', '2026-08-17 09:00:00', 'ACTIVE'),
-(26, 'PRT-026', 'Gasket Set', 'Engine', 'set', 1300.00, 7, 4, 'BATCH-2026-04', '2026-08-17 09:00:00', 'ACTIVE'),
-(27, 'PRT-027', 'Alternator Belt', 'Engine', 'pc', 540.00, 14, 5, 'BATCH-2026-05', '2026-08-17 09:00:00', 'ACTIVE'),
-(28, 'PRT-028', 'Starter Brush Set', 'Electrical', 'set', 600.00, 9, 4, 'BATCH-2026-05', '2026-08-17 09:00:00', 'ACTIVE'),
-(29, 'PRT-029', 'Motorcycle Engine Oil (1L)', 'Engine', 'liter', 420.00, 70, 15, 'BATCH-2026-05', '2026-08-21 09:00:00', 'ACTIVE'),
-(30, 'PRT-030', 'Spark Plug (single)', 'Engine', 'pc', 220.00, 50, 15, 'BATCH-2026-05', '2026-08-21 09:00:00', 'ACTIVE'),
-(31, 'PRT-031', 'Wheel Bearing', 'Drivetrain', 'pc', 480.00, 20, 6, 'BATCH-2026-05', '2026-08-21 09:00:00', 'ACTIVE'),
-(32, 'PRT-032', 'AC Compressor Oil', 'AC', 'bottle', 350.00, 4, 5, 'BATCH-2026-05', '2026-08-21 09:00:00', 'ACTIVE');
+INSERT INTO parts_inventory (part_id, part_code, part_name, category, vehicle_types, unit, unit_price, quantity_on_hand, reorder_level, batch_number, date_added, status) VALUES
+(9,  'PRT-009', 'Oil Filter',                 'Engine',     'CAR,MOTORCYCLE,TRICYCLE', 'pc',     250.00,  60, 15, 'BATCH-2026-03', '2026-08-01 09:00:00', 'ACTIVE'),
+(10, 'PRT-010', 'Brake Fluid (500ml)',        'Brake',      'CAR,MOTORCYCLE,TRICYCLE', 'bottle', 320.00,  40, 10, 'BATCH-2026-03', '2026-08-01 09:00:00', 'ACTIVE'),
+(11, 'PRT-011', 'Brake Disc Rotor',           'Brake',      'CAR',                     'pc',     1800.00, 10, 4,  'BATCH-2026-03', '2026-08-01 09:00:00', 'ACTIVE'),
+(12, 'PRT-012', 'Motorcycle Brake Pads (set)','Brake',      'MOTORCYCLE,TRICYCLE',     'set',    450.00,  25, 8,  'BATCH-2026-03', '2026-08-01 09:00:00', 'ACTIVE'),
+(13, 'PRT-013', 'Motorcycle Battery (12V)',   'Electrical', 'MOTORCYCLE,TRICYCLE',     'pc',     1500.00, 14, 5,  'BATCH-2026-03', '2026-08-05 09:00:00', 'ACTIVE'),
+(14, 'PRT-014', 'Drive Chain Kit',            'Drivetrain', 'MOTORCYCLE,TRICYCLE',     'set',    2200.00, 9,  4,  'BATCH-2026-03', '2026-08-05 09:00:00', 'ACTIVE'),
+(15, 'PRT-015', 'CVT Drive Belt',             'Drivetrain', 'MOTORCYCLE',              'pc',     900.00,  16, 6,  'BATCH-2026-03', '2026-08-05 09:00:00', 'ACTIVE'),
+(16, 'PRT-016', 'Clutch Disc Set',            'Drivetrain', 'CAR,MOTORCYCLE,TRICYCLE', 'set',    2600.00, 6,  4,  'BATCH-2026-04', '2026-08-05 09:00:00', 'ACTIVE'),
+(17, 'PRT-017', 'Car Tire 14in',              'Tires',      'CAR',                     'pc',     3200.00, 12, 6,  'BATCH-2026-04', '2026-08-09 09:00:00', 'ACTIVE'),
+(18, 'PRT-018', 'Motorcycle Tire',            'Tires',      'MOTORCYCLE,TRICYCLE',     'pc',     1400.00, 18, 6,  'BATCH-2026-04', '2026-08-09 09:00:00', 'ACTIVE'),
+(19, 'PRT-019', 'Headlight Bulb',             'Electrical', 'CAR,MOTORCYCLE,TRICYCLE', 'pc',     350.00,  30, 10, 'BATCH-2026-04', '2026-08-09 09:00:00', 'ACTIVE'),
+(20, 'PRT-020', 'Fuse Assortment Box',        'Electrical', 'CAR,MOTORCYCLE,TRICYCLE', 'box',    180.00,  35, 10, 'BATCH-2026-04', '2026-08-09 09:00:00', 'ACTIVE'),
+(21, 'PRT-021', 'Radiator Hose',              'Engine',     'CAR',                     'pc',     520.00,  12, 5,  'BATCH-2026-04', '2026-08-13 09:00:00', 'ACTIVE'),
+(22, 'PRT-022', 'Fuel Filter',                'Engine',     'CAR',                     'pc',     420.00,  15, 6,  'BATCH-2026-04', '2026-08-13 09:00:00', 'ACTIVE'),
+(23, 'PRT-023', 'Shock Absorber',             'Suspension', 'CAR,MOTORCYCLE,TRICYCLE', 'pc',     2100.00, 8,  4,  'BATCH-2026-04', '2026-08-13 09:00:00', 'ACTIVE'),
+(24, 'PRT-024', 'Ball Joint',                 'Suspension', 'CAR',                     'pc',     750.00,  10, 4,  'BATCH-2026-04', '2026-08-13 09:00:00', 'ACTIVE'),
+(25, 'PRT-025', 'Tie Rod End',                'Suspension', 'CAR',                     'pc',     680.00,  3,  4,  'BATCH-2026-04', '2026-08-17 09:00:00', 'ACTIVE'),
+(26, 'PRT-026', 'Gasket Set',                 'Engine',     'CAR,MOTORCYCLE,TRICYCLE', 'set',    1300.00, 7,  4,  'BATCH-2026-04', '2026-08-17 09:00:00', 'ACTIVE'),
+(27, 'PRT-027', 'Alternator Belt',            'Engine',     'CAR',                     'pc',     540.00,  14, 5,  'BATCH-2026-05', '2026-08-17 09:00:00', 'ACTIVE'),
+(28, 'PRT-028', 'Starter Brush Set',          'Electrical', 'CAR,MOTORCYCLE,TRICYCLE', 'set',    600.00,  9,  4,  'BATCH-2026-05', '2026-08-17 09:00:00', 'ACTIVE'),
+(29, 'PRT-029', 'Motorcycle Engine Oil (1L)', 'Engine',     'MOTORCYCLE,TRICYCLE',     'liter',  420.00,  70, 15, 'BATCH-2026-05', '2026-08-21 09:00:00', 'ACTIVE'),
+(30, 'PRT-030', 'Spark Plug (single)',        'Engine',     'CAR,MOTORCYCLE,TRICYCLE', 'pc',     220.00,  50, 15, 'BATCH-2026-05', '2026-08-21 09:00:00', 'ACTIVE'),
+(31, 'PRT-031', 'Wheel Bearing',              'Drivetrain', 'CAR,MOTORCYCLE,TRICYCLE', 'pc',     480.00,  20, 6,  'BATCH-2026-05', '2026-08-21 09:00:00', 'ACTIVE'),
+(32, 'PRT-032', 'AC Compressor Oil',          'AC',         'CAR',                     'bottle', 350.00,  4,  5,  'BATCH-2026-05', '2026-08-21 09:00:00', 'ACTIVE');
 
 
 -- =====================================================================
@@ -1980,6 +1983,7 @@ END //
 
 DELIMITER ;
 
+
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS sp_log_repair_order_part //
@@ -1990,10 +1994,13 @@ CREATE PROCEDURE sp_log_repair_order_part(
     IN p_quantity INT
 )
 BEGIN
-    DECLARE v_order_status VARCHAR(50) DEFAULT NULL;
-    DECLARE v_qty_on_hand INT DEFAULT NULL;
-    DECLARE v_unit_price DECIMAL(10,2) DEFAULT NULL;
-    DECLARE v_batch_number VARCHAR(50) DEFAULT NULL;
+    DECLARE v_order_status  VARCHAR(50) DEFAULT NULL;
+    DECLARE v_vehicle_type  VARCHAR(20) DEFAULT NULL;
+    DECLARE v_qty_on_hand   INT DEFAULT NULL;
+    DECLARE v_unit_price    DECIMAL(10,2) DEFAULT NULL;
+    DECLARE v_batch_number  VARCHAR(50) DEFAULT NULL;
+    DECLARE v_part_types    VARCHAR(50) DEFAULT NULL;
+    DECLARE v_msg           VARCHAR(255);
 
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
@@ -2005,86 +2012,75 @@ BEGIN
 
     -- 1. Validate Input Quantity
     IF p_quantity IS NULL OR p_quantity <= 0 THEN
-        SIGNAL SQLSTATE '45000' 
+        SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Quantity must be greater than zero.';
     END IF;
 
     -- 2. Lock and Check Repair Order Status
-    SELECT status INTO v_order_status 
-    FROM repair_orders 
+    SELECT status INTO v_order_status
+    FROM repair_orders
     WHERE order_id = p_order_id
     FOR UPDATE;
 
     IF v_order_status IS NULL THEN
-        SIGNAL SQLSTATE '45000' 
+        SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Repair order not found.';
     END IF;
 
     -- Guard Clause: Must be IN_PROGRESS or AWAITING_PARTS to log parts
     IF v_order_status NOT IN ('IN_PROGRESS', 'AWAITING_PARTS') THEN
-        SIGNAL SQLSTATE '45000' 
+        SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Parts can only be logged when order is IN_PROGRESS or AWAITING_PARTS.';
     END IF;
 
-    -- 3. Lock and Check Part Details from Inventory
-    SELECT quantity_on_hand, unit_price, batch_number 
-    INTO v_qty_on_hand, v_unit_price, v_batch_number
-    FROM parts_inventory 
+    -- 3. Get the vehicle type of this order
+    SELECT v.vehicle_type INTO v_vehicle_type
+    FROM repair_orders ro
+    JOIN vehicles v ON v.vehicle_id = ro.vehicle_id
+    WHERE ro.order_id = p_order_id;
+
+    -- 4. Lock and Check Part Details from Inventory
+    SELECT quantity_on_hand, unit_price, batch_number, vehicle_types
+    INTO v_qty_on_hand, v_unit_price, v_batch_number, v_part_types
+    FROM parts_inventory
     WHERE part_id = p_part_id AND status = 'ACTIVE'
     FOR UPDATE;
 
     IF v_unit_price IS NULL THEN
-        SIGNAL SQLSTATE '45000' 
+        SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Selected part is inactive or does not exist.';
     END IF;
 
-    -- 4. Branching Logic based on Stock Availability
+    -- 5. Vehicle type compatibility check
+    IF v_vehicle_type IS NULL OR FIND_IN_SET(v_vehicle_type, v_part_types) = 0 THEN
+        SET v_msg = CONCAT('This part is not compatible with a ', IFNULL(v_vehicle_type, 'UNKNOWN'), '.');
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = v_msg;
+    END IF;
+
+    -- 6. Branching Logic based on Stock Availability
     IF v_qty_on_hand < p_quantity THEN
-        -- OUT OF STOCK:
-        -- Log request as PENDING_PARTS without deducting inventory
+        -- OUT OF STOCK: log as PENDING_PARTS without deducting inventory
         INSERT INTO repair_order_parts (
-            order_id, 
-            part_id, 
-            batch_number, 
-            quantity_used, 
-            unit_price,
-            status
+            order_id, part_id, batch_number, quantity_used, unit_price, status
         ) VALUES (
-            p_order_id, 
-            p_part_id, 
-            v_batch_number, 
-            p_quantity, 
-            v_unit_price,
-            'PENDING_PARTS'
+            p_order_id, p_part_id, v_batch_number, p_quantity, v_unit_price, 'PENDING_PARTS'
         );
 
-        -- Update main repair order status to AWAITING_PARTS
-        UPDATE repair_orders 
-        SET status = 'AWAITING_PARTS' 
+        UPDATE repair_orders
+        SET status = 'AWAITING_PARTS'
         WHERE order_id = p_order_id;
 
     ELSE
-        -- SUFFICIENT STOCK:
-        -- Deduct stock from inventory
-        UPDATE parts_inventory 
-        SET quantity_on_hand = quantity_on_hand - p_quantity 
+        -- SUFFICIENT STOCK: deduct and log as ISSUED
+        UPDATE parts_inventory
+        SET quantity_on_hand = quantity_on_hand - p_quantity
         WHERE part_id = p_part_id;
 
-        -- Log request as ISSUED
         INSERT INTO repair_order_parts (
-            order_id, 
-            part_id, 
-            batch_number, 
-            quantity_used, 
-            unit_price,
-            status
+            order_id, part_id, batch_number, quantity_used, unit_price, status
         ) VALUES (
-            p_order_id, 
-            p_part_id, 
-            v_batch_number, 
-            p_quantity, 
-            v_unit_price,
-            'ISSUED'
+            p_order_id, p_part_id, v_batch_number, p_quantity, v_unit_price, 'ISSUED'
         );
     END IF;
 
@@ -2199,23 +2195,40 @@ END //
 
 DELIMITER ;
 
+
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS sp_get_parts_inventory //
 
 CREATE PROCEDURE sp_get_parts_inventory(
-    IN p_status VARCHAR(50),
-    IN p_search VARCHAR(255)
+    IN p_status   VARCHAR(50),
+    IN p_search   VARCHAR(255),
+    IN p_order_id INT
 )
 BEGIN
+    DECLARE v_vehicle_type VARCHAR(20) DEFAULT NULL;
+
     -- Format search term with wildcards
     SET p_search = IF(p_search IS NULL OR TRIM(p_search) = '', NULL, CONCAT('%', TRIM(p_search), '%'));
 
-    SELECT 
+    -- If an order is given, only list parts that fit that order's vehicle type
+    IF p_order_id IS NOT NULL AND p_order_id > 0 THEN
+        SELECT v.vehicle_type INTO v_vehicle_type
+        FROM repair_orders ro
+        JOIN vehicles v ON v.vehicle_id = ro.vehicle_id
+        WHERE ro.order_id = p_order_id;
+
+        IF v_vehicle_type IS NULL THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Repair order not found.';
+        END IF;
+    END IF;
+
+    SELECT
         part_id,
         part_code,
         part_name,
         category,
+        vehicle_types,
         unit,
         unit_price,
         quantity_on_hand,
@@ -2225,97 +2238,16 @@ BEGIN
         status
     FROM parts_inventory
     WHERE (p_status = 'ALL' OR p_status IS NULL OR status = p_status)
+      AND (v_vehicle_type IS NULL OR FIND_IN_SET(v_vehicle_type, vehicle_types) > 0)
       AND (
-          p_search IS NULL 
-          OR part_code LIKE p_search
-          OR part_name LIKE p_search 
-          OR category LIKE p_search
+          p_search IS NULL
+          OR part_code    LIKE p_search
+          OR part_name    LIKE p_search
+          OR category     LIKE p_search
           OR batch_number LIKE p_search
       )
     ORDER BY part_name ASC;
 END //
-
-DELIMITER ;
-DELIMITER $$
-
-DROP PROCEDURE IF EXISTS sp_get_parts_by_repair_order$$
-
-CREATE PROCEDURE sp_get_parts_by_repair_order(
-    IN p_order_id INT
-)
-BEGIN
-    SELECT 
-        rop.order_part_id,
-        rop.order_id,
-        rop.part_id,
-        pi.part_code,
-        pi.part_name,
-        pi.category,
-        pi.unit,
-        rop.batch_number,
-        rop.quantity_used,
-        rop.unit_price AS unit_price_at_use,
-        pi.unit_price AS current_unit_price,
-        (rop.quantity_used * rop.unit_price) AS subtotal,
-        rop.status AS part_status,
-        pi.status AS inventory_status
-    FROM repair_order_parts rop
-    INNER JOIN parts_inventory pi ON rop.part_id = pi.part_id
-    WHERE rop.order_id = p_order_id
-      AND rop.status != 'CANCELLED'
-    ORDER BY rop.order_part_id ASC;
-END$$
-
-DELIMITER ;
-DELIMITER $$
-
-DROP PROCEDURE IF EXISTS sp_mark_ready_to_invoice$$
-
-CREATE PROCEDURE sp_mark_ready_to_invoice(
-    IN p_order_id INT,
-    IN p_user_id INT
-)
-sp_lbl: BEGIN
-    DECLARE v_pending_parts_count INT DEFAULT 0;
-    DECLARE v_current_status VARCHAR(50);
-
-    -- 1. Check if repair order exists & fetch current status
-    SELECT status INTO v_current_status
-    FROM repair_orders
-    WHERE order_id = p_order_id;
-
-    IF v_current_status IS NULL THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Repair order not found.';
-        LEAVE sp_lbl;
-    END IF;
-
-    -- 2. Validate current state transitions
-    IF v_current_status IN ('PENDING_DIAGNOSIS','AWAITING_DIAGNOSIS','READY_TO_INVOICE', 'AWAITING_PAYMENT', 'READY_FOR_RELEASE', 'FULFILLED', 'CANCELLED') THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Repair order has already passed the work stage or is cancelled.';
-        LEAVE sp_lbl;
-    END IF;
-
-    -- 3. Ensure no parts are still pending stock fulfillment
-    SELECT COUNT(*) INTO v_pending_parts_count
-    FROM repair_order_parts
-    WHERE order_id = p_order_id AND status = 'PENDING_PARTS';
-
-    IF v_pending_parts_count > 0 THEN
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Cannot mark as Ready to Invoice: There are still parts pending stock fulfillment.';
-        LEAVE sp_lbl;
-    END IF;
-
-    -- 4. Update Repair Order status and set completion timestamp
-    UPDATE repair_orders
-    SET 
-        status = 'READY_TO_INVOICE',
-        date_completed = NOW()
-    WHERE order_id = p_order_id;
-
-END$$
 
 DELIMITER ;
 
@@ -3079,6 +3011,7 @@ DELIMITER ;
 	CREATE PROCEDURE sp_get_parts_inventory_admin(
 		IN p_search VARCHAR(255),
 		IN p_stock_level VARCHAR(20),
+		IN p_vehicle_type VARCHAR(20),
 		IN p_sort_by VARCHAR(50),
 		IN p_sort_order VARCHAR(4)
 	)
@@ -3095,6 +3028,12 @@ DELIMITER ;
 			IF p_stock_level = '' OR p_stock_level = 'ALL' THEN SET p_stock_level = NULL; END IF;
 		END IF;
 
+		-- Sanitize vehicle type filter
+		IF p_vehicle_type IS NOT NULL THEN
+			SET p_vehicle_type = UPPER(TRIM(p_vehicle_type));
+			IF p_vehicle_type = '' OR p_vehicle_type = 'ALL' THEN SET p_vehicle_type = NULL; END IF;
+		END IF;
+
 		-- Sanitize sort parameters
 		SET p_sort_by = LOWER(IFNULL(TRIM(p_sort_by), 'part_id'));
 		SET p_sort_order = UPPER(IFNULL(TRIM(p_sort_order), 'ASC'));
@@ -3109,6 +3048,7 @@ DELIMITER ;
 			part_code,
 			part_name,
 			category,
+			vehicle_types,
 			unit,
 			unit_price,
 			quantity_on_hand,
@@ -3123,7 +3063,7 @@ DELIMITER ;
 			date_added
 		FROM parts_inventory
 		WHERE status = 'ACTIVE'
-		  -- Search Filter (Matches raw part_id, formatted P-001 ID, part_code, part_name, and category)
+		  -- Search Filter (Matches part_id, formatted P-001 ID, part_code, part_name, category, or vehicle_types)
 		  AND (
 				p_search IS NULL
 				OR CAST(part_id AS CHAR) = p_search
@@ -3131,6 +3071,7 @@ DELIMITER ;
 				OR part_code LIKE CONCAT('%', p_search, '%')
 				OR part_name LIKE CONCAT('%', p_search, '%')
 				OR category LIKE CONCAT('%', p_search, '%')
+				OR FIND_IN_SET(p_search, vehicle_types) > 0
 		  )
 		  -- Stock Level Filter
 		  AND (
@@ -3138,6 +3079,11 @@ DELIMITER ;
 				OR (p_stock_level = 'LOW_STOCK' AND quantity_on_hand <= 5)
 				OR (p_stock_level = 'MODERATE' AND quantity_on_hand BETWEEN 6 AND 20)
 				OR (p_stock_level = 'IN_STOCK' AND quantity_on_hand >= 21)
+		  )
+		  -- Vehicle Type Filter (CAR, MOTORCYCLE, TRICYCLE)
+		  AND (
+				p_vehicle_type IS NULL
+				OR FIND_IN_SET(p_vehicle_type, vehicle_types) > 0
 		  )
 		ORDER BY 
 			-- Sorting by Part Name
@@ -3148,11 +3094,11 @@ DELIMITER ;
 			CASE WHEN p_sort_by = 'qty' AND p_sort_order = 'ASC' THEN quantity_on_hand END ASC,
 			CASE WHEN p_sort_by = 'qty' AND p_sort_order = 'DESC' THEN quantity_on_hand END DESC,
 
-			-- Sorting by Unit Cost
+			-- Sorting by Unit Price
 			CASE WHEN p_sort_by = 'cost' AND p_sort_order = 'ASC' THEN unit_price END ASC,
 			CASE WHEN p_sort_by = 'cost' AND p_sort_order = 'DESC' THEN unit_price END DESC,
 
-			-- Sorting by Stock Level Rank (Low Stock -> Moderate -> In Stock)
+			-- Sorting by Stock Level Rank
 			CASE WHEN p_sort_by = 'stock_level' AND p_sort_order = 'ASC' THEN 
 				CASE 
 					WHEN quantity_on_hand <= 5 THEN 1
@@ -3806,6 +3752,43 @@ BEGIN
     SELECT LAST_INSERT_ID() AS mechanic_id;
 
     COMMIT;
+END$$
+
+DELIMITER ;
+DROP PROCEDURE IF EXISTS sp_get_services;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_get_services(
+    IN p_search VARCHAR(255),
+    IN p_status VARCHAR(20)
+)
+BEGIN
+    -- Blank search -> no search filter
+    SET p_search = NULLIF(TRIM(p_search), '');
+
+    -- NULL or blank -> ACTIVE (safe default for pickers); ALL -> no status filter
+    SET p_status = UPPER(TRIM(IFNULL(NULLIF(TRIM(p_status), ''), 'ACTIVE')));
+
+    IF p_status NOT IN ('ACTIVE', 'INACTIVE', 'ALL') THEN
+        SIGNAL SQLSTATE '45000' SET MYSQL_ERRNO = 1644,
+            MESSAGE_TEXT = 'Invalid status filter. Use ACTIVE, INACTIVE or ALL.';
+    END IF;
+
+    SELECT
+        service_catalog_id,
+        service_name,
+        description,
+        standard_labor_cost,
+        status
+    FROM service_catalog
+    WHERE (p_status = 'ALL' OR status = p_status)
+      AND (
+            p_search IS NULL
+            OR service_name LIKE CONCAT('%', p_search, '%')
+            OR description  LIKE CONCAT('%', p_search, '%')
+      )
+    ORDER BY service_name ASC;
 END$$
 
 DELIMITER ;

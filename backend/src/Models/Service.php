@@ -17,32 +17,30 @@ class Service {
      * @param string|null $search
      * @return array
      */
-    public function getAllServices($search = null) {
+    public function getAllServices($search = null, $status = 'ACTIVE') {
         try {
-            $searchQuery = !empty($search) ? '%' . trim($search) . '%' : null;
-
-            if ($searchQuery) {
-                $query = "SELECT service_catalog_id, service_name, description, standard_labor_cost 
-                          FROM service_catalog 
-                          WHERE service_name LIKE ? OR description LIKE ?
-                          ORDER BY service_name ASC";
-                $stmt = self::$conn->prepare($query);
-                $stmt->bind_param("ss", $searchQuery, $searchQuery);
-            } else {
-                $query = "SELECT service_catalog_id, service_name, description, standard_labor_cost 
-                          FROM service_catalog 
-                          ORDER BY service_name ASC";
-                $stmt = self::$conn->prepare($query);
-            }
+            $stmt = self::$conn->prepare("CALL sp_get_services(?, ?)");
 
             if (!$stmt) {
-                throw new Exception("Prepare failed: " . self::$conn->error);
+                throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
             }
 
-            $stmt->execute();
+            $stmt->bind_param("ss", $search, $status);
+
+            if (!$stmt->execute()) {
+                throw new Exception($stmt->error, $stmt->errno);
+            }
+
             $result = $stmt->get_result();
             $services = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
             $stmt->close();
+
+            // Clear connection buffer for stored procedure execution
+            while (self::$conn->more_results() && self::$conn->next_result()) {
+                if ($extra = self::$conn->use_result()) {
+                    $extra->free();
+                }
+            }
 
             return [
                 "success" => true,
@@ -52,6 +50,7 @@ class Service {
         } catch (Exception $e) {
             return [
                 "success" => false,
+                "code"    => (int)$e->getCode(),
                 "error"   => "Failed to retrieve service catalog: " . $e->getMessage()
             ];
         }

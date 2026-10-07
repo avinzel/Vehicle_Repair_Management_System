@@ -61,21 +61,27 @@
          * @param string $search  Optional search keyword
          * @return array
          */
-        public static function getAllParts($status = 'ALL', $search = '') {
-            $query = "CALL sp_get_parts_inventory(?, ?)";
+        public static function getAllParts($status = 'ALL', $search = '', $orderId = null) {
+            $query = "CALL sp_get_parts_inventory(?, ?, ?)";
+            $stmt = null;
 
             try {
                 $stmt = self::$conn->prepare($query);
 
                 if (!$stmt) {
-                    throw new Exception("Prepare failed: " . self::$conn->error);
+                    throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
                 }
 
-                $statusVal = empty($status) ? 'ALL' : $status;
-                $searchVal = empty($search) ? '' : $search;
+                $statusVal  = empty($status) ? 'ALL' : $status;
+                $searchVal  = empty($search) ? '' : $search;
+                $orderIdVal = ($orderId !== null && $orderId !== '') ? (int)$orderId : null;
 
-                $stmt->bind_param("ss", $statusVal, $searchVal);
-                $stmt->execute();
+                $stmt->bind_param("ssi", $statusVal, $searchVal, $orderIdVal);
+
+                // PHP < 8.1 returns false instead of throwing
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error, $stmt->errno);
+                }
 
                 $result = $stmt->get_result();
                 $parts = [];
@@ -88,6 +94,7 @@
                 }
 
                 $stmt->close();
+                $stmt = null;
 
                 // Clear buffer for stored procedure execution
                 while (self::$conn->more_results() && self::$conn->next_result()) {
@@ -101,23 +108,19 @@
                     "data"    => $parts
                 ];
             } catch (Exception $e) {
+                if ($stmt) {
+                    $stmt->close();
+                }
+
                 return [
                     "success" => false,
+                    "code"    => (int)$e->getCode(),
                     "error"   => "Error fetching parts: " . $e->getMessage()
                 ];
-            }    
+            }
         }
-        /**
-         * Fetches parts inventory with support for searching, stock level filtering, and dynamic sorting.
-         * 
-         * @param string|null $search      Search keyword (ID, Code, Name, Category)
-         * @param string|null $stockLevel  Filter by 'LOW_STOCK', 'MODERATE', 'IN_STOCK', or 'ALL'
-         * @param string      $sortBy      Field to sort by ('name', 'qty', 'cost', 'stock_level')
-         * @param string      $sortOrder   Sort direction ('ASC' or 'DESC')
-         * @return array
-         */
-public static function getPartsInventoryAdmin($search = null, $stockLevel = null, $sortBy = 'name', $sortOrder = 'ASC') {
-            $query = "CALL sp_get_parts_inventory_admin(?, ?, ?, ?)";
+        public static function getPartsInventoryAdmin($search = null, $stockLevel = null, $vehicleType = null, $sortBy = 'name', $sortOrder = 'ASC') {
+            $query = "CALL sp_get_parts_inventory_admin(?, ?, ?, ?, ?)";
 
             try {
                 $stmt = self::$conn->prepare($query);
@@ -126,12 +129,13 @@ public static function getPartsInventoryAdmin($search = null, $stockLevel = null
                     throw new Exception("Prepare failed: " . self::$conn->error);
                 }
 
-                $searchVal     = empty($search) ? null : $search;
-                $stockLevelVal = empty($stockLevel) ? null : $stockLevel;
-                $sortByVal     = empty($sortBy) ? 'name' : $sortBy;
-                $sortOrderVal  = strtoupper($sortOrder) === 'DESC' ? 'DESC' : 'ASC';
+                $searchVal      = empty($search) ? null : $search;
+                $stockLevelVal  = empty($stockLevel) ? null : $stockLevel;
+                $vehicleTypeVal = empty($vehicleType) ? null : $vehicleType;
+                $sortByVal      = empty($sortBy) ? 'name' : $sortBy;
+                $sortOrderVal   = strtoupper($sortOrder) === 'DESC' ? 'DESC' : 'ASC';
 
-                $stmt->bind_param("ssss", $searchVal, $stockLevelVal, $sortByVal, $sortOrderVal);
+                $stmt->bind_param("sssss", $searchVal, $stockLevelVal, $vehicleTypeVal, $sortByVal, $sortOrderVal);
                 $stmt->execute();
 
                 $result = $stmt->get_result();
@@ -146,7 +150,7 @@ public static function getPartsInventoryAdmin($search = null, $stockLevel = null
 
                 $stmt->close();
 
-                // Clear buffer for stored procedure execution
+                // Clear connection buffer for stored procedure execution
                 while (self::$conn->more_results() && self::$conn->next_result()) {
                     if ($extraResult = self::$conn->use_result()) {
                         $extraResult->free();

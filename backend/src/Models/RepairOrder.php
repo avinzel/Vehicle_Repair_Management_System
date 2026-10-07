@@ -380,15 +380,15 @@
                 ];
             }
         }
-        // POST: Log part to repair order (updates order status to AWAITING_PARTS if stock is insufficient)
+            // POST: Log part to repair order (updates order status to AWAITING_PARTS if stock is insufficient)
         public static function logPart($orderId, $partId, $quantity) {
-            $query = "CALL sp_log_repair_order_part(?, ?, ?)";
+            $stmt = null;
 
             try {
-                $stmt = self::$conn->prepare($query);
+                $stmt = self::$conn->prepare("CALL sp_log_repair_order_part(?, ?, ?)");
 
                 if (!$stmt) {
-                    throw new Exception("Prepare failed: " . self::$conn->error);
+                    throw new \Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
                 }
 
                 $orderIdVal = (int)$orderId;
@@ -396,25 +396,46 @@
                 $qtyVal     = (int)$quantity;
 
                 $stmt->bind_param("iii", $orderIdVal, $partIdVal, $qtyVal);
-                $stmt->execute();
-                $stmt->close();
 
-                // Clear stored procedure multi-result set buffer to prevent out of sync errors
-                while (self::$conn->more_results() && self::$conn->next_result()) {
-                    if ($extraResult = self::$conn->use_result()) {
-                        $extraResult->free();
-                    }
+                // PHP < 8.1 returns false instead of throwing
+                if (!$stmt->execute()) {
+                    throw new \Exception($stmt->error, $stmt->errno);
                 }
+
+                $stmt->close();
+                $stmt = null;
+
+                self::clearBuffer();
 
                 return [
                     "success" => true,
                     "message" => "Part processed successfully."
                 ];
+
             } catch (\Exception $e) {
+                if ($stmt) {
+                    $stmt->close();
+                }
+                self::clearBuffer();
+
+                $code = (int)$e->getCode();
+
                 return [
                     "success" => false,
-                    "error"   => "Error logging part: " . $e->getMessage()
+                    "code"    => $code,
+                    // 1644 = a business rule from the procedure (safe to show as is)
+                    "error"   => $code === 1644
+                        ? $e->getMessage()
+                        : "Error logging part: " . $e->getMessage()
                 ];
+            }
+        }
+
+        private static function clearBuffer() {
+            while (self::$conn->more_results() && self::$conn->next_result()) {
+                if ($extraResult = self::$conn->use_result()) {
+                    $extraResult->free();
+                }
             }
         }
         public function getPartsByRepairOrder($orderId) {
