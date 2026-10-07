@@ -760,7 +760,10 @@ END //
 
 DELIMITER ;
 
+USE VehicleRepair;
+
 DELIMITER //
+
 DROP PROCEDURE IF EXISTS sp_get_billing_and_invoicing //
 
 CREATE PROCEDURE sp_get_billing_and_invoicing(
@@ -797,14 +800,15 @@ BEGIN
         GROUP BY ros.order_id
     ) sc_sum ON ro.order_id = sc_sum.order_id
 
-    -- Subquery for parts total using quantity_used
+    -- Subquery for parts total using quantity_used (ISSUED parts only)
     LEFT JOIN (
         SELECT order_id, SUM(unit_price * quantity_used) AS parts_cost
         FROM repair_order_parts
+        WHERE status = 'ISSUED'
         GROUP BY order_id
     ) parts_sum ON ro.order_id = parts_sum.order_id
 
-    WHERE ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', "READY_FOR_RELEASE")
+    WHERE ro.status IN ('READY_TO_INVOICE', 'AWAITING_PAYMENT', 'READY_FOR_RELEASE')
       AND (
             p_search IS NULL
             OR CONCAT('RO-', ro.order_id) LIKE CONCAT('%', p_search, '%')
@@ -820,7 +824,7 @@ BEGIN
     ORDER BY ro.date_received DESC;
 END //
 
-DELIMITER //
+DELIMITER ;
 
 DROP PROCEDURE IF EXISTS sp_get_order_history //
 
@@ -892,6 +896,7 @@ END //
 DELIMITER ;
 
 
+
 DELIMITER //
 
 DROP PROCEDURE IF EXISTS sp_get_repair_order_details //
@@ -906,17 +911,16 @@ BEGIN
         DATE_FORMAT(ro.date_received, '%b %d, %Y') AS formatted_date,
         ro.status,
         ro.complaint,
-		ro.mileage_at_service, 
+        ro.mileage_at_service, 
         ro.diagnosis_notes,
         DATE_FORMAT(ro.diagnosis_completed_at, '%b %d, %Y %h:%i %p') AS formatted_diagnosis_date,
         CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
         CONCAT(v.manufacturer, ' ', v.model, ' ', IFNULL(v.year_model, '')) AS vehicle_name,
         v.plate_number,
         v.vehicle_type,
-		v.vin_number,    
+        v.vin_number,    
+
         -- 1. Assigned Mechanics Array
-        -- position joined via rom.position_id — position is chosen per
-        -- assignment again, not fixed on the mechanic.
         CONCAT('[', 
             IFNULL(
                 (
@@ -963,7 +967,7 @@ BEGIN
             ), 
         ']') AS services,
 
-        -- 3. Itemized Parts Array
+        -- 3. Itemized Parts Array (ISSUED only)
         CONCAT('[', 
             IFNULL(
                 (
@@ -982,6 +986,7 @@ BEGIN
                     FROM repair_order_parts rop
                     JOIN parts_inventory pi ON rop.part_id = pi.part_id
                     WHERE rop.order_id = p_order_id
+                      AND rop.status = 'ISSUED'
                 ), 
                 ''
             ), 
@@ -1003,6 +1008,7 @@ BEGIN
                 SELECT SUM(quantity_used * unit_price) 
                 FROM repair_order_parts 
                 WHERE order_id = p_order_id
+                  AND status = 'ISSUED'
             ), 
             0.00
         ) AS total_parts_cost,
@@ -1021,6 +1027,7 @@ BEGIN
                     SELECT SUM(quantity_used * unit_price) 
                     FROM repair_order_parts 
                     WHERE order_id = p_order_id
+                      AND status = 'ISSUED'
                 ), 0.00
             )
         ) AS grand_total
