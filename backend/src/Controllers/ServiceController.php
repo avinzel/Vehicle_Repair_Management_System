@@ -203,9 +203,125 @@ class ServiceController {
     //     exit();
     // }
 
-    /**
-     * Helper method to decode incoming JSON request body
-     */
+    public function addService() {
+        header('Content-Type: application/json');
+        $input = $this->getInputData();
+        $validated = $this->validateServiceInput($input);
+        if (isset($validated['error'])) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "error" => $validated['error']]);
+            return;
+        }
+
+        $result = self::$model->createService(
+            $validated['service_name'],
+            $validated['description'],
+            $validated['standard_labor_cost']
+        );
+        if ($result['success']) {
+            http_response_code(201);
+            echo json_encode([
+                "status" => "success",
+                "message" => "Service created successfully",
+                "service_catalog_id" => $result['service_catalog_id']
+            ]);
+            return;
+        }
+        if (($result['code'] ?? 0) === 1062) {
+            http_response_code(409);
+            echo json_encode(["status" => "error", "error" => "A service with this name already exists"]);
+            return;
+        }
+        error_log($result['error'] ?? 'Service creation failed');
+        http_response_code(500);
+        echo json_encode(["status" => "error", "error" => "Failed to create service"]);
+    }
+
+    public function updateService() {
+        header('Content-Type: application/json');
+        $input = $this->getInputData();
+        $serviceId = $input['service_catalog_id'] ?? null;
+        if (filter_var($serviceId, FILTER_VALIDATE_INT) === false || (int)$serviceId <= 0) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "error" => "A valid service_catalog_id is required"]);
+            return;
+        }
+
+        $validated = $this->validateServiceInput($input);
+        if (isset($validated['error'])) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "error" => $validated['error']]);
+            return;
+        }
+        $result = self::$model->updateService(
+            (int)$serviceId,
+            $validated['service_name'],
+            $validated['description'],
+            $validated['standard_labor_cost']
+        );
+        if (!empty($result['success'])) {
+            http_response_code(200);
+            echo json_encode(["status" => "success", "message" => "Service updated successfully"]);
+        } elseif (!empty($result['not_found'])) {
+            http_response_code(404);
+            echo json_encode(["status" => "error", "error" => "Active service not found"]);
+        } elseif (($result['code'] ?? 0) === 1062) {
+            http_response_code(409);
+            echo json_encode(["status" => "error", "error" => "A service with this name already exists"]);
+        } else {
+            error_log($result['error'] ?? 'Service update failed');
+            http_response_code(500);
+            echo json_encode(["status" => "error", "error" => "Failed to update service"]);
+        }
+    }
+
+    public function deleteService() {
+        header('Content-Type: application/json');
+        $input = $this->getInputData();
+        $serviceId = $input['service_catalog_id'] ?? null;
+        if (filter_var($serviceId, FILTER_VALIDATE_INT) === false || (int)$serviceId <= 0) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "error" => "A valid service_catalog_id is required"]);
+            return;
+        }
+
+        $result = self::$model->softDeleteService((int)$serviceId);
+        if (is_array($result)) {
+            error_log($result['error'] ?? 'Service deactivation failed');
+            http_response_code(500);
+            echo json_encode(["status" => "error", "error" => "Failed to deactivate service"]);
+        } elseif ($result > 0) {
+            http_response_code(204);
+        } else {
+            http_response_code(404);
+            echo json_encode(["status" => "error", "error" => "Active service not found"]);
+        }
+    }
+
+    private function validateServiceInput(array $input) {
+        $name = trim((string)($input['service_name'] ?? ''));
+        $description = isset($input['description']) && trim((string)$input['description']) !== ''
+            ? trim((string)$input['description'])
+            : null;
+        $cost = $input['standard_labor_cost'] ?? null;
+
+        if ($name === '' || strlen($name) > 150) {
+            return ["error" => "service_name is required and must be 150 characters or fewer"];
+        }
+        if ($description !== null && strlen($description) > 255) {
+            return ["error" => "description must be 255 characters or fewer"];
+        }
+        if (!is_numeric($cost) || !is_finite((float)$cost) || (float)$cost < 0) {
+            return ["error" => "standard_labor_cost must be a non-negative number"];
+        }
+
+        return [
+            'service_name' => $name,
+            'description' => $description,
+            'standard_labor_cost' => (float)$cost
+        ];
+    }
+
     public function getInputData() {
         $input = json_decode(file_get_contents('php://input'), true);
         return $input ?? [];

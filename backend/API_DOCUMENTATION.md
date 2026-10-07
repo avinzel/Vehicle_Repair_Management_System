@@ -85,9 +85,9 @@ Common HTTP status codes:
 | `reports` | GET | Dashboard analytics and admin reports | Yes | Categories-based |
 | `customers` | GET | Customer list and profile lookup | Yes | Supports detail lookup |
 | `mechanics` | GET / POST / PUT / DELETE | Mechanic records and assignment support | Yes | Some role restrictions |
-| `parts` | GET / POST | Inventory list and restock | Yes | Admin view available |
+| `parts` | GET / POST / PUT / DELETE | Inventory list and management | Yes | Create/edit/delete are admin-only |
 | `invoices` | GET / POST | Invoice generation and payment flows | Yes | Payment and release sub-actions |
-| `services` | GET | Service catalog | Yes | Read-only at the moment |
+| `services` | GET / POST / PUT / DELETE | Service catalog management | Yes | Writes are admin-only |
 | `mechanic-position` | GET | Mechanic position catalog | Yes | Read-only at the moment |
 
 ## 4) Query parameter conventions
@@ -581,7 +581,58 @@ Supported sort order:
 - `ASC`
 - `DESC`
 
-### 8.3 Restock inventory
+### 8.3 Add part
+
+- `POST /api.php?action=parts`
+- Admin role (`role_id = 1`) required.
+- Request body uses the existing part form fields:
+
+```json
+{
+  "part_name": "Engine Oil (1L)",
+  "unit": "bottle",
+  "quantity_on_hand": 10,
+  "unit_price": 350
+}
+```
+
+Required: `part_name` (up to 150 characters), `unit` (up to 20 characters), `quantity_on_hand` (non-negative integer), and `unit_price` (non-negative number). The current form uses `pc`, `set`, `pair`, `liter`, or `bottle`.
+
+Part names are compared case-insensitively after trimming; a duplicate name returns HTTP `409` with `A part with this name already exists.` This check includes inactive records.
+
+The backend generates `part_code` and `batch_number` when omitted. Optional schema fields are `part_code`, `category`, `vehicle_types` (comma-separated `CAR`, `MOTORCYCLE`, and/or `TRICYCLE`), `reorder_level` (non-negative integer; defaults to `5`), and `batch_number`.
+
+Returns `201` with `part_id`; duplicate supplied part codes return `409`.
+
+### 8.4 Edit part
+
+- `PUT /api.php?action=parts`
+- Admin role (`role_id = 1`) required.
+- JSON body:
+
+```json
+{
+  "part_id": 7,
+  "part_name": "Engine Oil (1L)",
+  "unit": "bottle",
+  "quantity_on_hand": 10,
+  "unit_price": 350
+}
+```
+
+All fields shown are required. Only active parts can be edited. Returns `200` on success, `400` for invalid fields, and `404` if no active part matches.
+Updating to another existing part name returns HTTP `409` with `A part with this name already exists.`
+
+### 8.5 Delete part
+
+- `DELETE /api.php?action=parts`
+- Admin role (`role_id = 1`) required.
+- JSON body: `{"part_id":7}`
+- Soft-deletes by setting `status` to `INACTIVE`; the row and historical repair-order references remain.
+- Returns `204` on success or `404` if no active part matches.
+- Returns `409` if any associated `repair_order_parts` row is pending. The current schema names this state `PENDING_PARTS`; the API check also recognizes `PENDING` for compatible databases.
+
+### 8.6 Restock inventory
 
 - `POST /api.php?action=parts&post-method=restock`
 - Auth required
@@ -659,7 +710,6 @@ Optional:
 ```json
 {
   "mechanic_id": 3,
-  "user_id": 8,
   "specialization": "Engine",
   "date_hired": "2025-01-15",
   "status": "ACTIVE"
@@ -669,9 +719,15 @@ Optional:
 Required:
 
 - `mechanic_id`
-- `user_id`
 - `specialization`
-- `date_hired`
+- `date_hired` (`YYYY-MM-DD`)
+
+Optional:
+
+- `status` (`ACTIVE` or `INACTIVE`; defaults to `ACTIVE`)
+
+The linked `user_id` is looked up from the mechanic record; it is not required from the edit form. Mechanic and linked user statuses update together.
+Setting status to `INACTIVE` is rejected with HTTP `409` if the mechanic has an active repair order (`PENDING_DIAGNOSIS`, `AWAITING_DIAGNOSIS`, `PENDING_MECHANICS`, `IN_PROGRESS`, or `AWAITING_PARTS`).
 
 ### 9.5 Delete mechanic record
 
@@ -686,6 +742,8 @@ Required:
 ```
 
 This performs a soft delete.
+- Both `mechanics.status` and the linked `users.status` are set to `INACTIVE` in one transaction.
+- Deactivation is rejected with HTTP `409` if the mechanic has an active repair order (`PENDING_DIAGNOSIS`, `AWAITING_DIAGNOSIS`, `PENDING_MECHANICS`, `IN_PROGRESS`, or `AWAITING_PARTS`).
 
 ## 10) Customers
 
@@ -762,6 +820,8 @@ Optional:
 - `middle_name`
 - `status`
 
+Setting `status` to `INACTIVE` is rejected with HTTP `409` if the user’s linked mechanic has an active order. The active mechanic-work statuses checked by the backend are `PENDING_DIAGNOSIS`, `AWAITING_DIAGNOSIS`, `PENDING_MECHANICS`, `IN_PROGRESS`, and `AWAITING_PARTS`.
+
 ### 11.3 Delete user
 
 - `DELETE /api.php?action=users`
@@ -774,7 +834,8 @@ Optional:
 }
 ```
 
-This is a soft delete. The currently authenticated user cannot delete their own account.
+This is a soft delete. The currently authenticated user cannot delete their own account. If the user has an associated mechanic, both user and mechanic statuses are set to `INACTIVE` atomically.
+If that mechanic still has an active repair order (`PENDING_DIAGNOSIS`, `AWAITING_DIAGNOSIS`, `PENDING_MECHANICS`, `IN_PROGRESS`, or `AWAITING_PARTS`), deactivation is rejected with HTTP `409` until the order is completed or reassigned.
 
 ## 12) Reports and analytics
 
@@ -868,7 +929,48 @@ Action: `services`
   - `search`
 - Returns the service catalog entries.
 
-At the moment, the created update/add endpoints are commented out and not exposed in the router.
+### 13.1 Add service
+
+- `POST /api.php?action=services`
+- Admin role (`role_id = 1`) required.
+- JSON body:
+
+```json
+{
+  "service_name": "Brake System Overhaul",
+  "description": "Inspect and overhaul the brake system.",
+  "standard_labor_cost": 2500
+}
+```
+
+Required: `service_name` (up to 150 characters) and `standard_labor_cost` (non-negative number).
+Optional: `description` (up to 255 characters; blank values are stored as `NULL`).
+Returns `201` with `service_catalog_id`; duplicate names return `409`.
+
+### 13.2 Edit service
+
+- `PUT /api.php?action=services`
+- Admin role (`role_id = 1`) required.
+- JSON body uses the same fields as add, plus `service_catalog_id`:
+
+```json
+{
+  "service_catalog_id": 4,
+  "service_name": "Brake System Overhaul",
+  "description": "Inspect and overhaul the brake system.",
+  "standard_labor_cost": 2500
+}
+```
+
+Returns `200` on success, `400` for invalid fields, `404` if the active service is not found, and `409` for a duplicate name.
+
+### 13.3 Delete service
+
+- `DELETE /api.php?action=services`
+- Admin role (`role_id = 1`) required.
+- JSON body: `{"service_catalog_id":4}`
+- Soft-deletes by setting `service_catalog.status` to `INACTIVE`; the service row is retained.
+- Returns `204` on success or `404` if no active service matches.
 
 ## 14) Mechanic positions
 
@@ -890,19 +992,14 @@ Not implemented in the current dispatcher:
 - `POST /api.php?action=customers`
 - `PUT /api.php?action=customers`
 - `DELETE /api.php?action=customers`
-- `PUT /api.php?action=parts`
-- `DELETE /api.php?action=parts`
-- `POST /api.php?action=services`
-- `PUT /api.php?action=services`
-- `DELETE /api.php?action=services`
 - `POST /api.php?action=mechanic-position`
 - `PUT /api.php?action=mechanic-position`
 - `DELETE /api.php?action=mechanic-position`
 
-Known implementation note:
+Database upgrade required for existing installations:
 
-- The `mechanics` route branch currently has no terminating `break` before the `parts` route, which can cause GET results to continue into another handler in some situations.
-- The role-based permission logic exists, but some route-level checks rely on HTTP method naming rather than the configured permission map.
+- Existing `parts_inventory.status` enums contain `ACTIVE` and legacy `DISCONTINUED`, but not `INACTIVE`. Run [`src/Config/parts_status_inactive_migration.sql`](./src/Config/parts_status_inactive_migration.sql) once on an existing database. Fresh databases created from either schema script already include `INACTIVE`.
+- Role permissions are keyed to actual HTTP verbs (`PUT`), so the configured restrictions apply to edit routes.
 
 ## 16) Order lifecycle summary
 

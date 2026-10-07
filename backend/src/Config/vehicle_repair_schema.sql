@@ -107,7 +107,7 @@
 		reorder_level    INT DEFAULT 5,
 		batch_number     VARCHAR(50) NOT NULL,
 		date_added       DATETIME DEFAULT CURRENT_TIMESTAMP,
-		status           ENUM('ACTIVE','DISCONTINUED') DEFAULT 'ACTIVE',
+		status           ENUM('ACTIVE','INACTIVE','DISCONTINUED') NOT NULL DEFAULT 'ACTIVE',
 		CONSTRAINT chk_parts_vehicle_types CHECK (vehicle_types <> '')
 	);
 	-- =====================================================================
