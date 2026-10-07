@@ -6,6 +6,7 @@ import { DetailDrawer } from "@/components/DetailDrawer";
 import { OrderCard } from "@/components/OrderCard";
 import { MechanicOrderDetail } from "@/components/MechanicOrderDetail";
 import { getMyPositionOnOrder } from "@/components/MechanicOrderStages";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 // Statuses a mechanic actually has something to do at. Everything past
 // IN_PROGRESS is advisor/billing territory (invoicing, payment, release)
@@ -20,6 +21,52 @@ import { getMyPositionOnOrder } from "@/components/MechanicOrderStages";
 const VISIBLE_TO_MECHANIC_STATUSES = ["AWAITING_DIAGNOSIS", "PENDING_MECHANICS", "IN_PROGRESS", "AWAITING_PARTS"];
 
 export function AssignedOrders() {
+  // POST action=repair-orders&post-method=mark-ready-to-invoice
+  // -> RepairOrderController::markReadyToInvoice -> sp_mark_ready_to_invoice.
+  // The SP rejects the call while any part is still PENDING_PARTS, and
+  // stamps date_completed on success.
+  const [completeOrderId, setCompleteOrderId] = useState(null);
+  const [completing, setCompleting] = useState(false);
+  const [completeError, setCompleteError] = useState(null);
+
+  function requestComplete(orderId) {
+    setCompleteError(null);
+    setCompleteOrderId(orderId);
+  }
+
+  async function handleMarkComplete() {
+    const order = assignedOrders.find((o) => o.id === completeOrderId);
+    if (!order) return;
+
+    setCompleting(true);
+    setCompleteError(null);
+    try {
+      const response = await fetch(
+        "http://localhost:8000/api.php?action=repair-orders&post-method=mark-ready-to-invoice",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order_id: Number(order.rawId ?? order.id) }),
+        }
+      );
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok || (json.status && json.status !== "success")) {
+        throw new Error(json.error ?? json.message ?? `Request failed (HTTP ${response.status})`);
+      }
+
+      setCompleteOrderId(null);
+      getTableData(); // order leaves the actionable list, which also closes the drawer
+    } catch (err) {
+      console.error("Failed to mark job complete:", err);
+      setCompleteError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setCompleting(false);
+    }
+  }
+
+
   // tableData is the single source of truth for the mechanic's assigned
   // orders. MechanicPage fetches + normalizes it (and builds each order's
   // `team`), so the sidebar badge and this list can never disagree.
@@ -87,7 +134,7 @@ export function AssignedOrders() {
             onClick={() => setSelectedOrderId(order.id)}
             roleBadge={getMyPositionOnOrder(order, currentUserName)}
             notesPreview={order.diagnosticNotes}
-            footerNote={partsSummary(order)}
+            footerNote={`${order.parts_logged_count ?? 0} part${order.parts_logged_count === 1 ? "" : "s"} logged · ${order.total_mechanics_count ?? order.team?.length ?? 0} mechanic${(order.total_mechanics_count ?? 1) === 1 ? "" : "s"} on job`}
           />
         ))}
 
@@ -111,8 +158,24 @@ export function AssignedOrders() {
           onLogParts={handleLogParts}
           allowDiagnosisForm={false}
           onOpenDiagnosticLog={handleOpenDiagnosticLog}
+          onRequestComplete={requestComplete}
         />
       </DetailDrawer>
+      <ConfirmDialog
+        open={completeOrderId !== null}
+        onOpenChange={(open) => {
+          if (!open && !completing) {
+            setCompleteOrderId(null);
+            setCompleteError(null);
+          }
+        }}
+        title="Mark job complete?"
+        description="Hand this job over for billing? It leaves your list and can't be moved back to In Progress from here."
+        confirmLabel="Confirm"
+        loading={completing}
+        error={completeError}
+        onConfirm={handleMarkComplete}
+      />
     </div>
   );
 }

@@ -92,12 +92,6 @@ export function OrderHistory() {
       </div>
 
       <div className="p-6 space-y-3">
-        {!loading && !error && (
-          <p className="text-sm text-muted-foreground">
-            {orders.length} fulfilled order{orders.length === 1 ? "" : "s"}
-            {totalRevenue ? ` · ${totalRevenue} total revenue` : ""}
-          </p>
-        )}
 
         <Card className="py-0 gap-0 overflow-hidden">
           <Table>

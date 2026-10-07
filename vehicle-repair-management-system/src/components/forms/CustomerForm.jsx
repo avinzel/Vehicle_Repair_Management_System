@@ -9,6 +9,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const DEFAULT_CUSTOMER_VALUES = {
   firstName: "",
+  middleName: "",
   lastName: "",
   phone: "",
   email: "",
@@ -24,6 +25,8 @@ function validateField(name, value) {
       if (!trimmed) return "First name is required";
       if (trimmed.length < 2) return "First name must be at least 2 characters";
       return "";
+    // middleName is intentionally NOT validated: it's optional (nullable
+    // customers.middle_name) and a single initial like "L" is acceptable.
     case "lastName":
       if (!trimmed) return "Last name is required";
       if (trimmed.length < 2) return "Last name must be at least 2 characters";
@@ -45,6 +48,7 @@ function validateField(name, value) {
   }
 }
 
+// middleName is left out on purpose so it never blocks "Next".
 const FIELD_NAMES = ["firstName", "lastName", "phone", "email", "address"];
 
 // `values` + `onFieldChange` come from the parent stepper so the data
@@ -90,32 +94,47 @@ export const CustomerForm = forwardRef(function CustomerForm(
       <h3 className="text-lg font-semibold mb-6">Customer Information</h3>
 
       <form className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="firstName">First Name</Label>
-          <Input
-            id="firstName"
-            placeholder="Juan"
-            value={values.firstName}
-            onChange={handleChange("firstName")}
-            aria-invalid={!!showError("firstName")}
-          />
-          {showError("firstName") && (
-            <p className="text-sm text-destructive">{errors.firstName}</p>
-          )}
-        </div>
+        {/* Name row: first / middle (optional) / last */}
+        <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-5">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="firstName">First Name</Label>
+            <Input
+              id="firstName"
+              placeholder="Juan"
+              value={values.firstName}
+              onChange={handleChange("firstName")}
+              aria-invalid={!!showError("firstName")}
+            />
+            {showError("firstName") && (
+              <p className="text-sm text-destructive">{errors.firstName}</p>
+            )}
+          </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="lastName">Last Name</Label>
-          <Input
-            id="lastName"
-            placeholder="Dela Cruz"
-            value={values.lastName}
-            onChange={handleChange("lastName")}
-            aria-invalid={!!showError("lastName")}
-          />
-          {showError("lastName") && (
-            <p className="text-sm text-destructive">{errors.lastName}</p>
-          )}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="middleName">
+              Middle Name <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <Input
+              id="middleName"
+              placeholder="Santos"
+              value={values.middleName ?? ""}
+              onChange={handleChange("middleName")}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="lastName">Last Name</Label>
+            <Input
+              id="lastName"
+              placeholder="Dela Cruz"
+              value={values.lastName}
+              onChange={handleChange("lastName")}
+              aria-invalid={!!showError("lastName")}
+            />
+            {showError("lastName") && (
+              <p className="text-sm text-destructive">{errors.lastName}</p>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-col gap-1.5">

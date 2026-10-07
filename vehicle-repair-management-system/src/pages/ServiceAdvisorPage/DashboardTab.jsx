@@ -64,7 +64,7 @@ function getOrderLink(status, formattedOrderId) {
 
 function formatCurrency(amount) {
     if (amount == null) return '—';
-    return `${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+    return `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 }
 
 

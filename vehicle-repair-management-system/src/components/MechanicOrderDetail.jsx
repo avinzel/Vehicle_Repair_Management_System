@@ -13,7 +13,7 @@ import { resolveMechanicStage, getMyPositionOnOrder } from "@/components/Mechani
 //    screenshots.
 //  - "team": Work Orders view. Plain order id as title, badge shows the
 //    viewer's own ROLE on this job, subtitle is "Vehicle · Plate".
-export function MechanicOrderDetail({ order, currentUserName, onUpdateOrder, onLogParts, allowDiagnosisForm = true, onOpenDiagnosticLog }) {
+export function MechanicOrderDetail({ order, currentUserName, onUpdateOrder, onLogParts, allowDiagnosisForm = true, onOpenDiagnosticLog, onRequestComplete  }) {
   if (!order) return null;
 
   const { kind, Component, isUpdate } = resolveMechanicStage(order, currentUserName, { allowDiagnosisForm });
@@ -56,7 +56,7 @@ export function MechanicOrderDetail({ order, currentUserName, onUpdateOrder, onL
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-3 uppercase">
+          <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
             {kind === "diagnosis" ? "Vehicle Information" : "Job Details"}
           </h3>
           <div className="grid grid-cols-2 gap-3">
@@ -90,7 +90,9 @@ export function MechanicOrderDetail({ order, currentUserName, onUpdateOrder, onL
           myPositionOnThisJob={myPositionOnThisJob}
           onLogParts={onLogParts}
           onOpenDiagnosticLog={onOpenDiagnosticLog}
+          onRequestComplete={onRequestComplete}
           isUpdate={isUpdate}
+          
         />
       </div>
     </div>

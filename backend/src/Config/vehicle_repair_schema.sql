@@ -535,16 +535,33 @@ DELIMITER //
 	CREATE PROCEDURE sp_populate_dashboard_table()
 	BEGIN
 		SELECT 
-			CONCAT('RO-', ro.order_id) AS order_id,
-			CONCAT(c.first_name, ' ', c.last_name) AS customer,
-			CONCAT(v.manufacturer, ' ', v.model, ' ', v.year_model) AS vehicle,
-			ro.status,
-			IFNULL(CONCAT('₱', FORMAT(i.total_amount, 2)), '—') AS amount
-		FROM repair_orders ro
-		JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
-		JOIN customers c ON v.customer_id = c.customer_id
-		LEFT JOIN invoices i ON ro.order_id = i.order_id
-		ORDER BY ro.order_id ASC;
+        CONCAT('RO-', ro.order_id) AS order_id,
+        CONCAT(c.first_name, ' ', c.last_name) AS customer,
+        CONCAT(v.manufacturer, ' ', v.model, ' ', v.year_model) AS vehicle,
+        ro.status,
+        -- Real invoice total if one exists, otherwise running estimate.
+        -- NULLIF -> orders with no services/parts yet stay NULL (shown as "—").
+        COALESCE(
+            i.total_amount,
+            NULLIF(IFNULL(sc_sum.labor_cost, 0) + IFNULL(parts_sum.parts_cost, 0), 0)
+        ) AS amount
+    FROM repair_orders ro
+    JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
+    JOIN customers c ON v.customer_id = c.customer_id
+    LEFT JOIN invoices i ON ro.order_id = i.order_id
+    LEFT JOIN (
+        SELECT ros.order_id, SUM(sc.standard_labor_cost) AS labor_cost
+        FROM repair_order_services ros
+        JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+        GROUP BY ros.order_id
+    ) sc_sum ON ro.order_id = sc_sum.order_id
+    LEFT JOIN (
+        SELECT order_id, SUM(unit_price * quantity_used) AS parts_cost
+        FROM repair_order_parts
+        WHERE status = 'ISSUED'
+        GROUP BY order_id
+    ) parts_sum ON ro.order_id = parts_sum.order_id
+    ORDER BY ro.order_id ASC;
 	END //
 
 	DELIMITER ;
