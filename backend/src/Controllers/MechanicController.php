@@ -13,6 +13,8 @@ class MechanicController {
 
     // POST: Create Mechanic
     public function createMechanic() {
+        header('Content-Type: application/json');
+
         $data = $this->getInputData();
 
         $userId         = $data['user_id'] ?? null;
@@ -37,7 +39,7 @@ class MechanicController {
             if ($newId) {
                 http_response_code(201); // Created
                 echo json_encode([
-                    "message" => "Mechanic created successfully",
+                    "message"     => "Mechanic created successfully",
                     "mechanic_id" => $newId
                 ]);
             } else {
@@ -45,8 +47,22 @@ class MechanicController {
                 echo json_encode(["error" => "Failed to create mechanic"]);
             }
         } catch (Exception $e) {
-            http_response_code(500); // Internal Server Error
-            echo json_encode(["error" => "Database operation failed: " . $e->getMessage()]);
+            // Map the error codes raised by sp_create_mechanic to proper HTTP statuses
+            switch ((int)$e->getCode()) {
+                case 1062: // user is already a mechanic
+                    http_response_code(409); // Conflict
+                    break;
+                case 1452: // user_id doesn't exist
+                    http_response_code(404); // Not Found
+                    break;
+                case 1644: // invalid status
+                    http_response_code(400); // Bad Request
+                    break;
+                default:
+                    http_response_code(500); // Internal Server Error
+            }
+
+            echo json_encode(["error" => $e->getMessage()]);
         }
     }
 

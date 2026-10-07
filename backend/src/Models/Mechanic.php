@@ -77,27 +77,39 @@
             }
         }
 
-// POST (Create Mechanic)
+        // POST (Create Mechanic)
         public function createMechanic($userId, $specialization, $dateHired, $status = 'ACTIVE') {
-            $query = "INSERT INTO mechanics (user_id, specialization, date_hired, status) VALUES (?, ?, ?, ?)";
-            
+            $query = "CALL sp_create_mechanic(?, ?, ?, ?)";
+
             $stmt = self::$conn->prepare($query);
             if (!$stmt) {
-                throw new Exception("Prepare failed: " . self::$conn->error);
+                throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
             }
 
             $stmt->bind_param("isss", $userId, $specialization, $dateHired, $status);
-            
-            if ($stmt->execute()) {
-                $newId = $stmt->insert_id;
+
+            // On PHP 8.1+ this throws mysqli_sql_exception with the proc's message.
+            // On older PHP it returns false, so we rethrow it ourselves.
+            if (!$stmt->execute()) {
+                $msg  = $stmt->error;
+                $code = $stmt->errno;
                 $stmt->close();
-                return $newId;
+                throw new Exception($msg, $code);
             }
 
+            $result = $stmt->get_result();
+            $row = $result ? $result->fetch_assoc() : null;
             $stmt->close();
-            return false;
-        }
 
+            // Clear connection buffer
+            while (self::$conn->more_results() && self::$conn->next_result()) {
+                if ($extraResult = self::$conn->use_result()) {
+                    $extraResult->free();
+                }
+            }
+
+            return $row ? (int)$row['mechanic_id'] : false;
+        }
         // PUT (Update Mechanic)
         public function updateMechanic($mechanicId, $userId, $specialization, $dateHired, $status) {
             $query = "UPDATE mechanics 

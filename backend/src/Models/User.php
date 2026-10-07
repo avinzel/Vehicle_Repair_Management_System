@@ -50,7 +50,6 @@ use Exception;
                 return false;
             }
         }
-
         public static function createUser(
             String $username,
             String $password_hash,
@@ -61,8 +60,16 @@ use Exception;
             String $email,
             int $role_id
         ){
-            $query = 'INSERT INTO users (username, password_hash, first_name, middle_name, last_name, contact_no, email, role_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "ACTIVE")'; //procedure
+            $query = 'CALL sp_create_user(?, ?, ?, ?, ?, ?, ?, ?)';
             $stmt = self::$conn->prepare($query);
+
+            if (!$stmt) {
+                return [
+                    "success" => false,
+                    "error"   => "Error creating user: " . self::$conn->error
+                ];
+            }
+
             $stmt->bind_param(
                 "sssssssi",
                 $username,
@@ -72,22 +79,60 @@ use Exception;
                 $last_name,
                 $contact_no,
                 $email,
-                $role_id,
+                $role_id
             );
+
             try {
-                $stmt->execute();
-                return ["success" => true];
+                if (!$stmt->execute()) {
+                    // PHP < 8.1 returns false instead of throwing
+                    throw new \Exception($stmt->error, $stmt->errno);
+                }
+
+                $result = $stmt->get_result();
+                $row = $result ? $result->fetch_assoc() : null;
+                $stmt->close();
+
+                // Clear connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extra = self::$conn->use_result()) {
+                        $extra->free();
+                    }
+                }
+
+                return [
+                    "success" => true,
+                    "user_id" => $row ? (int)$row['user_id'] : null
+                ];
+
             } catch (\Exception $e) {
-                // Handle the exception (e.g., log it, rethrow it, etc.)
-                if ($e->getCode() === 1062) {
+                $stmt->close();
+                $msg = $e->getMessage();
+
+                if ((int)$e->getCode() === 1062) {
+                    $field = 'unknown';
+                    if (stripos($msg, 'username') !== false)      $field = 'username';
+                    elseif (stripos($msg, 'email') !== false)     $field = 'email';
+                    elseif (stripos($msg, 'contact') !== false)   $field = 'contact_no';
+
                     return [
-                        "success" => false, 
-                        "error" => "duplicate"
+                        "success" => false,
+                        "error"   => "duplicate",
+                        "field"   => $field,
+                        "message" => $msg
                     ];
                 }
+
+                if ((int)$e->getCode() === 1452 || (int)$e->getCode() === 1644 || (int)$e->getCode() === 1406) {
+                    return [
+                        "success" => false,
+                        "error"   => "invalid",
+                        "message" => $msg
+                    ];
+                }
+
                 return [
-                    "success" => false, 
-                    "error" => "Error creating user: " . $e->getMessage()
+                    "success" => false,
+                    "error"   => "Error creating user: " . $msg
                 ];
             }
         }
@@ -110,60 +155,89 @@ use Exception;
             return $affectedRows;
 
         }
-        public static function updateUser(
+       public static function updateUser(
             int $user_id,
             string $username,
             string $first_name,
-            string $middle_name,
+            ?string $middle_name,
             string $last_name,
             string $contact_no,
             string $email,
             int $role_id,
             string $status = 'ACTIVE'
         ) {
-            $query = 'UPDATE users 
-                    SET username = ?, 
-                        first_name = ?, 
-                        middle_name = ?, 
-                        last_name = ?, 
-                        contact_no = ?, 
-                        email = ?, 
-                        role_id = ?, 
-                        status = ? 
-                    WHERE user_id = ?';
-
-            $stmt = self::$conn->prepare($query);
-            $stmt->bind_param(
-                "ssssssisi",
-                $username,
-                $first_name,
-                $middle_name,
-                $last_name,
-                $contact_no,
-                $email,
-                $role_id,
-                $status,
-                $user_id
-            );
+            $stmt = null;
 
             try {
-                $stmt->execute();
+                $stmt = self::$conn->prepare('CALL sp_update_user(?, ?, ?, ?, ?, ?, ?, ?, ?)');
+
+                if (!$stmt) {
+                    throw new \Exception(self::$conn->error, self::$conn->errno);
+                }
+
+                $stmt->bind_param(
+                    "issssssis",
+                    $user_id,
+                    $username,
+                    $first_name,
+                    $middle_name,
+                    $last_name,
+                    $contact_no,
+                    $email,
+                    $role_id,
+                    $status
+                );
+
+                if (!$stmt->execute()) {
+                    // PHP < 8.1 returns false instead of throwing
+                    throw new \Exception($stmt->error, $stmt->errno);
+                }
+
+                $stmt->close();
+                $stmt = null;
+
+                // Clear connection buffer
+                while (self::$conn->more_results() && self::$conn->next_result()) {
+                    if ($extra = self::$conn->use_result()) {
+                        $extra->free();
+                    }
+                }
+
                 return ["success" => true];
-            } catch (\mysqli_sql_exception $e) {
-                if ($e->getCode() === 1062) {
+
+            } catch (\Exception $e) {
+                if ($stmt) {
+                    $stmt->close();
+                }
+
+                $code = (int)$e->getCode();
+                $msg  = $e->getMessage();
+
+                if ($code === 1062) {
+                    $field = 'unknown';
+                    if (stripos($msg, 'username') !== false)    $field = 'username';
+                    elseif (stripos($msg, 'email') !== false)   $field = 'email';
+                    elseif (stripos($msg, 'contact') !== false) $field = 'contact_no';
+
                     return [
-                        "success" => false, 
-                        "error" => "duplicate"
+                        "success" => false,
+                        "error"   => "duplicate",
+                        "field"   => $field,
+                        "message" => $msg
                     ];
                 }
+
+                if ($code === 1032) {
+                    return ["success" => false, "error" => "not_found", "message" => $msg];
+                }
+
+                if (in_array($code, [1452, 1644, 1406], true)) {
+                    return ["success" => false, "error" => "invalid", "message" => $msg];
+                }
+
                 return [
-                    "success" => false, 
-                    "error" => "Error updating user: " . $e->getMessage()
-                ];
-            } catch (\Exception $e) {
-                return [
-                    "success" => false, 
-                    "error" => "Error updating user: " . $e->getMessage()
+                    "success" => false,
+                    "error"   => "Error updating user: " . $msg
                 ];
             }
         }

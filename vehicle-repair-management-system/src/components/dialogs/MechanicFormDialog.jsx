@@ -24,7 +24,6 @@ const MECHANIC_ROLE_ID = 3;
 
 export const MECHANIC_STATUSES = [
   { value: "ACTIVE", label: "Active" },
-  { value: "ON_LEAVE", label: "On Leave" },
   { value: "INACTIVE", label: "Inactive" },
 ];
 

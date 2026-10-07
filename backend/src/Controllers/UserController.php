@@ -44,17 +44,23 @@
             }
         }
         public function updateUser() {
-            $data = $this->getInputData();  
-     
+            header('Content-Type: application/json');
+
+            $data = $this->getInputData();
+
             $user_id     = $data['user_id'] ?? null;
-            $username    = isset($data['username']) ? trim($data['username']) : null;
+            $username    = isset($data['username'])   ? trim($data['username'])   : null;
             $first_name  = isset($data['first_name']) ? trim($data['first_name']) : null;
-            $middle_name = isset($data['middle_name']) ? trim($data['middle_name']) : null;
-            $last_name   = isset($data['last_name']) ? trim($data['last_name']) : null;
+            $last_name   = isset($data['last_name'])  ? trim($data['last_name'])  : null;
             $contact_no  = isset($data['contact_no']) ? trim($data['contact_no']) : null;
-            $email       = isset($data['email']) ? trim($data['email']) : null;
-            $role_id     = $data['role_id'] ?? null; 
-            $status      = isset($data['status']) ? trim($data['status']) : 'ACTIVE';
+            $email       = isset($data['email'])      ? trim($data['email'])      : null;
+            $role_id     = $data['role_id'] ?? null;
+            $status      = isset($data['status'])     ? trim($data['status'])     : 'ACTIVE';
+
+            // Blank or null middle name -> null (stored as real NULL)
+            $middle_name = (isset($data['middle_name']) && trim($data['middle_name']) !== '')
+                ? trim($data['middle_name'])
+                : null;
 
             if (!$user_id || !$username || !$first_name || !$last_name || !$contact_no || !$email || !$role_id) {
                 http_response_code(400);
@@ -62,30 +68,47 @@
                 return;
             }
 
-            // Call the model to update the user
             $response = $this->userModel->updateUser(
-                (int)$user_id, 
-                $username, 
-                $first_name, 
-                $middle_name, 
-                $last_name, 
-                $contact_no, 
-                $email, 
-                (int)$role_id, 
+                (int)$user_id,
+                $username,
+                $first_name,
+                $middle_name,
+                $last_name,
+                $contact_no,
+                $email,
+                (int)$role_id,
                 $status
             );
 
             if ($response["success"]) {
                 http_response_code(200);
                 echo json_encode(["message" => "User updated successfully"]);
-            } else {
-                if ($response["error"] == "duplicate") {
-                    http_response_code(409);
-                    echo json_encode(["error" => "Username or Email already exists"]);
-                } else {
+                return;
+            }
+
+            switch ($response["error"]) {
+                case "duplicate":
+                    http_response_code(409); // Conflict
+                    echo json_encode([
+                        "error" => $response["message"] ?? "Duplicate entry",
+                        "field" => $response["field"] ?? null
+                    ]);
+                    break;
+
+                case "not_found":
+                    http_response_code(404);
+                    echo json_encode(["error" => $response["message"] ?? "User not found"]);
+                    break;
+
+                case "invalid":
+                    http_response_code(400);
+                    echo json_encode(["error" => $response["message"] ?? "Invalid data"]);
+                    break;
+
+                default:
+                    error_log($response["error"]); // raw error stays server-side
                     http_response_code(500);
                     echo json_encode(["error" => "Failed to update user"]);
-                }
             }
         }
 /**
