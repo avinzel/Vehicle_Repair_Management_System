@@ -25,18 +25,6 @@ export function matchesSearch(query, ...fields) {
   return fields.some((f) => f != null && String(f).toLowerCase().includes(q));
 }
 
-// Builds the { [pillLabel]: count } map for the optional `counts` prop.
-// "All" is always the full list; every other key comes from getLabel(item),
-// so it must return the same text used for the pill.
-export function buildTabCounts(items, getLabel) {
-  const counts = { All: items.length };
-  for (const item of items) {
-    const label = getLabel(item);
-    counts[label] = (counts[label] ?? 0) + 1;
-  }
-  return counts;
-}
-
 // Generic search box + pill row. Used by the order card lists and by the
 // admin CRUD tables so the position and look stay identical everywhere.
 //
@@ -55,7 +43,6 @@ export function FilterBar({
   onStatusFilterChange,
   placeholder = "Search...",
   tabs = [],
-  counts,
   showTabs = true,
 }) {
   return (
@@ -75,7 +62,6 @@ export function FilterBar({
         <div className="flex flex-wrap gap-2">
           {tabs.map((tab) => {
             const isActive = statusFilter === tab;
-            const count = counts?.[tab];
             return (
               <Button
                 key={tab}
@@ -87,7 +73,6 @@ export function FilterBar({
                 className="rounded-full"
               >
                 {tab}
-                {count != null && <span className="ml-1.5 opacity-70">{count}</span>}
               </Button>
             );
           })}

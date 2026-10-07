@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MechanicFormDialog } from "@/components/dialogs/MechanicFormDialog";
-import { FilterBar, matchesSearch, buildTabCounts } from "@/components/OrderSearchFilter";
+import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
 
 const API = "http://localhost:8000/api.php";
 
@@ -107,7 +107,6 @@ export function MechanicsPage() {
       ),
     [mechanics, search, statusFilter]
   );
-  const statusCounts = useMemo(() => buildTabCounts(mechanics, statusLabel), [mechanics]);
 
   function openAdd() {
     setEditing(null);
@@ -164,7 +163,6 @@ export function MechanicsPage() {
           onStatusFilterChange={setStatusFilter}
           placeholder="Search by name, email, phone, or specialization..."
           tabs={STATUS_TABS}
-          counts={statusCounts}
         />
       </div>
 

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StaffFormDialog } from "@/components/dialogs/StaffFormDialog";
-import { FilterBar, matchesSearch, buildTabCounts } from "@/components/OrderSearchFilter";
+import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
 
 const API = "http://localhost:8000/api.php";
 
@@ -127,7 +127,6 @@ export function Staffs() {
       ),
     [staff, search, roleFilter]
   );
-  const roleCounts = useMemo(() => buildTabCounts(staff, (m) => m.role), [staff]);
 
   function openAdd() {
     setEditing(null);
@@ -184,7 +183,6 @@ export function Staffs() {
           onStatusFilterChange={setRoleFilter}
           placeholder="Search by name, email, phone, or role..."
           tabs={ROLE_TABS}
-          counts={roleCounts}
         />
       </div>
 

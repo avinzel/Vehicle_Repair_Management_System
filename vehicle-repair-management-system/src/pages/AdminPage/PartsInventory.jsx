@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PartFormDialog, unitLabel } from "@/components/dialogs/PartFormDialog";
 import { RestockPartDialog } from "@/components/dialogs/RestockPartDialog";
-import { FilterBar, matchesSearch, buildTabCounts } from "@/components/OrderSearchFilter";
+import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
 
 const API = "http://localhost:8000/api.php";
 
@@ -122,7 +122,6 @@ export function PartsInventory() {
       ),
     [parts, search, stockFilter]
   );
-  const stockCounts = useMemo(() => buildTabCounts(parts, stockLabel), [parts]);
 
   function openAdd() {
     setEditing(null);
@@ -188,7 +187,6 @@ export function PartsInventory() {
           onStatusFilterChange={setStockFilter}
           placeholder="Search by part ID, name, or unit..."
           tabs={STOCK_TABS}
-          counts={stockCounts}
         />
       </div>
 
