@@ -100,22 +100,35 @@ class RepairOrderController {
                     "vehicle_id"  => $response['vehicle_id']
                 ]);
             } else {
-                // Return 409 Conflict if the error is due to pre-existing records
                 $errorMessage = $response['error'] ?? "Failed to complete intake process";
-                $isConflict = strpos($errorMessage, 'already exists') !== false;
-
-                http_response_code($isConflict ? 409 : 400);
-                echo json_encode([
-                    "status" => "error",
-                    "error"  => $errorMessage
-                ]);
+                if (($response['code'] ?? 0) === 1644) {
+                    http_response_code(409);
+                    echo json_encode(["status" => "error", "error" => $errorMessage]);
+                } elseif (($response['code'] ?? 0) === 1062) {
+                    if (stripos($errorMessage, 'email') !== false) {
+                        $conflictMessage = "A customer with this email address already exists.";
+                    } elseif (stripos($errorMessage, 'plate_number') !== false) {
+                        $conflictMessage = "A vehicle with this plate number already exists.";
+                    } elseif (stripos($errorMessage, 'vin_number') !== false) {
+                        $conflictMessage = "A vehicle with this VIN already exists.";
+                    } else {
+                        $conflictMessage = "A customer or vehicle with the supplied unique value already exists.";
+                    }
+                    http_response_code(409);
+                    echo json_encode(["status" => "error", "error" => $conflictMessage]);
+                } else {
+                    error_log("Vehicle intake failed: " . $errorMessage);
+                    http_response_code(500);
+                    echo json_encode(["status" => "error", "error" => "Failed to complete vehicle intake."]);
+                }
             }
 
         } catch (Exception $e) {
+            error_log("Vehicle intake controller failed: " . $e->getMessage());
             http_response_code(500);
             echo json_encode([
                 "status" => "error",
-                "error"  => "Database operation failed: " . $e->getMessage()
+                "error"  => "Failed to complete vehicle intake."
             ]);
         }
         exit();

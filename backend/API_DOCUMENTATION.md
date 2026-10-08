@@ -83,7 +83,7 @@ Common HTTP status codes:
 | `repair-orders` | GET / POST / PUT | Repair-order dashboard and workflow | Yes | Many sub-actions |
 | `users` | GET / PUT / DELETE | Staff/user management | Yes | Role-protected |
 | `reports` | GET | Dashboard analytics and admin reports | Yes | Categories-based |
-| `customers` | GET | Customer list and profile lookup | Yes | Supports detail lookup |
+| `customers` | GET / POST / PUT / DELETE | Customer and vehicle records | Yes | CRUD writes; delete is soft deactivation |
 | `mechanics` | GET / POST / PUT / DELETE | Mechanic records and assignment support | Yes | Some role restrictions |
 | `parts` | GET / POST / PUT / DELETE | Inventory list and management | Yes | Create/edit/delete are admin-only |
 | `invoices` | GET / POST | Invoice generation and payment flows | Yes | Payment and release sub-actions |
@@ -753,21 +753,87 @@ Action: `customers`
 
 - `GET /api.php?action=customers`
 - Auth required
+- Roles: 1, 2, and 3
 - Optional query param:
   - `search`
+- Lists active customers only. The response includes customer name components, contact details, status, vehicle count, and last visit.
 
 ### 10.2 Customer details with history
 
 - `GET /api.php?action=customers&customer_id=12`
 - Auth required
 - `customer_id` required
+- `customerId` is also accepted.
 
-Also accepted:
+Returns customer profile (including name components and status), structured vehicle records, and repair history. Inactive records can still be retrieved by ID for historical context.
 
-- `?customerId=12`
-- JSON body with `customer_id`
+### 10.3 Create a customer and optional vehicles
 
-Returns customer profile plus order/repair history.
+- `POST /api.php?action=customers`
+- Auth required; roles 1 and 2
+- Required customer fields: `first_name`, `last_name`, `contact_no`
+- Optional customer fields: `middle_name`, `email`, `address`
+- Optional `vehicles` is an array. Each vehicle requires `plate_number`, `vehicle_type`, `manufacturer`, and `model`. Supported `vehicle_type` values: `CAR`, `MOTORCYCLE`, `TRICYCLE`.
+- Optional vehicle fields: `year_model` (1901–2155), `color`, `vin_number`, `current_mileage` (non-negative integer; defaults to 0).
+
+Example:
+
+```json
+{
+  "first_name": "Jamie",
+  "middle_name": null,
+  "last_name": "Santos",
+  "contact_no": "09171234567",
+  "email": "jamie@example.com",
+  "address": "Sample address",
+  "vehicles": [
+    {
+      "plate_number": "ABC-1234",
+      "vehicle_type": "CAR",
+      "manufacturer": "Toyota",
+      "model": "Vios",
+      "year_model": 2021,
+      "color": "Silver",
+      "vin_number": null,
+      "current_mileage": 12000
+    }
+  ]
+}
+```
+
+Success returns HTTP `201` with `customer_id`.
+
+### 10.4 Update a customer and vehicles
+
+- `PUT /api.php?action=customers&customer_id=12`
+- Auth required; roles 1, 2, and 3
+- `customer_id` may instead be supplied as `customerId` in the query or as `customer_id`/`customerId` in the JSON body.
+- Requires `first_name`, `last_name`, and `contact_no`; customer fields are replaced with the supplied values.
+- `vehicles` is optional. Each vehicle without `vehicle_id` is added to the customer. To update an existing vehicle, include its `vehicle_id` and the required vehicle fields. It must belong to the specified customer.
+- Vehicles omitted from the request are left unchanged; this endpoint does not remove vehicles.
+- The customer changes and all submitted vehicle changes are atomic: on any error, none of the changes are committed.
+
+Success returns HTTP `200` with the `customer_id`.
+
+### 10.5 Deactivate a customer
+
+- `DELETE /api.php?action=customers&customer_id=12`
+- Auth required; role 1
+- `customer_id` may also be supplied as `customerId` in the query or JSON body.
+- Deactivation is soft: the customer status becomes `INACTIVE`; the customer, vehicles, and repair history remain in the database.
+- Deactivation is rejected with HTTP `409` while any linked repair order is not `FULFILLED` or `CANCELLED`.
+- The active customer directory and new vehicle-intake flow exclude/reject inactive customers.
+
+### Customer validation and errors
+
+- HTTP `400`: missing/invalid fields, invalid vehicle type, or invalid customer ID.
+- HTTP `404`: customer does not exist, or a submitted vehicle does not belong to the customer.
+- HTTP `409`: duplicate email/plate/VIN, update of an inactive customer, or attempted deactivation while an active repair order exists.
+- HTTP `500`: unexpected backend/database failure; clients receive a generic message while details are logged server-side.
+
+### Customer identity during vehicle intake
+
+The vehicle-intake endpoint (`POST /api.php?action=repair-orders`) resolves the customer by email first, then by an unambiguous contact number. An inactive customer matched by either identifier is rejected with HTTP `409`. If both identifiers resolve ambiguously, the request is rejected instead of selecting an arbitrary customer. A plate already registered to a different customer is also rejected with HTTP `409`; the backend does not overwrite that customer's contact details.
 
 ## 11) Users / staff management
 
@@ -989,9 +1055,6 @@ The router contains some method branches that are not operational or not fully w
 Not implemented in the current dispatcher:
 
 - `POST /api.php?action=users`
-- `POST /api.php?action=customers`
-- `PUT /api.php?action=customers`
-- `DELETE /api.php?action=customers`
 - `POST /api.php?action=mechanic-position`
 - `PUT /api.php?action=mechanic-position`
 - `DELETE /api.php?action=mechanic-position`
@@ -999,6 +1062,8 @@ Not implemented in the current dispatcher:
 Database upgrade required for existing installations:
 
 - Existing `parts_inventory.status` enums contain `ACTIVE` and legacy `DISCONTINUED`, but not `INACTIVE`. Run [`src/Config/parts_status_inactive_migration.sql`](./src/Config/parts_status_inactive_migration.sql) once on an existing database. Fresh databases created from either schema script already include `INACTIVE`.
+- Existing databases must also run [`src/Config/customer_management_migration.sql`](./src/Config/customer_management_migration.sql) once. It adds customer status and installs the customer management/read procedures and the updated vehicle-intake procedure. Fresh databases receive the corresponding definitions from `vehicle_repair_schema.sql`.
+- Databases that already ran the customer-management migration must run [`src/Config/customer_intake_identity_migration.sql`](./src/Config/customer_intake_identity_migration.sql) once to update vehicle-intake identity matching and conflict handling.
 - Role permissions are keyed to actual HTTP verbs (`PUT`), so the configured restrictions apply to edit routes.
 
 ## 16) Order lifecycle summary

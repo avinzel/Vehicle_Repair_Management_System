@@ -69,6 +69,7 @@
 		contact_no      VARCHAR(20) NOT NULL,
 		email           VARCHAR(100) unique,
 		address         VARCHAR(255),
+		status          ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
 		created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 

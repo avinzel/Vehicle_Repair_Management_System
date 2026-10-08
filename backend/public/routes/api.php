@@ -298,13 +298,16 @@
 
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
-               
+                $customerController->updateCustomer();
+                exit();
             }
             if ($_SERVER["REQUEST_METHOD"] === "POST"){
-               
+                $customerController->createCustomer();
+                exit();
             }
             if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
-              
+                $customerController->deactivateCustomer();
+                exit();
             }
         }
         break;

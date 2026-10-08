@@ -118,7 +118,8 @@
         } catch (Exception $e) {
             return [
                 "success" => false,
-                "error"   => "Intake processing failed: " . $e->getMessage()
+                "error"   => $e->getMessage(),
+                "code"    => (int)$e->getCode()
             ];
         }
     }
