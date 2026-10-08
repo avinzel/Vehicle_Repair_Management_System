@@ -4232,3 +4232,55 @@ BEGIN
 END$$
 
 DELIMITER ;
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_mark_ready_to_invoice$$
+
+CREATE PROCEDURE sp_mark_ready_to_invoice(
+    IN p_order_id INT,
+    IN p_user_id INT
+)
+sp_lbl: BEGIN
+    DECLARE v_pending_parts_count INT DEFAULT 0;
+    DECLARE v_current_status VARCHAR(50);
+
+    -- 1. Check if repair order exists & fetch current status
+    SELECT status INTO v_current_status
+    FROM repair_orders
+    WHERE order_id = p_order_id;
+
+    IF v_current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 2. Validate current state transitions
+    IF v_current_status IN ('PENDING_DIAGNOSIS','AWAITING_DIAGNOSIS','READY_TO_INVOICE', 'AWAITING_PAYMENT', 'READY_FOR_RELEASE', 'FULFILLED', 'CANCELLED') THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order has already passed the work stage or is cancelled.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 3. Ensure no parts are still pending stock fulfillment
+    SELECT COUNT(*) INTO v_pending_parts_count
+    FROM repair_order_parts
+    WHERE order_id = p_order_id AND status = 'PENDING_PARTS';
+
+    IF v_pending_parts_count > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot mark as Ready to Invoice: There are still parts pending stock fulfillment.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 4. Update Repair Order status and set completion timestamp
+    UPDATE repair_orders
+    SET 
+        status = 'READY_TO_INVOICE',
+        date_completed = NOW()
+    WHERE order_id = p_order_id;
+
+END$$
+
+DELIMITER ;
