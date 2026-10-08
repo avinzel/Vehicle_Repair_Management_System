@@ -165,6 +165,197 @@ class RepairOrderController {
             echo json_encode(["error" => "Operation failed: " . $e->getMessage()]);
         }
     }
+
+    public function getOrderManagementList() {
+        header('Content-Type: application/json');
+
+        $search = $_GET['search'] ?? null;
+        $status = strtoupper(trim((string)($_GET['status'] ?? 'ALL')));
+        $allowedStatuses = [
+            'ALL',
+            'PENDING_DIAGNOSIS',
+            'AWAITING_DIAGNOSIS',
+            'PENDING_MECHANICS',
+            'IN_PROGRESS',
+            'READY_TO_INVOICE',
+            'AWAITING_PAYMENT',
+            'READY_FOR_RELEASE',
+            'FULFILLED',
+            'CANCELLED',
+            'AWAITING_PARTS'
+        ];
+        if (!in_array($status, $allowedStatuses, true)) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error" => "Invalid status filter."
+            ]);
+            return;
+        }
+
+        try {
+            $response = $this->repairOrderModel->getOrderManagementList($status, $search);
+            if (!($response['success'] ?? false)) {
+                error_log($response['error'] ?? 'Order management list query failed');
+                http_response_code(500);
+                echo json_encode(["status" => "error", "error" => "Failed to fetch repair orders."]);
+                return;
+            }
+
+            http_response_code(200);
+            echo json_encode([
+                "status" => "success",
+                "count" => count($response['data']),
+                "data" => $response['data']
+            ]);
+        } catch (\Throwable $e) {
+            error_log("Order management list request failed: " . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(["status" => "error", "error" => "Failed to fetch repair orders."]);
+        }
+    }
+
+    public function cancelRepairOrder() {
+        header('Content-Type: application/json');
+        $input = $this->getInputData();
+        $orderId = $_GET['order_id'] ?? $_GET['orderId'] ?? $input['order_id'] ?? $input['orderId'] ?? null;
+        if (filter_var($orderId, FILTER_VALIDATE_INT) === false || (int)$orderId <= 0) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "error" => "A valid order_id is required."]);
+            return;
+        }
+
+        try {
+            $response = $this->repairOrderModel->cancelRepairOrder((int)$orderId);
+            if ($response['success'] ?? false) {
+                http_response_code(200);
+                echo json_encode([
+                    "status" => "success",
+                    "message" => "Repair order cancelled successfully.",
+                    "order_id" => (int)$orderId,
+                    "order_status" => "CANCELLED",
+                    "issued_part_rows_cancelled" => $response['issued_part_rows_cancelled'],
+                    "pending_part_rows_cancelled" => $response['pending_part_rows_cancelled'],
+                    "inventory_quantity_returned" => $response['inventory_quantity_returned']
+                ]);
+                return;
+            }
+
+            $code = (int)($response['code'] ?? 0);
+            if ($code === 1644) {
+                http_response_code($response['error'] === "Repair order not found." ? 404 : 409);
+                echo json_encode(["status" => "error", "error" => $response['error']]);
+                return;
+            }
+
+            error_log($response['error'] ?? 'Repair order cancellation failed');
+            http_response_code(500);
+            echo json_encode(["status" => "error", "error" => "Failed to cancel repair order."]);
+        } catch (\Throwable $e) {
+            error_log("Repair order cancellation request failed: " . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(["status" => "error", "error" => "Failed to cancel repair order."]);
+        }
+    }
+
+    public function updateRepairOrder() {
+        header('Content-Type: application/json');
+        $input = $this->getInputData();
+        $orderId = $_GET['order_id'] ?? $_GET['orderId'] ?? $input['order_id'] ?? $input['orderId'] ?? null;
+        if (filter_var($orderId, FILTER_VALIDATE_INT) === false || (int)$orderId <= 0) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "error" => "A valid order_id is required."]);
+            return;
+        }
+
+        $updates = [];
+        if (array_key_exists('complaint', $input)) {
+            if (!is_string($input['complaint']) || trim($input['complaint']) === '') {
+                http_response_code(400);
+                echo json_encode(["status" => "error", "error" => "complaint must be a non-empty string."]);
+                return;
+            }
+            if (strlen($input['complaint']) > 500) {
+                http_response_code(400);
+                echo json_encode(["status" => "error", "error" => "complaint must not exceed 500 characters."]);
+                return;
+            }
+            $updates['complaint'] = trim($input['complaint']);
+        }
+
+        if (array_key_exists('priority', $input)) {
+            if (!is_string($input['priority'])) {
+                http_response_code(400);
+                echo json_encode(["status" => "error", "error" => "priority must be STANDARD, URGENT, or RUSH."]);
+                return;
+            }
+            $priority = strtoupper(trim($input['priority']));
+            if (!in_array($priority, ['STANDARD', 'URGENT', 'RUSH'], true)) {
+                http_response_code(400);
+                echo json_encode(["status" => "error", "error" => "priority must be STANDARD, URGENT, or RUSH."]);
+                return;
+            }
+            $updates['priority'] = $priority;
+        }
+
+        if (array_key_exists('mileage_at_service', $input)) {
+            $mileage = $input['mileage_at_service'];
+            if (filter_var($mileage, FILTER_VALIDATE_INT) === false || (int)$mileage < 0) {
+                http_response_code(400);
+                echo json_encode(["status" => "error", "error" => "mileage_at_service must be a non-negative integer."]);
+                return;
+            }
+            $updates['mileage_at_service'] = (int)$mileage;
+        }
+
+        if (array_key_exists('diagnosis_notes', $input)) {
+            if ($input['diagnosis_notes'] !== null && !is_string($input['diagnosis_notes'])) {
+                http_response_code(400);
+                echo json_encode(["status" => "error", "error" => "diagnosis_notes must be a string or null."]);
+                return;
+            }
+            $updates['diagnosis_notes'] = $input['diagnosis_notes'] === null
+                ? null
+                : trim($input['diagnosis_notes']);
+        }
+
+        if (!$updates) {
+            http_response_code(400);
+            echo json_encode([
+                "status" => "error",
+                "error" => "At least one editable field is required: complaint, priority, mileage_at_service, or diagnosis_notes."
+            ]);
+            return;
+        }
+
+        try {
+            $response = $this->repairOrderModel->updateRepairOrder((int)$orderId, $updates);
+            if ($response['success'] ?? false) {
+                http_response_code(200);
+                echo json_encode([
+                    "status" => "success",
+                    "message" => "Repair order information updated successfully.",
+                    "order_id" => (int)$orderId
+                ]);
+                return;
+            }
+
+            $code = (int)($response['code'] ?? 0);
+            if ($code === 1644 && ($response['error'] ?? '') === "Repair order not found.") {
+                http_response_code(404);
+                echo json_encode(["status" => "error", "error" => $response['error']]);
+                return;
+            }
+            error_log($response['error'] ?? 'Repair order update failed');
+            http_response_code(500);
+            echo json_encode(["status" => "error", "error" => "Failed to update repair order information."]);
+        } catch (\Throwable $e) {
+            error_log("Repair order update request failed: " . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(["status" => "error", "error" => "Failed to update repair order information."]);
+        }
+    }
+
     public function getOrderHistory() {
         header('Content-Type: application/json');
 

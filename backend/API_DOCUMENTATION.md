@@ -216,6 +216,7 @@ This route uses sub-selection via:
 
 Allowed values:
 
+- `management`
 - `active`
 - `inactive`
 - `history`
@@ -228,7 +229,21 @@ Allowed values:
 - No category needed
 - Returns the service-advisor dashboard dataset under `data`
 
-### 6.3 Active repair orders list
+### 6.3 Order management list
+
+- `GET /api.php?action=repair-orders&category=management`
+- Auth required; available to Admin, Service Advisor, and Mechanic roles.
+- Optional query parameters:
+  - `status`: defaults to `ALL`; may be any repair-order status (`PENDING_DIAGNOSIS`, `AWAITING_DIAGNOSIS`, `PENDING_MECHANICS`, `IN_PROGRESS`, `READY_TO_INVOICE`, `AWAITING_PAYMENT`, `READY_FOR_RELEASE`, `FULFILLED`, `CANCELLED`, `AWAITING_PARTS`).
+  - `search`: order ID, customer name/contact/email, vehicle plate, manufacturer, or model.
+- With no status filter, returns all orders, including active workflow orders, invoiced orders, fulfilled orders, and cancelled orders. Each record includes the current `status`, invoice fields (`invoice_id`, `invoice_status`, `invoice_total`), customer and vehicle details, and assigned mechanics.
+- Invoiced orders are identified by the invoice fields; `status` remains the order workflow status.
+
+Success returns HTTP `200` with `count` and `data`.
+
+Invalid status filters return HTTP `400`.
+
+### 6.4 Active repair orders list
 
 - `GET /api.php?action=repair-orders&category=active`
 - Optional query parameters:
@@ -236,7 +251,7 @@ Allowed values:
   - `search`
 - Response includes a `count` and array of orders
 
-### 6.4 Active order detail
+### 6.5 Active order detail
 
 - `GET /api.php?action=repair-orders&category=active&order_id=12`
 - `order_id` required
@@ -246,14 +261,14 @@ Also accepted:
 
 - `?category=active&orderId=12`
 
-### 6.5 Billing and invoicing list
+### 6.6 Billing and invoicing list
 
 - `GET /api.php?action=repair-orders&category=inactive`
 - Optional query parameter:
   - `search`
 - Despite the name `inactive`, this route returns billing and invoicing records.
 
-### 6.6 Order history
+### 6.7 Order history
 
 - `GET /api.php?action=repair-orders&category=history`
 - Optional query parameter:
@@ -263,7 +278,7 @@ Also accepted:
   - `total_revenue`
   - `data`
 
-### 6.7 Parts used on a repair order
+### 6.8 Parts used on a repair order
 
 - `GET /api.php?action=repair-orders&category=parts-by-order&order_id=12`
 - `order_id` required
@@ -271,18 +286,21 @@ Also accepted:
   - `count`
   - `total_parts_cost`
   - `data`
+- Returns issued part rows only (`status = ISSUED`), including `order_part_id`, `part_id`, part code/name, batch, quantity, unit price, subtotal, and status. Pending or cancelled rows are not included in the parts-used total.
+- Existing databases that do not have `sp_get_parts_by_repair_order` must run [`src/Config/get_parts_by_repair_order_migration.sql`](./src/Config/get_parts_by_repair_order_migration.sql).
 
-### 6.8 Mechanic work orders
+### 6.9 Mechanic work orders
 
 - `GET /api.php?action=repair-orders&category=assigned`
 - Optional query parameter:
   - `mechanic_id`
 - If no `mechanic_id` is provided, the backend attempts to infer the current logged-in user’s mechanic record.
 
-### 6.9 Create vehicle intake
+### 6.10 Create vehicle intake
 
 - `POST /api.php?action=repair-orders`
 - Auth required
+- Service Advisor role only. Admins and Mechanics receive HTTP `403`.
 - Request body supports nested `customer`, `vehicle`, and `order` objects.
 
 Example:
@@ -349,7 +367,38 @@ Success:
 - HTTP `201`
 - Returns created `order_id`, `customer_id`, and `vehicle_id`
 
-### 6.10 Assign diagnostician
+### 6.11 Update repair order information
+
+- `PUT /api.php?action=repair-orders&put-method=update-order`
+- Auth required; Admin and Service Advisor roles only.
+- The `put-method=update-order` query parameter is required. A PUT request to `action=repair-orders` without a `put-method` returns HTTP `400` rather than silently doing nothing.
+- Request JSON requires `order_id` plus at least one editable field.
+- Editable fields are `complaint`, `priority`, `mileage_at_service`, and `diagnosis_notes`. Each may be sent independently; omitted fields remain unchanged.
+- `priority` must be `STANDARD`, `URGENT`, or `RUSH`; mileage must be a non-negative integer; complaint is limited to 500 characters.
+- `diagnosis_notes` accepts a string or `null`; send `null` to clear the notes.
+- A supplied `status` field is ignored. Order status is controlled only by workflow actions.
+- Success returns HTTP `200`; missing order returns HTTP `404`; invalid request data returns HTTP `400`.
+
+Example:
+
+```json
+{
+  "order_id": 12,
+  "complaint": "Engine overheating during long trips."
+}
+```
+
+### 6.12 Cancel a repair order
+
+- `DELETE /api.php?action=repair-orders&order_id=12`
+- Auth required; Admin and Service Advisor roles.
+- `order_id` is required in the query string; `orderId` is also accepted. A JSON body may alternatively provide `order_id`/`orderId`.
+- Cancellation is allowed only before `READY_TO_INVOICE`. Orders at that status or later, and already cancelled orders, cannot be cancelled.
+- Cancellation runs transactionally: issued part quantities are returned to inventory, issued and pending part rows are marked `CANCELLED`, and the order is marked `CANCELLED`. Part rows are retained for audit history.
+- Success returns counts of cancelled issued/pending rows and the total inventory quantity returned.
+- Missing order returns HTTP `404`; non-cancellable order returns HTTP `409`; invalid ID returns HTTP `400`.
+
+### 6.13 Assign diagnostician
 
 - `POST /api.php?action=repair-orders&post-method=assign-diagnostician`
 - Auth required
@@ -367,7 +416,7 @@ Alternate accepted aliases:
 - `orderId`, `mechanicId`
 - `diagnostician_id` / `diagnosticianId`
 
-### 6.11 Submit diagnosis
+### 6.14 Submit diagnosis
 
 - `POST /api.php?action=repair-orders&post-method=submit-diagnosis`
 - Auth required
@@ -391,7 +440,7 @@ Also accepted:
 - `diagnosis_notes` instead of `diagnostic_notes`
 - `services` instead of `required_services`
 
-### 6.12 Assign mechanic to repair job
+### 6.15 Assign mechanic to repair job
 
 - `POST /api.php?action=repair-orders&post-method=assign-mechanic`
 - Auth required
@@ -410,7 +459,7 @@ Also accepted:
 - `orderId`, `mechanicId`, `positionId`
 - `pos_id`, `posId`
 
-### 6.13 Log a used part
+### 6.16 Log a used part
 
 - `POST /api.php?action=repair-orders&post-method=log-part`
 - Auth required
@@ -428,7 +477,7 @@ Also accepted:
 
 - `orderId`, `partId`, `qty`
 
-### 6.14 Mark order ready to invoice
+### 6.17 Mark order ready to invoice
 
 - `POST /api.php?action=repair-orders&post-method=mark-ready-to-invoice`
 - Auth required
@@ -1064,6 +1113,8 @@ Database upgrade required for existing installations:
 - Existing `parts_inventory.status` enums contain `ACTIVE` and legacy `DISCONTINUED`, but not `INACTIVE`. Run [`src/Config/parts_status_inactive_migration.sql`](./src/Config/parts_status_inactive_migration.sql) once on an existing database. Fresh databases created from either schema script already include `INACTIVE`.
 - Existing databases must also run [`src/Config/customer_management_migration.sql`](./src/Config/customer_management_migration.sql) once. It adds customer status and installs the customer management/read procedures and the updated vehicle-intake procedure. Fresh databases receive the corresponding definitions from `vehicle_repair_schema.sql`.
 - Databases that already ran the customer-management migration must run [`src/Config/customer_intake_identity_migration.sql`](./src/Config/customer_intake_identity_migration.sql) once to update vehicle-intake identity matching and conflict handling.
+- Existing databases must run [`src/Config/get_parts_by_repair_order_migration.sql`](./src/Config/get_parts_by_repair_order_migration.sql) once to install the missing repair-order parts lookup procedure.
+- Existing databases must run [`src/Config/order_update_fields_migration.sql`](./src/Config/order_update_fields_migration.sql) once to enable partial order updates and editable diagnosis notes.
 - Role permissions are keyed to actual HTTP verbs (`PUT`), so the configured restrictions apply to edit routes.
 
 ## 16) Order lifecycle summary

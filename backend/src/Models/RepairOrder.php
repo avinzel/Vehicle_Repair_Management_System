@@ -123,6 +123,124 @@
             ];
         }
     }
+       public function getOrderManagementList($status = 'ALL', $search = null) {
+            try {
+                $statusFilter = $status ?: 'ALL';
+                $searchQuery = $search !== null && trim((string)$search) !== ''
+                    ? trim((string)$search)
+                    : null;
+                $stmt = self::$conn->prepare("CALL sp_get_order_management_list(?, ?)");
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
+                }
+                $stmt->bind_param("ss", $statusFilter, $searchQuery);
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error, $stmt->errno);
+                }
+                $result = $stmt->get_result();
+                $orders = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+                if ($result) {
+                    $result->free();
+                }
+                $stmt->close();
+                self::clearBuffer();
+                return ["success" => true, "data" => $orders];
+            } catch (\Throwable $e) {
+                self::clearBuffer();
+                return [
+                    "success" => false,
+                    "error" => $e->getMessage(),
+                    "code" => (int)$e->getCode()
+                ];
+            }
+        }
+
+        public function cancelRepairOrder(int $orderId) {
+            $stmt = null;
+            try {
+                $stmt = self::$conn->prepare("CALL sp_cancel_repair_order(?)");
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
+                }
+                $stmt->bind_param("i", $orderId);
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error, $stmt->errno);
+                }
+                $result = $stmt->get_result();
+                $summary = $result ? $result->fetch_assoc() : [];
+                if ($result) {
+                    $result->free();
+                }
+                $stmt->close();
+                $stmt = null;
+                self::clearBuffer();
+
+                return [
+                    "success" => true,
+                    "issued_part_rows_cancelled" => (int)($summary['issued_part_rows_cancelled'] ?? 0),
+                    "pending_part_rows_cancelled" => (int)($summary['pending_part_rows_cancelled'] ?? 0),
+                    "inventory_quantity_returned" => (int)($summary['inventory_quantity_returned'] ?? 0)
+                ];
+            } catch (\Throwable $e) {
+                if ($stmt) {
+                    $stmt->close();
+                }
+                self::clearBuffer();
+                return [
+                    "success" => false,
+                    "error" => $e->getMessage(),
+                    "code" => (int)$e->getCode()
+                ];
+            }
+        }
+
+        public function updateRepairOrder(int $orderId, array $updates) {
+            $stmt = null;
+            try {
+                $stmt = self::$conn->prepare("CALL sp_update_repair_order_details(?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
+                }
+                $updateComplaint = array_key_exists('complaint', $updates) ? 1 : 0;
+                $complaint = $updates['complaint'] ?? null;
+                $updatePriority = array_key_exists('priority', $updates) ? 1 : 0;
+                $priority = $updates['priority'] ?? null;
+                $updateMileage = array_key_exists('mileage_at_service', $updates) ? 1 : 0;
+                $mileage = $updates['mileage_at_service'] ?? null;
+                $updateDiagnosisNotes = array_key_exists('diagnosis_notes', $updates) ? 1 : 0;
+                $diagnosisNotes = $updates['diagnosis_notes'] ?? null;
+                $stmt->bind_param(
+                    "iisisiiis",
+                    $orderId,
+                    $updateComplaint,
+                    $complaint,
+                    $updatePriority,
+                    $priority,
+                    $updateMileage,
+                    $mileage,
+                    $updateDiagnosisNotes,
+                    $diagnosisNotes
+                );
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error, $stmt->errno);
+                }
+                $stmt->close();
+                $stmt = null;
+                self::clearBuffer();
+                return ["success" => true];
+            } catch (\Throwable $e) {
+                if ($stmt) {
+                    $stmt->close();
+                }
+                self::clearBuffer();
+                return [
+                    "success" => false,
+                    "error" => $e->getMessage(),
+                    "code" => (int)$e->getCode()
+                ];
+            }
+        }
+
        public function getActiveRepairOrders($status = 'ALL', $search = '') {
             try {
                 $filterStatus = !empty($status) ? $status : 'ALL';

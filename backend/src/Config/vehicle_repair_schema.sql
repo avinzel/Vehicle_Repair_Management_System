@@ -1037,7 +1037,7 @@ BEGIN
         SET p_sort_order = 'ASC';
     END IF;
 
-    SELECT 
+    SELECT
         CONCAT('M-', LPAD(m.mechanic_id, 3, '0')) AS formatted_mechanic_id,
         m.mechanic_id,
         CONCAT(u.first_name, ' ', IFNULL(CONCAT(u.middle_name, ' '), ''), u.last_name) AS full_name,
@@ -1357,6 +1357,194 @@ DELIMITER ;
 
 DELIMITER //
 
+DROP PROCEDURE IF EXISTS sp_get_order_management_list //
+CREATE PROCEDURE sp_get_order_management_list(
+    IN p_status VARCHAR(50),
+    IN p_search VARCHAR(255)
+)
+BEGIN
+    SET p_status = IF(p_status IS NULL OR TRIM(p_status) = '', 'ALL', UPPER(TRIM(p_status)));
+    SET p_search = IF(p_search IS NULL OR TRIM(p_search) = '', NULL, CONCAT('%', TRIM(p_search), '%'));
+
+    SELECT
+        ro.order_id,
+        CONCAT('RO-', ro.order_id) AS formatted_order_id,
+        ro.vehicle_id,
+        v.customer_id,
+        CONCAT_WS(' ', c.first_name, NULLIF(c.middle_name, ''), c.last_name) AS customer_name,
+        c.contact_no,
+        c.email,
+        v.plate_number,
+        v.vehicle_type,
+        v.manufacturer,
+        v.model,
+        v.year_model,
+        ro.date_received,
+        ro.date_completed,
+        ro.mileage_at_service,
+        ro.complaint,
+        ro.diagnosis_notes,
+        ro.priority,
+        ro.status,
+        GROUP_CONCAT(
+            DISTINCT CONCAT(u.first_name, ' ', u.last_name)
+            ORDER BY u.first_name, u.last_name
+            SEPARATOR ', '
+        ) AS assigned_mechanics,
+        i.invoice_id,
+        i.invoice_date,
+        i.status AS invoice_status,
+        i.total_amount AS invoice_total
+    FROM repair_orders ro
+    INNER JOIN vehicles v ON v.vehicle_id = ro.vehicle_id
+    INNER JOIN customers c ON c.customer_id = v.customer_id
+    LEFT JOIN repair_order_mechanics rom ON rom.order_id = ro.order_id
+    LEFT JOIN mechanics m ON m.mechanic_id = rom.mechanic_id
+    LEFT JOIN users u ON u.user_id = m.user_id
+    LEFT JOIN invoices i ON i.order_id = ro.order_id
+    WHERE (p_status = 'ALL' OR ro.status = p_status)
+      AND (
+          p_search IS NULL
+          OR CAST(ro.order_id AS CHAR) LIKE p_search
+          OR CONCAT('RO-', ro.order_id) LIKE p_search
+          OR CONCAT_WS(' ', c.first_name, NULLIF(c.middle_name, ''), c.last_name) LIKE p_search
+          OR c.contact_no LIKE p_search
+          OR c.email LIKE p_search
+          OR v.plate_number LIKE p_search
+          OR v.manufacturer LIKE p_search
+          OR v.model LIKE p_search
+      )
+    GROUP BY ro.order_id
+    ORDER BY ro.date_received DESC, ro.order_id DESC;
+END //
+
+DROP PROCEDURE IF EXISTS sp_cancel_repair_order //
+CREATE PROCEDURE sp_cancel_repair_order(IN p_order_id INT)
+BEGIN
+    DECLARE v_order_status VARCHAR(50) DEFAULT NULL;
+    DECLARE v_issued_rows INT DEFAULT 0;
+    DECLARE v_pending_rows INT DEFAULT 0;
+    DECLARE v_returned_quantity INT DEFAULT 0;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    SELECT status INTO v_order_status
+    FROM repair_orders
+    WHERE order_id = p_order_id
+    FOR UPDATE;
+
+    IF v_order_status IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Repair order not found.';
+    END IF;
+
+    IF v_order_status = 'CANCELLED' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Repair order is already cancelled.';
+    END IF;
+
+    IF v_order_status NOT IN (
+        'PENDING_DIAGNOSIS',
+        'AWAITING_DIAGNOSIS',
+        'PENDING_MECHANICS',
+        'IN_PROGRESS',
+        'AWAITING_PARTS'
+    ) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot cancel a repair order once it is READY_TO_INVOICE or has progressed beyond that workflow stage.';
+    END IF;
+
+    SELECT
+        COUNT(CASE WHEN status = 'ISSUED' THEN 1 END),
+        COUNT(CASE WHEN status = 'PENDING_PARTS' THEN 1 END),
+        COALESCE(SUM(CASE WHEN status = 'ISSUED' THEN quantity_used ELSE 0 END), 0)
+    INTO v_issued_rows, v_pending_rows, v_returned_quantity
+    FROM repair_order_parts
+    WHERE order_id = p_order_id;
+
+    UPDATE parts_inventory pi
+    INNER JOIN (
+        SELECT part_id, SUM(quantity_used) AS quantity_to_return
+        FROM repair_order_parts
+        WHERE order_id = p_order_id
+          AND status = 'ISSUED'
+        GROUP BY part_id
+    ) issued_parts ON issued_parts.part_id = pi.part_id
+    SET pi.quantity_on_hand = pi.quantity_on_hand + issued_parts.quantity_to_return;
+
+    UPDATE repair_order_parts
+    SET status = 'CANCELLED'
+    WHERE order_id = p_order_id
+      AND status IN ('ISSUED', 'PENDING_PARTS');
+
+    UPDATE repair_orders
+    SET status = 'CANCELLED'
+    WHERE order_id = p_order_id;
+
+    COMMIT;
+
+    SELECT
+        v_issued_rows AS issued_part_rows_cancelled,
+        v_pending_rows AS pending_part_rows_cancelled,
+        v_returned_quantity AS inventory_quantity_returned;
+END //
+
+DROP PROCEDURE IF EXISTS sp_update_repair_order_details //
+CREATE PROCEDURE sp_update_repair_order_details(
+    IN p_order_id INT,
+    IN p_update_complaint TINYINT,
+    IN p_complaint VARCHAR(500),
+    IN p_update_priority TINYINT,
+    IN p_priority VARCHAR(20),
+    IN p_update_mileage TINYINT,
+    IN p_mileage_at_service INT,
+    IN p_update_diagnosis_notes TINYINT,
+    IN p_diagnosis_notes TEXT
+)
+BEGIN
+    DECLARE v_order_status VARCHAR(50) DEFAULT NULL;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    SELECT status INTO v_order_status
+    FROM repair_orders
+    WHERE order_id = p_order_id
+    FOR UPDATE;
+
+    IF v_order_status IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Repair order not found.';
+    END IF;
+
+    IF p_update_priority = 1
+       AND p_priority NOT IN ('STANDARD', 'URGENT', 'RUSH') THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Priority must be STANDARD, URGENT, or RUSH.';
+    END IF;
+
+    UPDATE repair_orders
+    SET complaint = IF(p_update_complaint = 1, p_complaint, complaint),
+        priority = IF(p_update_priority = 1, p_priority, priority),
+        mileage_at_service = IF(p_update_mileage = 1, p_mileage_at_service, mileage_at_service),
+        diagnosis_notes = IF(p_update_diagnosis_notes = 1, p_diagnosis_notes, diagnosis_notes)
+    WHERE order_id = p_order_id;
+
+    COMMIT;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
 DROP PROCEDURE IF EXISTS sp_get_customer_directory //
 
 CREATE PROCEDURE sp_get_customer_directory(
@@ -1553,8 +1741,6 @@ BEGIN
 END //
 
 DELIMITER ;
-
-
 
 DELIMITER //
 
@@ -4011,6 +4197,38 @@ BEGIN
             OR description  LIKE CONCAT('%', p_search, '%')
       )
     ORDER BY service_name ASC;
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_get_parts_by_repair_order$$
+
+CREATE PROCEDURE sp_get_parts_by_repair_order(
+    IN p_order_id INT
+)
+BEGIN
+    SELECT
+        rop.order_part_id,
+        rop.order_id,
+        rop.part_id,
+        pi.part_code,
+        pi.part_name,
+        pi.category,
+        pi.unit,
+        rop.batch_number,
+        rop.quantity_used,
+        rop.unit_price AS unit_price_at_use,
+        pi.unit_price AS current_unit_price,
+        (rop.quantity_used * rop.unit_price) AS subtotal,
+        rop.status AS part_status,
+        pi.status AS inventory_status
+    FROM repair_order_parts rop
+    INNER JOIN parts_inventory pi ON rop.part_id = pi.part_id
+    WHERE rop.order_id = p_order_id
+      AND rop.status != 'CANCELLED'
+    ORDER BY rop.order_part_id ASC;
 END$$
 
 DELIMITER ;
