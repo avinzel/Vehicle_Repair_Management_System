@@ -361,6 +361,10 @@
         break;
         case "parts": {
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                if (isset($_GET["order_id"])) {
+                    $partController->getParts();
+                    exit();
+                }
                 if(Auth::getRoleId() === 1){
                     $partController->getPartsInventoryAdmin(); 
                     exit();

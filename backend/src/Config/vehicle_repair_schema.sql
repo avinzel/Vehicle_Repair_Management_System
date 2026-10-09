@@ -3139,6 +3139,20 @@ BEGIN
     LEFT JOIN invoices i ON ro.order_id = i.order_id
     WHERE v.customer_id = p_customer_id
     ORDER BY ro.date_received DESC;
+
+    -- Result Set 4: Maintenance History for the Customer's Vehicles
+    SELECT
+        mh.history_id,
+        mh.order_id,
+        mh.service_date,
+        mh.service_summary,
+        mh.next_service_due_date,
+        mh.next_service_due_mileage
+    FROM maintenance_history mh
+    JOIN repair_orders ro ON ro.order_id = mh.order_id
+    JOIN vehicles v ON v.vehicle_id = ro.vehicle_id
+    WHERE v.customer_id = p_customer_id
+    ORDER BY mh.service_date DESC, mh.history_id DESC;
 END //
 
 DELIMITER ;

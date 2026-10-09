@@ -190,9 +190,9 @@
             header('Content-Type: application/json');
 
             // Capture query parameters
-            $status  = $_GET['status']   ?? 'ALL';
-            $search  = $_GET['search']   ?? '';
             $orderId = $_GET['order_id'] ?? null;   // optional: only parts that fit this order's vehicle
+            $status  = $_GET['status']   ?? ($orderId !== null ? 'ACTIVE' : 'ALL');
+            $search  = $_GET['search']   ?? '';
 
             // Fetch data from model
             $result = self::$model::getAllParts($status, $search, $orderId);
