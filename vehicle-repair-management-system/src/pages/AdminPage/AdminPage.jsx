@@ -12,7 +12,9 @@ const PAGE_META = {
   '/admin/mechanics': { title: 'Mechanic Management', subtitle: 'Manage mechanic profiles, specializations, and availability' },
   '/admin/parts': { title: 'Parts Inventory', subtitle: 'Monitor stock levels and restock parts' },
   '/admin/services': { title: 'Service Catalogue', subtitle: 'Define and manage the services offered by the workshop' },
-  '/admin/reports': { title: 'Reports & Analytics', subtitle: 'Explore operational, revenue, inventory, and team insights' }
+  '/admin/reports': { title: 'Reports & Analytics', subtitle: 'Explore operational, revenue, inventory, and team insights' },
+  '/admin/orders': { title: 'Repair Orders', subtitle: 'View and manage all repair orders in the system' },
+  '/admin/customers': { title: 'Customer Records', subtitle: 'Manage customer profiles and their vehicles' }
 }
 
 function getPageMeta(pathname) {

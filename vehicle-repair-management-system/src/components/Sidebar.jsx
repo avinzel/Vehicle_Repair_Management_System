@@ -17,7 +17,11 @@ import {
     LogOut,
     X,
     SquareUser,
-    Toolbox
+    Toolbox,
+    User,
+    FileText,
+    ChevronDown,
+    
 } from 'lucide-react';
 
 import {
@@ -31,18 +35,42 @@ import {
     SidebarMenuItem,
     SidebarMenuButton
 } from '@/components/ui/sidebar';
+// Install if missing: npx shadcn@latest add collapsible
+import {
+    Collapsible,
+    CollapsibleTrigger,
+    CollapsibleContent,
+} from '@/components/ui/collapsible';
 import { useNavigate } from 'react-router';
 
 // Nav links per role. Add/remove items here as the system's role-based
 // access rules change, rather than editing the render logic below.
 const ROLE_LINKS = {
+    // Admin is the only role with grouped sections (each has a `label`).
+    // Other roles stay flat arrays; see `sections` below.
     Admin: [
-        { name: 'Dashboard', icon: LayoutDashboard, href: '/admin'},
-        { name: 'Staffs', icon: SquareUser, href: '/admin/staff'},
-        { name: 'Mechanics', icon: MechanicIcon, href: '/admin/mechanics' },
-        { name: 'Parts Inventory', icon: Boxes, href: '/admin/parts', badgeKey: 'lowStock' },
-        { name: 'Services', icon: Toolbox, href: '/admin/services' },
-        { name: 'Reports', icon: BarChart3, href: '/admin/reports' },
+        {
+            items: [
+                { name: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
+            ],
+        },
+        {
+            label: 'Records',
+            items: [
+                { name: 'Repair Orders', icon: FileText, href: '/admin/orders' },
+                { name: 'Customer Records', icon: User, href: '/admin/customers' },
+            ],
+        },
+        {
+            label: 'Workspace',
+            items: [
+                { name: 'Staff', icon: SquareUser, href: '/admin/staff' },
+                { name: 'Mechanics', icon: MechanicIcon, href: '/admin/mechanics' },
+                { name: 'Services', icon: Toolbox, href: '/admin/services' },
+                { name: 'Parts Inventory', icon: Boxes, href: '/admin/parts', badgeKey: 'lowStock' },
+                { name: 'Reports', icon: BarChart3, href: '/admin/reports' },
+            ],
+        },
     ],
     'Service Advisor': [
         { name: 'Dashboard', icon: LayoutDashboard, href: '/service-advisor' },
@@ -101,8 +129,41 @@ export function AppSidebar({
     const menuRef = useRef(null);
     const navigate = useNavigate();
 
-    const links = ROLE_LINKS[role] ?? ROLE_LINKS['Service Advisor'];
+    const roleLinks = ROLE_LINKS[role] ?? ROLE_LINKS['Service Advisor'];
+    // Grouped roles already have { label, items }; flat roles become one unlabeled section.
+    const sections = roleLinks[0]?.items ? roleLinks : [{ label: null, items: roleLinks }];
     const isDarkRole = DARK_SIDEBAR_ROLES.includes(role);
+
+    // Open/closed state per labeled group, keyed by label. A group starts
+    // open only if it contains the current page, so the active link is
+    // never hidden on load. Unlabeled sections (e.g. Dashboard) are never
+    // collapsible, so they don't need an entry here.
+    const [openGroups, setOpenGroups] = useState(() =>
+        Object.fromEntries(
+            sections
+                .filter((s) => s.label)
+                .map((s) => [s.label, true])
+        )
+    );
+
+    // When navigation lands inside a collapsed group (e.g. via a redirect
+    // or a link from another page), open it. Never force-closes anything,
+    // so the user's manual toggles are respected.
+    useEffect(() => {
+        setOpenGroups((prev) => {
+            const next = { ...prev };
+            let changed = false;
+            for (const s of sections) {
+                if (s.label && !next[s.label] && s.items.some((l) => isLinkActive(l.href, location.pathname))) {
+                    next[s.label] = true;
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location.pathname, role]);
+
     const initials = userName
         .split(' ')
         .map((part) => part[0])
@@ -119,6 +180,49 @@ export function AppSidebar({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    // Shared by collapsible and non-collapsible sections.
+    function renderMenu(items) {
+        return (
+            <SidebarMenu className="space-y-1">
+                {items.map((link) => {
+                    const Icon = link.icon;
+                    const isActive = isLinkActive(link.href, location.pathname);
+                    const badgeValue = link.badgeKey ? badges[link.badgeKey] : null;
+                    return (
+                        <SidebarMenuItem key={link.name}>
+                            <SidebarMenuButton
+                                asChild
+                                isActive={isActive}
+                                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
+                                    ? '!bg-sidebar-primary !text-sidebar-primary-foreground shadow-sm hover:!bg-sidebar-primary/90 hover:!text-sidebar-primary-foreground'
+                                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                                    }`}
+                            >
+                                <Link
+                                    to={link.href}
+                                    className="flex items-center justify-between w-full"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <Icon className={`w-4 h-4 ${isActive ? 'text-sidebar-primary-foreground' : 'text-sidebar-foreground/60'}`} />
+                                        <span>{link.name}</span>
+                                    </div>
+                                    {badgeValue != null && (
+                                        <span
+                                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground' : 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                                }`}
+                                        >
+                                            {badgeValue}
+                                        </span>
+                                    )}
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    );
+                })}
+            </SidebarMenu>
+        );
+    }
 
     async function logout() {
         const response = await fetch("http://localhost:8000/api.php?action=logout", {
@@ -153,47 +257,47 @@ export function AppSidebar({
                 </SidebarHeader>
 
                 <SidebarContent className="px-4 py-2">
-                    <SidebarGroup>
-                        <SidebarGroupContent>
-                            <SidebarMenu className="space-y-2">
-                                {links.map((link) => {
-                                    const Icon = link.icon;
-                                    const isActive = isLinkActive(link.href, location.pathname);
-                                    const badgeValue = link.badgeKey ? badges[link.badgeKey] : null;
-                                    return (
-                                        <SidebarMenuItem key={link.name}>
-                                            <SidebarMenuButton
-                                                asChild
-                                                isActive={isActive}
-                                                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
-                                                    ? '!bg-sidebar-primary !text-sidebar-primary-foreground shadow-sm hover:!bg-sidebar-primary/90 hover:!text-sidebar-primary-foreground'
-                                                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                                                    }`}
-                                            >
-                                                <Link
-                                                    to={link.href}
-                                                    className="flex items-center justify-between w-full"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <Icon className={`w-4 h-4 ${isActive ? 'text-sidebar-primary-foreground' : 'text-sidebar-foreground/60'}`} />
-                                                        <span>{link.name}</span>
-                                                    </div>
-                                                    {badgeValue != null && (
-                                                        <span
-                                                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground' : 'bg-sidebar-accent text-sidebar-accent-foreground'
-                                                                }`}
-                                                        >
-                                                            {badgeValue}
-                                                        </span>
-                                                    )}
-                                                </Link>
-                                            </SidebarMenuButton>
-                                        </SidebarMenuItem>
-                                    );
-                                })}
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </SidebarGroup>
+                    {sections.map((section, sectionIndex) => {
+                        // Unlabeled section (Dashboard, or every flat role):
+                        // plain list, not collapsible.
+                        if (!section.label) {
+                            return (
+                                <SidebarGroup key={sectionIndex} className="py-2 mb-2 last:mb-0">
+                                    <SidebarGroupContent>{renderMenu(section.items)}</SidebarGroupContent>
+                                </SidebarGroup>
+                            );
+                        }
+
+                        const isOpen = !!openGroups[section.label];
+                        return (
+                            <Collapsible
+                                key={section.label}
+                                open={isOpen}
+                                onOpenChange={(open) =>
+                                    setOpenGroups((prev) => ({ ...prev, [section.label]: open }))
+                                }
+                                className="mb-2 last:mb-0"
+                            >
+                                <SidebarGroup className="p-0 ">
+                                    <CollapsibleTrigger
+                                        className="group/trigger flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                    >
+                                        <span className="font-normal text-md text-sidebar-foreground">
+                                            {section.label}
+                                        </span>
+                                        <ChevronDown
+                                            className={`w-4 h-4 text-sidebar-foreground/60 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
+                                        />
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                        <SidebarGroupContent className="pt-1">
+                                            {renderMenu(section.items)}
+                                        </SidebarGroupContent>
+                                    </CollapsibleContent>
+                                </SidebarGroup>
+                            </Collapsible>
+                        );
+                    })}
                 </SidebarContent>
 
                 <SidebarFooter className="p-4 border-t border-sidebar-border">

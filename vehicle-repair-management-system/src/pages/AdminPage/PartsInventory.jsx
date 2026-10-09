@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PartFormDialog, unitLabel } from "@/components/dialogs/PartFormDialog";
 import { RestockPartDialog } from "@/components/dialogs/RestockPartDialog";
 import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
+import { normalizePart } from "@/utils/normalizeOrder";
 
 const API = "http://localhost:8000/api.php";
 
@@ -29,32 +30,60 @@ const STOCK_LEVELS = {
 };
 
 function getStockLevel(part) {
-  if (part.quantity <= 0) return "OUT";
-  if (part.quantity <= part.reorderLevel) return "LOW";
-  if (part.quantity <= part.reorderLevel * MODERATE_MULTIPLIER) return "MODERATE";
+  if (part.quantity_on_hand <= 0) return "OUT";
+  if (part.quantity_on_hand <= part.reorder_level) return "LOW";
+  if (part.quantity_on_hand <= part.reorder_level * MODERATE_MULTIPLIER) return "MODERATE";
   return "IN_STOCK";
 }
 
-const STOCK_TABS = [
-  "All",
-  STOCK_LEVELS.IN_STOCK.label,
-  STOCK_LEVELS.MODERATE.label,
-  STOCK_LEVELS.LOW.label,
-  STOCK_LEVELS.OUT.label,
+const PILL_FILTERS = [
+  { label: "All", kind: "all" },
+  // stock level
+  { label: STOCK_LEVELS.IN_STOCK.label, kind: "stock" },
+  { label: STOCK_LEVELS.MODERATE.label, kind: "stock" },
+  { label: STOCK_LEVELS.LOW.label, kind: "stock" },
+  { label: STOCK_LEVELS.OUT.label, kind: "stock" },
+  // vehicle type
+  { label: "Car", kind: "vehicle" },
+  { label: "Motorcycle", kind: "vehicle" },
+  { label: "Tricycle", kind: "vehicle" },
 ];
 
+const FILTER_TABS = PILL_FILTERS.map((f) => f.label);
 // Row shape comes from sp_get_parts_inventory.
-function normalizePart(raw) {
-  const id = raw.part_id ?? raw.id;
-  return {
-    id,
-    code: `P-${String(id).padStart(3, "0")}`,
-    name: raw.part_name ?? raw.name ?? "—",
-    unit: raw.unit ?? "pc",
-    quantity: Number(raw.quantity_on_hand ?? 0),
-    unitPrice: Number(raw.unit_price ?? 0),
-    reorderLevel: Number(raw.reorder_level ?? 0),
-  };
+// function normalizePart(raw) {
+//   const id = raw.part_id ?? raw.id;
+//   return {
+//     id,
+//     code: `P-${String(id).padStart(3, "0")}`,
+//     name: raw.part_name ?? raw.name ?? "—",
+//     category: raw.category ?? "—",
+//     vehicle_types: raw.vehicle_types ?? "—",
+//     unit: raw.unit ?? "pc",
+//     quantity: Number(raw.quantity_on_hand ?? 0),
+//     unitPrice: Number(raw.unit_price ?? 0),
+//     reorderLevel: Number(raw.reorder_level ?? 0),
+//   };
+// }
+function matchesPill(part, label) {
+  const pill = PILL_FILTERS.find((f) => f.label === label);
+  if (!pill || pill.kind === "all") return true;
+
+  if (pill.kind === "stock") {
+    return STOCK_LEVELS[getStockLevel(part)].label === label;
+  }
+
+  // vehicle: vehicle_types may be one or several ("CAR", "Car, Motorcycle").
+  // Parts marked "All"/"Universal" fit every vehicle.
+  const tokens = String(part.vehicle_types ?? "")
+    .toLowerCase()
+    .split(/[,/|]/)
+    .map((t) => t.trim());
+  return (
+    tokens.includes(label.toLowerCase()) ||
+    tokens.includes("all") ||
+    tokens.includes("universal")
+  );
 }
 
 function formatPeso(amount) {
@@ -77,7 +106,8 @@ export function PartsInventory() {
   const [loadError, setLoadError] = useState(null);
 
   const [search, setSearch] = useState("");
-  const [stockFilter, setStockFilter] = useState("All");
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [vehicleFilter, setVehicleFilter] = useState("All");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // part row or null (= add)
@@ -112,15 +142,15 @@ export function PartsInventory() {
     [parts]
   );
 
-  const stockLabel = (p) => STOCK_LEVELS[getStockLevel(p)].label;
+
   const filteredParts = useMemo(
     () =>
       parts.filter(
         (p) =>
-          (stockFilter === "All" || stockLabel(p) === stockFilter) &&
-          matchesSearch(search, p.name, p.code, unitLabel(p.unit))
+          matchesPill(p, activeFilter) &&
+          matchesSearch(search, p.part_name, p.part_code, unitLabel(p.unit), p.vehicle_types)
       ),
-    [parts, search, stockFilter]
+    [parts, search, activeFilter]
   );
 
   function openAdd() {
@@ -183,10 +213,10 @@ export function PartsInventory() {
         <FilterBar
           search={search}
           onSearchChange={setSearch}
-          statusFilter={stockFilter}
-          onStatusFilterChange={setStockFilter}
-          placeholder="Search by part ID, name, or unit..."
-          tabs={STOCK_TABS}
+          statusFilter={activeFilter}
+          onStatusFilterChange={setActiveFilter}
+          placeholder="Search by part ID, name, vehicle types ,or unit..."
+          tabs={FILTER_TABS}
         />
       </div>
 
@@ -217,8 +247,10 @@ export function PartsInventory() {
                 <TableRow>
                   <TableHead className="text-sm font-medium text-tertiary">Part ID</TableHead>
                   <TableHead className="text-sm font-medium text-tertiary">Name</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Category</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Vehicle Type</TableHead>
                   <TableHead className="text-sm font-medium text-tertiary">Unit</TableHead>
-                  <TableHead className="text-sm font-medium text-tertiary">Qty on Hand</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary text-center">Qty on Hand</TableHead>
                   <TableHead className="text-sm font-medium text-tertiary">Unit Cost</TableHead>
                   <TableHead className="text-sm font-medium text-tertiary">Stock Level</TableHead>
                   <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
@@ -228,12 +260,14 @@ export function PartsInventory() {
                 {filteredParts.map((part) => {
                   const level = STOCK_LEVELS[getStockLevel(part)];
                   return (
-                    <TableRow key={part.id}>
-                      <TableCell className="text-xs text-muted-foreground">{part.code}</TableCell>
-                      <TableCell className="font-medium">{part.name}</TableCell>
+                    <TableRow key={part.part_id}>
+                      <TableCell className="text-xs text-muted-foreground">{part.part_code}</TableCell>
+                      <TableCell className="font-medium">{part.part_name}</TableCell>
+                      <TableCell className="font-medium">{part.category}</TableCell>
+                      <TableCell className="font-medium">{part.vehicle_types}</TableCell>
                       <TableCell className="text-muted-foreground">{unitLabel(part.unit)}</TableCell>
-                      <TableCell className="font-medium">{part.quantity}</TableCell>
-                      <TableCell className="text-muted-foreground">{formatPeso(part.unitPrice)}</TableCell>
+                      <TableCell className="font-medium text-center">{part.quantity_on_hand}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatPeso(part.unit_price)}</TableCell>
                       <TableCell>
                         <Badge variant="secondary" className={level.cls}>
                           {level.label}

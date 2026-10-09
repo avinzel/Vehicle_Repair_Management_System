@@ -23,6 +23,8 @@ import { MechanicsPage } from "./pages/AdminPage/Mechanics";
 import { PartsInventory } from "./pages/AdminPage/PartsInventory";
 import { Services } from "./pages/AdminPage/Services";
 import { Reports } from "./pages/AdminPage/Reports";
+import { CustomersPage } from "./pages/AdminPage/Customers";
+import { OrdersPage } from "./pages/AdminPage/RepairOrders";
 
 import { OverviewTab } from "./pages/AdminPage/reports/OverviewTab";
 import { PipelineTab } from "./pages/AdminPage/reports/PipelineTab";
@@ -88,6 +90,8 @@ function App() {
             <Route path="mechanics" element={<MechanicsTab />} />
           </Route>
 
+          <Route path='customers' element={<CustomersPage />} />
+          <Route path='orders' element={<OrdersPage />} />
         </Route>
 
         <Route
