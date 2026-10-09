@@ -10,7 +10,6 @@ const API = "http://localhost:8000/api.php";
 const PAYMENT_LABELS = {
   CASH: "Cash",
   GCASH: "GCash",
-  BANK_TRANSFER: "Bank Transfer",
 };
 
 function formatPeso(amount) {
@@ -36,14 +35,6 @@ function Tile({ label, children, className = "" }) {
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="font-medium break-words">{children}</p>
     </div>
-  );
-}
-
-function SectionTitle({ children }) {
-  return (
-    <h3 className="text-xs font-semibold text-muted-foreground tracking-wide mb-3 uppercase">
-      {children}
-    </h3>
   );
 }
 
@@ -117,7 +108,9 @@ export function OrderHistoryDetail({ order }) {
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         <div>
-          <SectionTitle>Customer &amp; Vehicle</SectionTitle>
+          <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
+            Customer &amp; Vehicle
+          </h3>
           <div className="grid grid-cols-2 gap-3">
             <Tile label="Customer">{order.customer}</Tile>
             <Tile label="Vehicle">{order.vehicle}</Tile>
@@ -130,14 +123,18 @@ export function OrderHistoryDetail({ order }) {
 
         {details?.complaint && (
           <div>
-            <SectionTitle>Customer Complaint</SectionTitle>
+            <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
+            Customer Complaint
+            </h3>
             <p className="text-sm bg-secondary/50 rounded-lg p-3">{details.complaint}</p>
           </div>
         )}
 
         {details?.diagnosis_notes && (
           <div>
-            <SectionTitle>Diagnosis</SectionTitle>
+            <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
+            Customer Complaint
+            </h3>
             <p className="text-sm bg-secondary/50 rounded-lg p-3">{details.diagnosis_notes}</p>
             {details.formatted_diagnosis_date && (
               <p className="text-xs text-muted-foreground mt-1.5">Filed {details.formatted_diagnosis_date}</p>
@@ -146,7 +143,9 @@ export function OrderHistoryDetail({ order }) {
         )}
 
         <div>
-          <SectionTitle>Services Performed</SectionTitle>
+          <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
+            Customer Complaint
+          </h3>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading services...</p>
           ) : services.length > 0 ? (
@@ -167,7 +166,9 @@ export function OrderHistoryDetail({ order }) {
         </div>
 
         <div>
-          <SectionTitle>Parts Used</SectionTitle>
+          <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
+            Parts Used
+          </h3>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading parts...</p>
           ) : parts.length > 0 ? (
@@ -193,7 +194,9 @@ export function OrderHistoryDetail({ order }) {
         </div>
 
         <div>
-          <SectionTitle>Mechanics on Job</SectionTitle>
+          <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
+            Mechanics on Job
+            </h3>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading mechanics...</p>
           ) : mechanics.length > 0 ? (
@@ -214,7 +217,9 @@ export function OrderHistoryDetail({ order }) {
         </div>
 
         <div>
-          <SectionTitle>Invoice &amp; Payment</SectionTitle>
+          <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
+            Invoice &amp; Payment
+            </h3>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading invoice...</p>
           ) : invoice ? (

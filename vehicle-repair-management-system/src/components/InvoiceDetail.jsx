@@ -17,7 +17,6 @@ function formatCurrency(amount) {
 const PAYMENT_METHODS = [
   { value: "CASH", label: "Cash" },
   { value: "GCASH", label: "GCash" },
-  { value: "BANK_TRANSFER", label: "Bank Transfer" },
 ];
 
 function methodLabel(value) {
@@ -344,7 +343,7 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
             <h3 className="text-xs font-semibold text-muted-foreground tracking-wide">
               Payment Method
             </h3>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {PAYMENT_METHODS.map((method) => (
                 <button
                   key={method.value}

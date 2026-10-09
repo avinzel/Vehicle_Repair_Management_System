@@ -1,6 +1,7 @@
 "use client"
 
 import { forwardRef, useImperativeHandle, useState } from "react";
+import { Check, Plus, Car } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -54,17 +55,24 @@ function validateField(name, value) {
   }
 }
 
-const FIELD_NAMES = ["vehicleType", "plateNumber", "make", "model", "year", "color", "vinNumber"];
-
 // `values` + `onFieldChange` come from the parent stepper so the data
 // survives switching between steps. This component only owns UI-only
 // state: which errors to show, and whether the user has tried to submit.
+//
+// existingVehicles / selectedVehicleId / onSelectVehicle are only passed when
+// the customer came from Customer Records. selectedVehicleId === null means
+// "Enter a new vehicle". When an existing vehicle is selected, its identity
+// fields (type, plate, make, model, year, VIN) are read-only; color and
+// mileage stay editable since the intake SP updates both for returning vehicles.
 export const VehicleForm = forwardRef(function VehicleForm(
-  { values, onFieldChange },
+  { values, onFieldChange, existingVehicles = [], selectedVehicleId = null, onSelectVehicle },
   ref
 ) {
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
+
+  const isExisting = selectedVehicleId != null;
+  const lockedClass = isExisting ? "bg-muted/50" : "";
 
   const handleChange = (name) => (e) => {
     const value = e.target.value;
@@ -82,9 +90,14 @@ export const VehicleForm = forwardRef(function VehicleForm(
   };
 
   const validateAll = () => {
+    const names = [
+      "vehicleType", "plateNumber", "make", "model", "year", "currentMileage",
+      // Color is optional for an existing vehicle (SP keeps the old one if null).
+      ...(isExisting ? [] : ["color"]),
+    ];
     const nextErrors = {};
-    FIELD_NAMES.forEach((name) => {
-      nextErrors[name] = validateField(name, values[name]);
+    names.forEach((name) => {
+      nextErrors[name] = validateField(name, values[name] ?? "");
     });
     setErrors(nextErrors);
     setSubmitted(true);
@@ -103,6 +116,63 @@ export const VehicleForm = forwardRef(function VehicleForm(
     <div>
       <h3 className="text-lg font-semibold mb-6">Vehicle Details</h3>
 
+      {existingVehicles.length > 0 && (
+        <div className="mb-6 space-y-2 border-b border-border pb-6">
+          <p className="text-xs text-muted-foreground">
+            Select an existing vehicle or enter a new one below
+          </p>
+
+          {existingVehicles.map((v) => {
+            const selected = selectedVehicleId === v.id;
+            return (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => onSelectVehicle?.(v.id)}
+                className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                  selected ? "border-primary bg-primary/10" : "border-border hover:bg-secondary/50"
+                }`}
+              >
+                <div
+                  className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
+                    selected ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {selected ? <Check className="w-4 h-4" /> : <Car className="w-4 h-4" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {[v.make, v.model, v.year].filter(Boolean).join(" ")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{v.plateNumber}</p>
+                </div>
+                {selected && <span className="text-xs text-primary">Selected</span>}
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => onSelectVehicle?.(null)}
+            className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+              !isExisting
+                ? "border-primary bg-primary/10 border-solid"
+                : "border-dashed border-border hover:bg-secondary/50"
+            }`}
+          >
+            <div
+              className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
+                !isExisting ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+              }`}
+            >
+              {!isExisting ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            </div>
+            <span className="flex-1 text-sm">Enter a new vehicle</span>
+            {!isExisting && <span className="text-xs text-primary">Selected</span>}
+          </button>
+        </div>
+      )}
+
       <form className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
         <div className="flex flex-col gap-1.5 sm:col-span-1">
           <Label>Vehicle Type</Label>
@@ -114,6 +184,7 @@ export const VehicleForm = forwardRef(function VehicleForm(
                 variant={values.vehicleType === type ? "default" : "outline"}
                 onClick={() => handleTypeSelect(type)}
                 aria-pressed={values.vehicleType === type}
+                disabled={isExisting}
                 className="min-w-[110px]"
               >
                 {type}
@@ -133,7 +204,8 @@ export const VehicleForm = forwardRef(function VehicleForm(
             value={values.plateNumber}
             onChange={handleChange("plateNumber")}
             aria-invalid={!!showError("plateNumber")}
-            
+            readOnly={isExisting}
+            className={lockedClass}
           />
           {showError("plateNumber") && (
             <p className="text-sm text-destructive">{errors.plateNumber}</p>
@@ -148,6 +220,8 @@ export const VehicleForm = forwardRef(function VehicleForm(
             value={values.make}
             onChange={handleChange("make")}
             aria-invalid={!!showError("make")}
+            readOnly={isExisting}
+            className={lockedClass}
           />
           {showError("make") && (
             <p className="text-sm text-destructive">{errors.make}</p>
@@ -162,6 +236,8 @@ export const VehicleForm = forwardRef(function VehicleForm(
             value={values.model}
             onChange={handleChange("model")}
             aria-invalid={!!showError("model")}
+            readOnly={isExisting}
+            className={lockedClass}
           />
           {showError("model") && (
             <p className="text-sm text-destructive">{errors.model}</p>
@@ -177,6 +253,8 @@ export const VehicleForm = forwardRef(function VehicleForm(
             value={values.year}
             onChange={handleChange("year")}
             aria-invalid={!!showError("year")}
+            readOnly={isExisting}
+            className={lockedClass}
           />
           {showError("year") && (
             <p className="text-sm text-destructive">{errors.year}</p>
@@ -205,19 +283,22 @@ export const VehicleForm = forwardRef(function VehicleForm(
             value={values.vinNumber}
             onChange={handleChange("vinNumber")}
             aria-invalid={!!showError("vinNumber")}
-            maxlength="17" 
+            maxLength={17}
+            readOnly={isExisting}
+            className={lockedClass}
           />
           {showError("vinNumber") && (
             <p className="text-sm text-destructive">{errors.vinNumber}</p>
           )}
         </div>
+
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="currentMileage">Current Mileage (optional)</Label>
           <Input
             id="currentMileage"
             placeholder="e.g., 10000"
             inputMode="numeric"
-            value={values.currentMileage}   // was values.currentMillage
+            value={values.currentMileage}
             onChange={handleChange("currentMileage")}
             aria-invalid={!!showError("currentMileage")}
             maxLength={6}
@@ -227,7 +308,6 @@ export const VehicleForm = forwardRef(function VehicleForm(
           )}
         </div>
       </form>
-
     </div>
   );
 });

@@ -13,7 +13,7 @@ import { formatStatusLabel } from "@/utils/formatStatusLabel";
 // historical Fulfilled orders for reference. It deliberately does NOT
 // include earlier statuses (Pending Diagnosis through Awaiting Parts) —
 // those belong on Active Repair Orders.
-const BILLING_TABS = ["All", "Ready to Invoice", "Awaiting Payment", "Ready for Release"];
+const BILLING_TABS = ["All", "Ready To Invoice", "Awaiting Payment", "Ready For Release"];
 
 export function BillingInvoicing() {
   // billingOrders is the single source of truth for this list.
