@@ -69,6 +69,7 @@
 		contact_no      VARCHAR(20) NOT NULL,
 		email           VARCHAR(100) unique,
 		address         VARCHAR(255),
+		status          ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
 		created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
@@ -1036,7 +1037,7 @@ BEGIN
         SET p_sort_order = 'ASC';
     END IF;
 
-    SELECT 
+    SELECT
         CONCAT('M-', LPAD(m.mechanic_id, 3, '0')) AS formatted_mechanic_id,
         m.mechanic_id,
         CONCAT(u.first_name, ' ', IFNULL(CONCAT(u.middle_name, ' '), ''), u.last_name) AS full_name,
@@ -1171,26 +1172,85 @@ CREATE PROCEDURE sp_create_vehicle_intake(
 BEGIN
     -- Declare local variable to hold sanitized VIN
     DECLARE v_vin VARCHAR(50);
+    DECLARE v_customer_status ENUM('ACTIVE','INACTIVE');
+    DECLARE v_email_customer_id INT DEFAULT NULL;
+    DECLARE v_contact_customer_id INT DEFAULT NULL;
+    DECLARE v_contact_customer_count INT DEFAULT 0;
+    DECLARE v_inactive_contact_count INT DEFAULT 0;
+    DECLARE v_plate_customer_id INT DEFAULT NULL;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
 
     START TRANSACTION;
 
     -- Converts "" (empty string) to NULL
     SET v_vin = NULLIF(TRIM(p_vin_number), '');
+    SET p_email = NULLIF(TRIM(p_email), '');
+    SET p_vehicle_id = NULL;
+    SET p_customer_id = NULL;
 
-    -- 1. Check if vehicle exists by plate number
-    SELECT vehicle_id, customer_id 
-    INTO p_vehicle_id, p_customer_id 
-    FROM vehicles 
-    WHERE plate_number = p_plate_number 
-    LIMIT 1;
+    -- Resolve customer identity before trusting a plate match.
+    SELECT MAX(customer_id)
+    INTO v_email_customer_id
+    FROM customers
+    WHERE p_email IS NOT NULL
+      AND email = p_email;
 
-    -- 2. If vehicle was not found, search for customer by contact number or email
-    IF p_customer_id IS NULL THEN
-        SELECT customer_id INTO p_customer_id 
-        FROM customers 
-        WHERE contact_no = p_contact_no 
-           OR (email IS NOT NULL AND email = p_email) 
-        LIMIT 1;
+    SELECT MIN(customer_id),
+           COUNT(DISTINCT customer_id),
+           COUNT(DISTINCT CASE WHEN status = 'INACTIVE' THEN customer_id END)
+    INTO v_contact_customer_id, v_contact_customer_count, v_inactive_contact_count
+    FROM customers
+    WHERE contact_no = p_contact_no;
+
+    IF (v_email_customer_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM customers
+            WHERE customer_id = v_email_customer_id AND status = 'INACTIVE'
+        ))
+       OR (v_email_customer_id IS NULL AND v_inactive_contact_count > 0) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot create a repair order for an inactive customer.';
+    END IF;
+
+    IF v_email_customer_id IS NOT NULL THEN
+        SET p_customer_id = v_email_customer_id;
+    ELSEIF v_contact_customer_count = 1 THEN
+        SET p_customer_id = v_contact_customer_id;
+    ELSEIF v_contact_customer_count > 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'This contact number matches multiple customer records. Provide the email address associated with the intended customer.';
+    END IF;
+
+    -- Resolve the vehicle by plate and require its owner to match the customer identity.
+    SELECT MAX(vehicle_id), MAX(customer_id)
+    INTO p_vehicle_id, v_plate_customer_id
+    FROM vehicles
+    WHERE plate_number = p_plate_number;
+
+    IF p_vehicle_id IS NOT NULL THEN
+        IF p_customer_id IS NULL OR p_customer_id <> v_plate_customer_id THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'This plate number is already registered to a different customer.';
+        END IF;
+    END IF;
+
+    IF p_customer_id IS NULL AND p_vehicle_id IS NULL THEN
+        SET p_customer_id = NULL;
+    END IF;
+
+    IF p_customer_id IS NOT NULL THEN
+        SELECT status INTO v_customer_status
+        FROM customers
+        WHERE customer_id = p_customer_id
+        FOR UPDATE;
+
+        IF v_customer_status <> 'ACTIVE' THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Cannot create a repair order for an inactive customer.';
+        END IF;
     END IF;
 
     -- 3. Handle Customer (Insert if new, Sync details if existing)
@@ -1203,7 +1263,7 @@ BEGIN
         -- Update contact info / address in case they changed
         UPDATE customers 
         SET contact_no = p_contact_no,
-            email      = IFNULL(p_email, email),
+            email      = COALESCE(p_email, email),
             address    = IFNULL(p_address, address)
         WHERE customer_id = p_customer_id;
     END IF;
@@ -1297,6 +1357,194 @@ DELIMITER ;
 
 DELIMITER //
 
+DROP PROCEDURE IF EXISTS sp_get_order_management_list //
+CREATE PROCEDURE sp_get_order_management_list(
+    IN p_status VARCHAR(50),
+    IN p_search VARCHAR(255)
+)
+BEGIN
+    SET p_status = IF(p_status IS NULL OR TRIM(p_status) = '', 'ALL', UPPER(TRIM(p_status)));
+    SET p_search = IF(p_search IS NULL OR TRIM(p_search) = '', NULL, CONCAT('%', TRIM(p_search), '%'));
+
+    SELECT
+        ro.order_id,
+        CONCAT('RO-', ro.order_id) AS formatted_order_id,
+        ro.vehicle_id,
+        v.customer_id,
+        CONCAT_WS(' ', c.first_name, NULLIF(c.middle_name, ''), c.last_name) AS customer_name,
+        c.contact_no,
+        c.email,
+        v.plate_number,
+        v.vehicle_type,
+        v.manufacturer,
+        v.model,
+        v.year_model,
+        ro.date_received,
+        ro.date_completed,
+        ro.mileage_at_service,
+        ro.complaint,
+        ro.diagnosis_notes,
+        ro.priority,
+        ro.status,
+        GROUP_CONCAT(
+            DISTINCT CONCAT(u.first_name, ' ', u.last_name)
+            ORDER BY u.first_name, u.last_name
+            SEPARATOR ', '
+        ) AS assigned_mechanics,
+        i.invoice_id,
+        i.invoice_date,
+        i.status AS invoice_status,
+        i.total_amount AS invoice_total
+    FROM repair_orders ro
+    INNER JOIN vehicles v ON v.vehicle_id = ro.vehicle_id
+    INNER JOIN customers c ON c.customer_id = v.customer_id
+    LEFT JOIN repair_order_mechanics rom ON rom.order_id = ro.order_id
+    LEFT JOIN mechanics m ON m.mechanic_id = rom.mechanic_id
+    LEFT JOIN users u ON u.user_id = m.user_id
+    LEFT JOIN invoices i ON i.order_id = ro.order_id
+    WHERE (p_status = 'ALL' OR ro.status = p_status)
+      AND (
+          p_search IS NULL
+          OR CAST(ro.order_id AS CHAR) LIKE p_search
+          OR CONCAT('RO-', ro.order_id) LIKE p_search
+          OR CONCAT_WS(' ', c.first_name, NULLIF(c.middle_name, ''), c.last_name) LIKE p_search
+          OR c.contact_no LIKE p_search
+          OR c.email LIKE p_search
+          OR v.plate_number LIKE p_search
+          OR v.manufacturer LIKE p_search
+          OR v.model LIKE p_search
+      )
+    GROUP BY ro.order_id
+    ORDER BY ro.date_received DESC, ro.order_id DESC;
+END //
+
+DROP PROCEDURE IF EXISTS sp_cancel_repair_order //
+CREATE PROCEDURE sp_cancel_repair_order(IN p_order_id INT)
+BEGIN
+    DECLARE v_order_status VARCHAR(50) DEFAULT NULL;
+    DECLARE v_issued_rows INT DEFAULT 0;
+    DECLARE v_pending_rows INT DEFAULT 0;
+    DECLARE v_returned_quantity INT DEFAULT 0;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    SELECT status INTO v_order_status
+    FROM repair_orders
+    WHERE order_id = p_order_id
+    FOR UPDATE;
+
+    IF v_order_status IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Repair order not found.';
+    END IF;
+
+    IF v_order_status = 'CANCELLED' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Repair order is already cancelled.';
+    END IF;
+
+    IF v_order_status NOT IN (
+        'PENDING_DIAGNOSIS',
+        'AWAITING_DIAGNOSIS',
+        'PENDING_MECHANICS',
+        'IN_PROGRESS',
+        'AWAITING_PARTS'
+    ) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot cancel a repair order once it is READY_TO_INVOICE or has progressed beyond that workflow stage.';
+    END IF;
+
+    SELECT
+        COUNT(CASE WHEN status = 'ISSUED' THEN 1 END),
+        COUNT(CASE WHEN status = 'PENDING_PARTS' THEN 1 END),
+        COALESCE(SUM(CASE WHEN status = 'ISSUED' THEN quantity_used ELSE 0 END), 0)
+    INTO v_issued_rows, v_pending_rows, v_returned_quantity
+    FROM repair_order_parts
+    WHERE order_id = p_order_id;
+
+    UPDATE parts_inventory pi
+    INNER JOIN (
+        SELECT part_id, SUM(quantity_used) AS quantity_to_return
+        FROM repair_order_parts
+        WHERE order_id = p_order_id
+          AND status = 'ISSUED'
+        GROUP BY part_id
+    ) issued_parts ON issued_parts.part_id = pi.part_id
+    SET pi.quantity_on_hand = pi.quantity_on_hand + issued_parts.quantity_to_return;
+
+    UPDATE repair_order_parts
+    SET status = 'CANCELLED'
+    WHERE order_id = p_order_id
+      AND status IN ('ISSUED', 'PENDING_PARTS');
+
+    UPDATE repair_orders
+    SET status = 'CANCELLED'
+    WHERE order_id = p_order_id;
+
+    COMMIT;
+
+    SELECT
+        v_issued_rows AS issued_part_rows_cancelled,
+        v_pending_rows AS pending_part_rows_cancelled,
+        v_returned_quantity AS inventory_quantity_returned;
+END //
+
+DROP PROCEDURE IF EXISTS sp_update_repair_order_details //
+CREATE PROCEDURE sp_update_repair_order_details(
+    IN p_order_id INT,
+    IN p_update_complaint TINYINT,
+    IN p_complaint VARCHAR(500),
+    IN p_update_priority TINYINT,
+    IN p_priority VARCHAR(20),
+    IN p_update_mileage TINYINT,
+    IN p_mileage_at_service INT,
+    IN p_update_diagnosis_notes TINYINT,
+    IN p_diagnosis_notes TEXT
+)
+BEGIN
+    DECLARE v_order_status VARCHAR(50) DEFAULT NULL;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    SELECT status INTO v_order_status
+    FROM repair_orders
+    WHERE order_id = p_order_id
+    FOR UPDATE;
+
+    IF v_order_status IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Repair order not found.';
+    END IF;
+
+    IF p_update_priority = 1
+       AND p_priority NOT IN ('STANDARD', 'URGENT', 'RUSH') THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Priority must be STANDARD, URGENT, or RUSH.';
+    END IF;
+
+    UPDATE repair_orders
+    SET complaint = IF(p_update_complaint = 1, p_complaint, complaint),
+        priority = IF(p_update_priority = 1, p_priority, priority),
+        mileage_at_service = IF(p_update_mileage = 1, p_mileage_at_service, mileage_at_service),
+        diagnosis_notes = IF(p_update_diagnosis_notes = 1, p_diagnosis_notes, diagnosis_notes)
+    WHERE order_id = p_order_id;
+
+    COMMIT;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
 DROP PROCEDURE IF EXISTS sp_get_customer_directory //
 
 CREATE PROCEDURE sp_get_customer_directory(
@@ -1314,9 +1562,13 @@ BEGIN
     SELECT 
         c.customer_id,
         CONCAT('C-', LPAD(c.customer_id, 3, '0')) AS formatted_customer_id,
-        CONCAT(c.first_name, ' ', c.last_name) AS full_name, 
+        CONCAT_WS(' ', c.first_name, NULLIF(c.middle_name, ''), c.last_name) AS full_name,
+        c.first_name,
+        c.middle_name,
+        c.last_name,
         c.contact_no,
         c.email,
+        c.status,
         COUNT(DISTINCT v.vehicle_id) AS vehicle_count,
         DATE_FORMAT(MAX(r.date_received), '%b %d, %Y') AS last_visit
 
@@ -1325,23 +1577,29 @@ BEGIN
     LEFT JOIN repair_orders r ON v.vehicle_id = r.vehicle_id
 
     WHERE 
-        p_search IS NULL
-        OR CONCAT('C-', LPAD(c.customer_id, 3, '0')) LIKE CONCAT('%', p_search, '%')
-        OR CONCAT(c.first_name, ' ', c.last_name) LIKE CONCAT('%', p_search, '%')
-        OR c.first_name LIKE CONCAT('%', p_search, '%')
-        OR c.last_name LIKE CONCAT('%', p_search, '%')
-        OR c.contact_no LIKE CONCAT('%', p_search, '%')
-        OR c.email LIKE CONCAT('%', p_search, '%')
-        OR v.plate_number LIKE CONCAT('%', p_search, '%')
-        OR v.manufacturer LIKE CONCAT('%', p_search, '%')
-        OR v.model LIKE CONCAT('%', p_search, '%')
+        c.status = 'ACTIVE'
+        AND (
+            p_search IS NULL
+            OR CONCAT('C-', LPAD(c.customer_id, 3, '0')) LIKE CONCAT('%', p_search, '%')
+            OR CONCAT_WS(' ', c.first_name, NULLIF(c.middle_name, ''), c.last_name) LIKE CONCAT('%', p_search, '%')
+            OR c.first_name LIKE CONCAT('%', p_search, '%')
+            OR c.middle_name LIKE CONCAT('%', p_search, '%')
+            OR c.last_name LIKE CONCAT('%', p_search, '%')
+            OR c.contact_no LIKE CONCAT('%', p_search, '%')
+            OR c.email LIKE CONCAT('%', p_search, '%')
+            OR v.plate_number LIKE CONCAT('%', p_search, '%')
+            OR v.manufacturer LIKE CONCAT('%', p_search, '%')
+            OR v.model LIKE CONCAT('%', p_search, '%')
+        )
 
     GROUP BY 
         c.customer_id,
         c.first_name,
+        c.middle_name,
         c.last_name,
         c.contact_no,
-        c.email
+        c.email,
+        c.status
 
     ORDER BY MAX(r.date_received) DESC;
 END //
@@ -1483,8 +1741,6 @@ BEGIN
 END //
 
 DELIMITER ;
-
-
 
 DELIMITER //
 
@@ -2834,10 +3090,14 @@ BEGIN
     -- Result Set 1: Customer Info & Aggregated Summary
     SELECT 
         c.customer_id,
-        CONCAT(c.first_name, ' ', IFNULL(CONCAT(c.middle_name, ' '), ''), c.last_name) AS full_name,
+        CONCAT_WS(' ', c.first_name, NULLIF(c.middle_name, ''), c.last_name) AS full_name,
+        c.first_name,
+        c.middle_name,
+        c.last_name,
         c.contact_no,
         c.email,
         c.address,
+        c.status,
         COUNT(DISTINCT v.vehicle_id) AS total_vehicles,
         MAX(ro.date_received) AS last_visit
     FROM customers c
@@ -2879,6 +3139,154 @@ BEGIN
     LEFT JOIN invoices i ON ro.order_id = i.order_id
     WHERE v.customer_id = p_customer_id
     ORDER BY ro.date_received DESC;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS sp_create_customer //
+CREATE PROCEDURE sp_create_customer(
+    IN p_first_name VARCHAR(75),
+    IN p_middle_name VARCHAR(75),
+    IN p_last_name VARCHAR(75),
+    IN p_contact_no VARCHAR(20),
+    IN p_email VARCHAR(100),
+    IN p_address VARCHAR(255)
+)
+BEGIN
+    INSERT INTO customers (first_name, middle_name, last_name, contact_no, email, address)
+    VALUES (p_first_name, p_middle_name, p_last_name, p_contact_no, p_email, p_address);
+    SELECT LAST_INSERT_ID() AS customer_id;
+END //
+
+DROP PROCEDURE IF EXISTS sp_update_customer //
+CREATE PROCEDURE sp_update_customer(
+    IN p_customer_id INT,
+    IN p_first_name VARCHAR(75),
+    IN p_middle_name VARCHAR(75),
+    IN p_last_name VARCHAR(75),
+    IN p_contact_no VARCHAR(20),
+    IN p_email VARCHAR(100),
+    IN p_address VARCHAR(255)
+)
+BEGIN
+    UPDATE customers
+    SET first_name = p_first_name,
+        middle_name = p_middle_name,
+        last_name = p_last_name,
+        contact_no = p_contact_no,
+        email = p_email,
+        address = p_address
+    WHERE customer_id = p_customer_id
+      AND status = 'ACTIVE';
+END //
+
+DROP PROCEDURE IF EXISTS sp_create_customer_vehicle //
+CREATE PROCEDURE sp_create_customer_vehicle(
+    IN p_customer_id INT,
+    IN p_plate_number VARCHAR(20),
+    IN p_vehicle_type ENUM('CAR','MOTORCYCLE','TRICYCLE'),
+    IN p_manufacturer VARCHAR(50),
+    IN p_model VARCHAR(50),
+    IN p_year_model YEAR,
+    IN p_color VARCHAR(30),
+    IN p_vin_number VARCHAR(50),
+    IN p_current_mileage INT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM customers
+        WHERE customer_id = p_customer_id AND status = 'ACTIVE'
+    ) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot add a vehicle to an inactive or missing customer.';
+    END IF;
+
+    INSERT INTO vehicles (
+        customer_id, plate_number, vehicle_type, manufacturer, model,
+        year_model, color, vin_number, current_mileage
+    )
+    VALUES (
+        p_customer_id, p_plate_number, p_vehicle_type, p_manufacturer, p_model,
+        p_year_model, p_color, p_vin_number, p_current_mileage
+    );
+END //
+
+DROP PROCEDURE IF EXISTS sp_update_customer_vehicle //
+CREATE PROCEDURE sp_update_customer_vehicle(
+    IN p_customer_id INT,
+    IN p_vehicle_id INT,
+    IN p_plate_number VARCHAR(20),
+    IN p_vehicle_type ENUM('CAR','MOTORCYCLE','TRICYCLE'),
+    IN p_manufacturer VARCHAR(50),
+    IN p_model VARCHAR(50),
+    IN p_year_model YEAR,
+    IN p_color VARCHAR(30),
+    IN p_vin_number VARCHAR(50),
+    IN p_current_mileage INT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM customers
+        WHERE customer_id = p_customer_id AND status = 'ACTIVE'
+    ) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot update a vehicle for an inactive or missing customer.';
+    END IF;
+
+    UPDATE vehicles
+    SET plate_number = p_plate_number,
+        vehicle_type = p_vehicle_type,
+        manufacturer = p_manufacturer,
+        model = p_model,
+        year_model = p_year_model,
+        color = p_color,
+        vin_number = p_vin_number,
+        current_mileage = p_current_mileage
+    WHERE vehicle_id = p_vehicle_id
+      AND customer_id = p_customer_id;
+END //
+
+DROP PROCEDURE IF EXISTS sp_deactivate_customer //
+CREATE PROCEDURE sp_deactivate_customer(IN p_customer_id INT)
+BEGIN
+    DECLARE v_status ENUM('ACTIVE','INACTIVE') DEFAULT NULL;
+    DECLARE v_active_order_count INT DEFAULT 0;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    SELECT status INTO v_status
+    FROM customers
+    WHERE customer_id = p_customer_id
+    FOR UPDATE;
+
+    IF v_status IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Customer not found.';
+    END IF;
+
+    SELECT COUNT(*) INTO v_active_order_count
+    FROM repair_orders ro
+    INNER JOIN vehicles v ON v.vehicle_id = ro.vehicle_id
+    WHERE v.customer_id = p_customer_id
+      AND ro.status NOT IN ('FULFILLED', 'CANCELLED');
+
+    IF v_active_order_count > 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot deactivate customer while they have an active repair order. Complete or cancel all active orders first.';
+    END IF;
+
+    UPDATE customers
+    SET status = 'INACTIVE'
+    WHERE customer_id = p_customer_id;
+
+    COMMIT;
 END //
 
 DELIMITER ;
@@ -3789,6 +4197,90 @@ BEGIN
             OR description  LIKE CONCAT('%', p_search, '%')
       )
     ORDER BY service_name ASC;
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_get_parts_by_repair_order$$
+
+CREATE PROCEDURE sp_get_parts_by_repair_order(
+    IN p_order_id INT
+)
+BEGIN
+    SELECT
+        rop.order_part_id,
+        rop.order_id,
+        rop.part_id,
+        pi.part_code,
+        pi.part_name,
+        pi.category,
+        pi.unit,
+        rop.batch_number,
+        rop.quantity_used,
+        rop.unit_price AS unit_price_at_use,
+        pi.unit_price AS current_unit_price,
+        (rop.quantity_used * rop.unit_price) AS subtotal,
+        rop.status AS part_status,
+        pi.status AS inventory_status
+    FROM repair_order_parts rop
+    INNER JOIN parts_inventory pi ON rop.part_id = pi.part_id
+    WHERE rop.order_id = p_order_id
+      AND rop.status != 'CANCELLED'
+    ORDER BY rop.order_part_id ASC;
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS sp_mark_ready_to_invoice$$
+
+CREATE PROCEDURE sp_mark_ready_to_invoice(
+    IN p_order_id INT,
+    IN p_user_id INT
+)
+sp_lbl: BEGIN
+    DECLARE v_pending_parts_count INT DEFAULT 0;
+    DECLARE v_current_status VARCHAR(50);
+
+    -- 1. Check if repair order exists & fetch current status
+    SELECT status INTO v_current_status
+    FROM repair_orders
+    WHERE order_id = p_order_id;
+
+    IF v_current_status IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order not found.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 2. Validate current state transitions
+    IF v_current_status IN ('PENDING_DIAGNOSIS','AWAITING_DIAGNOSIS','READY_TO_INVOICE', 'AWAITING_PAYMENT', 'READY_FOR_RELEASE', 'FULFILLED', 'CANCELLED') THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Repair order has already passed the work stage or is cancelled.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 3. Ensure no parts are still pending stock fulfillment
+    SELECT COUNT(*) INTO v_pending_parts_count
+    FROM repair_order_parts
+    WHERE order_id = p_order_id AND status = 'PENDING_PARTS';
+
+    IF v_pending_parts_count > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot mark as Ready to Invoice: There are still parts pending stock fulfillment.';
+        LEAVE sp_lbl;
+    END IF;
+
+    -- 4. Update Repair Order status and set completion timestamp
+    UPDATE repair_orders
+    SET 
+        status = 'READY_TO_INVOICE',
+        date_completed = NOW()
+    WHERE order_id = p_order_id;
+
 END$$
 
 DELIMITER ;

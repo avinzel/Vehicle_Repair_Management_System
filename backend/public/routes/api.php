@@ -135,6 +135,10 @@
 
                 // 3. Category Router
                 switch ($category) {
+                    case "management":
+                        $repairOrderController->getOrderManagementList();
+                        exit();
+
                     case "active":
                         if (isset($_GET["order_id"])) {
                             $repairOrderController->getRepairOrderDetails();
@@ -164,6 +168,11 @@
             }
             if ($_SERVER["REQUEST_METHOD"] === "POST"){
                 if (!isset($_GET["post-method"])) {
+                    if ((int)$auth->getRoleId() !== 2) {
+                        http_response_code(403);
+                        echo json_encode(["status" => "error", "error" => "Only Service Advisors can create repair orders."]);
+                        exit();
+                    }
                     $repairOrderController->createVehicleIntake();
                     exit();
                 }
@@ -201,6 +210,15 @@
                 if (isset($_GET["put-method"])) {
                     $putMethod = $_GET["put-method"]; 
                     switch($putMethod){
+                        case "update-order": {
+                            if (!in_array((int)$auth->getRoleId(), [1, 2], true)) {
+                                http_response_code(403);
+                                echo json_encode(["status" => "error", "error" => "Only Admins and Service Advisors can update repair order information."]);
+                                exit();
+                            }
+                            $repairOrderController->updateRepairOrder();
+                            exit();
+                        }
                         case "cancel-order-part": {
                             $repairOrderController->cancelRepairOrderPart(); 
                         }
@@ -211,7 +229,18 @@
                             exit();
                         }
                     }
+                } else {
+                    http_response_code(400);
+                    echo json_encode([
+                        "status" => "error",
+                        "error" => "Missing required put-method parameter."
+                    ]);
+                    exit();
                 }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE") {
+                $repairOrderController->cancelRepairOrder();
+                exit();
             }
         }
         break;
@@ -298,13 +327,16 @@
 
             }
             if ($_SERVER["REQUEST_METHOD"] === "PUT"){
-               
+                $customerController->updateCustomer();
+                exit();
             }
             if ($_SERVER["REQUEST_METHOD"] === "POST"){
-               
+                $customerController->createCustomer();
+                exit();
             }
             if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
-              
+                $customerController->deactivateCustomer();
+                exit();
             }
         }
         break;
@@ -351,7 +383,7 @@
                             echo json_encode(["error" => "404 not found"]);
                             exit();
                         break;
-                    }  
+                    }
                 } else {
                     if (Auth::getRoleId() !== 1) {
                             http_response_code(403);
@@ -440,7 +472,5 @@
             echo json_encode(["error" => "404 not found"]);
             exit();
         break;
-
-        
     }
 ?>
