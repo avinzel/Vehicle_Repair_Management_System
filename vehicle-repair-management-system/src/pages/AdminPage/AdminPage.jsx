@@ -11,9 +11,21 @@ const PAGE_META = {
   '/admin/staff': { title: 'Staff Management', subtitle: 'Manage staff accounts, roles, and access' },
   '/admin/mechanics': { title: 'Mechanic Management', subtitle: 'Manage mechanic profiles, specializations, and availability' },
   '/admin/parts': { title: 'Parts Inventory', subtitle: 'Monitor stock levels and restock parts' },
-  '/admin/services': { title: 'Service Catalouge', subtitle: 'Define and manage the services offered by the workshop' },
-  '/admin/reports': { title: 'Reports & Analytics', subtitle: 'View revenue, service trends, and inventory usage' },
-};
+  '/admin/services': { title: 'Service Catalogue', subtitle: 'Define and manage the services offered by the workshop' },
+  '/admin/reports': { title: 'Reports & Analytics', subtitle: 'Explore operational, revenue, inventory, and team insights' },
+  '/admin/orders': { title: 'Repair Orders', subtitle: 'View and manage all repair orders in the system' },
+  '/admin/customers': { title: 'Customer Records', subtitle: 'Manage customer profiles and their vehicles' }
+}
+
+function getPageMeta(pathname) {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+
+  const key = Object.keys(PAGE_META)
+    .filter((k) => path === k || path.startsWith(k + "/"))
+    .sort((a, b) => b.length - a.length)[0];
+
+  return key ? PAGE_META[key] : { title: '', subtitle: '' };
+}
 
 export function AdminPage({ user, setUser }) {
   const [tableData, setTableData] = useState([]);
@@ -63,7 +75,7 @@ export function AdminPage({ user, setUser }) {
 
   const meta = location.pathname === '/admin'
     ? { title: `Great to see you, ${user?.first_name ?? 'there'}!`, subtitle: today }
-    : PAGE_META[location.pathname] ?? { title: '', subtitle: '' };
+    : getPageMeta(location.pathname) ?? { title: '', subtitle: '' };
 
   // 4. Memoized Outlet Context Object
   const outletContextValue = useMemo(() => ({

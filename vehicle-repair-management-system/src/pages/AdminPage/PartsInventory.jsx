@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PartFormDialog, unitLabel } from "@/components/dialogs/PartFormDialog";
 import { RestockPartDialog } from "@/components/dialogs/RestockPartDialog";
+import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
+import { normalizePart } from "@/utils/normalizeOrder";
 
 const API = "http://localhost:8000/api.php";
 
@@ -28,24 +30,60 @@ const STOCK_LEVELS = {
 };
 
 function getStockLevel(part) {
-  if (part.quantity <= 0) return "OUT";
-  if (part.quantity <= part.reorderLevel) return "LOW";
-  if (part.quantity <= part.reorderLevel * MODERATE_MULTIPLIER) return "MODERATE";
+  if (part.quantity_on_hand <= 0) return "OUT";
+  if (part.quantity_on_hand <= part.reorder_level) return "LOW";
+  if (part.quantity_on_hand <= part.reorder_level * MODERATE_MULTIPLIER) return "MODERATE";
   return "IN_STOCK";
 }
 
+const PILL_FILTERS = [
+  { label: "All", kind: "all" },
+  // stock level
+  { label: STOCK_LEVELS.IN_STOCK.label, kind: "stock" },
+  { label: STOCK_LEVELS.MODERATE.label, kind: "stock" },
+  { label: STOCK_LEVELS.LOW.label, kind: "stock" },
+  { label: STOCK_LEVELS.OUT.label, kind: "stock" },
+  // vehicle type
+  { label: "Car", kind: "vehicle" },
+  { label: "Motorcycle", kind: "vehicle" },
+  { label: "Tricycle", kind: "vehicle" },
+];
+
+const FILTER_TABS = PILL_FILTERS.map((f) => f.label);
 // Row shape comes from sp_get_parts_inventory.
-function normalizePart(raw) {
-  const id = raw.part_id ?? raw.id;
-  return {
-    id,
-    code: `P-${String(id).padStart(3, "0")}`,
-    name: raw.part_name ?? raw.name ?? "—",
-    unit: raw.unit ?? "pc",
-    quantity: Number(raw.quantity_on_hand ?? 0),
-    unitPrice: Number(raw.unit_price ?? 0),
-    reorderLevel: Number(raw.reorder_level ?? 0),
-  };
+// function normalizePart(raw) {
+//   const id = raw.part_id ?? raw.id;
+//   return {
+//     id,
+//     code: `P-${String(id).padStart(3, "0")}`,
+//     name: raw.part_name ?? raw.name ?? "—",
+//     category: raw.category ?? "—",
+//     vehicle_types: raw.vehicle_types ?? "—",
+//     unit: raw.unit ?? "pc",
+//     quantity: Number(raw.quantity_on_hand ?? 0),
+//     unitPrice: Number(raw.unit_price ?? 0),
+//     reorderLevel: Number(raw.reorder_level ?? 0),
+//   };
+// }
+function matchesPill(part, label) {
+  const pill = PILL_FILTERS.find((f) => f.label === label);
+  if (!pill || pill.kind === "all") return true;
+
+  if (pill.kind === "stock") {
+    return STOCK_LEVELS[getStockLevel(part)].label === label;
+  }
+
+  // vehicle: vehicle_types may be one or several ("CAR", "Car, Motorcycle").
+  // Parts marked "All"/"Universal" fit every vehicle.
+  const tokens = String(part.vehicle_types ?? "")
+    .toLowerCase()
+    .split(/[,/|]/)
+    .map((t) => t.trim());
+  return (
+    tokens.includes(label.toLowerCase()) ||
+    tokens.includes("all") ||
+    tokens.includes("universal")
+  );
 }
 
 function formatPeso(amount) {
@@ -66,6 +104,10 @@ export function PartsInventory() {
   const [parts, setParts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+
+  const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [vehicleFilter, setVehicleFilter] = useState("All");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // part row or null (= add)
@@ -98,6 +140,17 @@ export function PartsInventory() {
   const lowStockCount = useMemo(
     () => parts.filter((p) => ["LOW", "OUT"].includes(getStockLevel(p))).length,
     [parts]
+  );
+
+
+  const filteredParts = useMemo(
+    () =>
+      parts.filter(
+        (p) =>
+          matchesPill(p, activeFilter) &&
+          matchesSearch(search, p.part_name, p.part_code, unitLabel(p.unit), p.vehicle_types)
+      ),
+    [parts, search, activeFilter]
   );
 
   function openAdd() {
@@ -155,137 +208,161 @@ export function PartsInventory() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="font-bold pb-1">Parts Inventory</CardTitle>
-            <CardDescription>
-              {parts.length} part{parts.length === 1 ? "" : "s"} · {lowStockCount} low stock
-            </CardDescription>
-          </div>
-          <Button onClick={openAdd} className="gap-1.5">
-            <Plus className="w-4 h-4" />
-            Add Part
-          </Button>
-        </CardHeader>
+    <div className="w-full">
+      <div className="sticky top-[73px] z-10 bg-card -mx-6 -mt-6 border-b border-border">
+        <FilterBar
+          search={search}
+          onSearchChange={setSearch}
+          statusFilter={activeFilter}
+          onStatusFilterChange={setActiveFilter}
+          placeholder="Search by part ID, name, vehicle types ,or unit..."
+          tabs={FILTER_TABS}
+        />
+      </div>
 
-        <CardContent>
-          {loadError && (
-            <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-              {loadError}
-            </p>
-          )}
+      <div className="pt-6 space-y-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="font-bold pb-1">Parts Inventory</CardTitle>
+              <CardDescription>
+                {parts.length} part{parts.length === 1 ? "" : "s"} · {lowStockCount} low stock
+              </CardDescription>
+            </div>
+            <Button onClick={openAdd} className="gap-1.5">
+              <Plus className="w-4 h-4" />
+              Add Part
+            </Button>
+          </CardHeader>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-sm font-medium text-tertiary">Part ID</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Name</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Unit</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Qty on Hand</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Unit Cost</TableHead>
-                <TableHead className="text-sm font-medium text-tertiary">Stock Level</TableHead>
-                <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {parts.map((part) => {
-                const level = STOCK_LEVELS[getStockLevel(part)];
-                return (
-                  <TableRow key={part.id}>
-                    <TableCell className="text-xs text-muted-foreground">{part.code}</TableCell>
-                    <TableCell className="font-medium">{part.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{unitLabel(part.unit)}</TableCell>
-                    <TableCell className="font-medium">{part.quantity}</TableCell>
-                    <TableCell className="text-muted-foreground">{formatPeso(part.unitPrice)}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={level.cls}>
-                        {level.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Restock ${part.name}`}
-                          className="hover:text-muted-foreground"
-                          onClick={() => setRestocking(part)}
-                        >
-                          <PackagePlus className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Edit ${part.name}`}
-                          className="hover:text-muted-foreground"
-                          onClick={() => openEdit(part)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Remove ${part.name}`}
-                          className="hover:text-destructive"
-                          onClick={() => {
-                            setDeleteError(null);
-                            setDeleting(part);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+          <CardContent>
+            {loadError && (
+              <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                {loadError}
+              </p>
+            )}
+
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-sm font-medium text-tertiary">Part ID</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Name</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Category</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Vehicle Type</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Unit</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary text-center">Qty on Hand</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Unit Cost</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Stock Level</TableHead>
+                  <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredParts.map((part) => {
+                  const level = STOCK_LEVELS[getStockLevel(part)];
+                  return (
+                    <TableRow key={part.part_id}>
+                      <TableCell className="text-xs text-muted-foreground">{part.part_code}</TableCell>
+                      <TableCell className="font-medium">{part.part_name}</TableCell>
+                      <TableCell className="font-medium">{part.category}</TableCell>
+                      <TableCell className="font-medium">{part.vehicle_types}</TableCell>
+                      <TableCell className="text-muted-foreground">{unitLabel(part.unit)}</TableCell>
+                      <TableCell className="font-medium text-center">{part.quantity_on_hand}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatPeso(part.unit_price)}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className={level.cls}>
+                          {level.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Restock ${part.name}`}
+                            className="hover:text-muted-foreground"
+                            onClick={() => setRestocking(part)}
+                          >
+                            <PackagePlus className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Edit ${part.name}`}
+                            className="hover:text-muted-foreground"
+                            onClick={() => openEdit(part)}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Remove ${part.name}`}
+                            className="hover:text-destructive"
+                            onClick={() => {
+                              setDeleteError(null);
+                              setDeleting(part);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+
+                {!loading && parts.length > 0 && filteredParts.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
+                      No parts match your filters.
                     </TableCell>
                   </TableRow>
-                );
-              })}
+                )}
+                {!loading && parts.length === 0 && !loadError && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
+                      No parts yet. Add one to start tracking stock.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {loading && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
+                      Loading parts...
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-              {!loading && parts.length === 0 && !loadError && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
-                    No parts yet. Add one to start tracking stock.
-                  </TableCell>
-                </TableRow>
-              )}
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
-                    Loading parts...
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        <PartFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          part={editing}
+          onSubmit={handleSubmit}
+        />
 
-      <PartFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        part={editing}
-        onSubmit={handleSubmit}
-      />
+        <RestockPartDialog
+          open={!!restocking}
+          onOpenChange={(open) => !open && setRestocking(null)}
+          part={restocking}
+          onSubmit={handleRestock}
+        />
 
-      <RestockPartDialog
-        open={!!restocking}
-        onOpenChange={(open) => !open && setRestocking(null)}
-        part={restocking}
-        onSubmit={handleRestock}
-      />
-
-      <ConfirmDialog
-        open={!!deleting}
-        onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}
-        title="Remove part?"
-        description={`${deleting?.name ?? "This part"} will be discontinued and can no longer be logged on repair orders. Past orders keep their history.`}
-        confirmLabel="Remove"
-        destructive
-        loading={deleteBusy}
-        error={deleteError}
-        onConfirm={handleDelete}
-      />
+        <ConfirmDialog
+          open={!!deleting}
+          onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}
+          title="Remove part?"
+          description={`${deleting?.name ?? "This part"} will be discontinued and can no longer be logged on repair orders. Past orders keep their history.`}
+          confirmLabel="Remove"
+          destructive
+          loading={deleteBusy}
+          error={deleteError}
+          onConfirm={handleDelete}
+        />
+      </div>
     </div>
   );
 }

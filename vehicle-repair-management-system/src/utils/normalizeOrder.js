@@ -40,6 +40,23 @@ function asArray(value) {
   return [];
 }
 
+function formatVehicleTypes(types) {
+  if (!types) return "—";
+
+  // Handle both comma-separated string or array inputs
+  const rawList = Array.isArray(types)
+    ? types
+    : String(types).split(",");
+
+  const formatted = rawList
+    .map((type) => type.trim())
+    .filter(Boolean)
+    .map((type) => type.charAt(0).toUpperCase() + type.slice(1).toLowerCase())
+    .join(", ");
+
+  return formatted || "—";
+}
+
 // ---------- Active Repair Orders: list row ----------
 // sp_get_active_repair_orders
 // order_id ("RO-5"), raw_order_id, customer_name, vehicle_info
@@ -212,19 +229,21 @@ export function normalizeMechanicWorkOrder(raw) {
 
 // ---------- Parts: inventory row ----------
 // sp_get_parts_inventory
-export function normalizePart(raw) {
+export function normalizePart(raw = {}) {
   return {
     part_id: num(raw.part_id),
-    part_code: raw.part_code,
-    part_name: raw.part_name,
-    category: raw.category,
-    unit: raw.unit,
+    part_code: raw.part_code?.trim() || "N/A",
+    part_name: raw.part_name?.trim() || "Unnamed Part",
+    category: raw.category?.trim() || "Uncategorized",
+    // Clean and format vehicle_types
+    vehicle_types: formatVehicleTypes(raw.vehicle_types),
+    unit: raw.unit?.trim() || "pc",
     unit_price: num(raw.unit_price),
     quantity_on_hand: num(raw.quantity_on_hand),
     reorder_level: num(raw.reorder_level),
-    batch_number: raw.batch_number,
-    date_added: raw.date_added,
-    status: raw.status,
+    batch_number: raw.batch_number?.trim() || "N/A",
+    date_added: raw.date_added || null,
+    status: raw.status?.trim() || "active",
   };
 }
 

@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
-import { useOutletContext } from "react-router";
+import { useReport } from "@/hooks/use-reports";
 
 // Pipeline stages shown in the left card, in workflow order. Tints mirror
 // the colours StatusBadge uses so a status looks the same everywhere.
@@ -17,8 +17,6 @@ const PIPELINE = [
   { status: "AWAITING_PAYMENT", row: "bg-orange-50 border-orange-200 text-orange-800" },
   { status: "READY_FOR_RELEASE", row: "bg-green-50 border-green-200 text-green-800" },
 ];
-
-const RECENT_ORDER_LIMIT = 6;
 
 function formatPeso(amount) {
   return `₱${Number(amount ?? 0).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
@@ -42,26 +40,12 @@ function StatCard({ label, value, hint, icon: Icon, iconClass, valueClass }) {
 }
 
 export function AdminDashboardTab() {
-  const { user, dashboard, loading, error, getDashboardData } = useOutletContext() ?? {};
+  // Fetched straight from the report endpoints (see loadDashboard in use-reports).
+  const { data: dashboard, loading, error } = useReport("dashboard");
 
-  const orders = Array.isArray(dashboard?.orders) ? dashboard.orders : [];
-
-  // Count orders per status for the pipeline card.
-  const countByStatus = orders.reduce((acc, o) => {
-    acc[o.status] = (acc[o.status] ?? 0) + 1;
-    return acc;
-  }, {});
-  const activeOrders = PIPELINE.reduce((sum, p) => sum + (countByStatus[p.status] ?? 0), 0);
-
-  // The dashboard SP returns oldest first; show the newest at the top.
-  const recentOrders = [...orders]
-    .sort(
-      (a, b) =>
-        parseInt(String(b.order_id).replace(/\D/g, ""), 10) -
-        parseInt(String(a.order_id).replace(/\D/g, ""), 10)
-    )
-    .slice(0, RECENT_ORDER_LIMIT);
-
+  const countByStatus = dashboard?.pipeline ?? {};
+  const activeOrders = dashboard?.activeOrders ?? 0;
+  const recentOrders = dashboard?.recentOrders ?? []; // already newest first
   const lowStock = dashboard?.lowStockCount ?? 0;
 
   return (
@@ -136,20 +120,17 @@ export function AdminDashboardTab() {
               <div className="divide-y divide-border">
                 {recentOrders.map((order) => (
                   <div
-                    key={order.order_id}
+                    key={order.raw_order_id}
                     className="flex items-center gap-3 py-3 text-sm"
                   >
                     <span className="w-20 shrink-0 text-xs font-mono text-muted-foreground">
                       {order.order_id}
                     </span>
                     <span className="flex-1 min-w-0 truncate font-medium">{order.customer}</span>
-                    <span className="hidden md:block w-40 truncate text-xs text-muted-foreground text-right">
-                      {order.vehicle}
-                    </span>
                     <div className="w-36 flex justify-end">
                       <StatusBadge status={order.status} />
                     </div>
-                    <span className="w-20 text-right text-muted-foreground">{order.amount ?? "—"}</span>
+                    <span className="w-20 text-right text-muted-foreground">{order.amount != null ? formatPeso(order.amount) : "—"}</span>
                   </div>
                 ))}
               </div>
