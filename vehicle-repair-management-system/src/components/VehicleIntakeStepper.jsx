@@ -15,6 +15,8 @@ import { CustomerForm, DEFAULT_CUSTOMER_VALUES } from "@/components/forms/Custom
 import { VehicleForm, DEFAULT_VEHICLE_VALUES } from "@/components/forms/VehicleForm";
 import { RepairOrderForm, DEFAULT_REPAIR_ORDER_VALUES } from "@/components/forms/RepairOrderForm";
 
+import { rememberVehicle } from "@/utils/vehicleLookup";
+
 import { useState, useRef } from "react";
 
 const steps = [
@@ -146,6 +148,8 @@ export function VehicleIntakeStepper({ getTableData, getCardData, intakeContext 
       // Snapshot before the form is reset. Adjust field names to match your forms.
       const c = formData.customer;
       const v = formData.vehicle;
+      // Feed the brand/model suggestions: most-used combinations float to the top next time.
+      rememberVehicle(v.vehicleType, v.make, v.model);
       setSummary({
         customer: (c.name || [c.firstName, c.lastName].filter(Boolean).join(" ")).toUpperCase(),
         vehicle: [v.make, v.model, v.year].filter(Boolean).join(" "),

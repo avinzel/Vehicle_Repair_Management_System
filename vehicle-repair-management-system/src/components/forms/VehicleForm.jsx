@@ -1,10 +1,12 @@
 "use client"
 
-import { forwardRef, useImperativeHandle, useState } from "react";
+import { forwardRef, useImperativeHandle, useState, useMemo, useEffect, useRef } from "react";
 import { Check, Plus, Car } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ComboboxInput } from "@/components/ComboboxInput";
+import { getBrands, getModels, canonicalBrand, canonicalModel, decodeVin } from "@/utils/vehicleLookup";
 
 const VEHICLE_TYPES = ["Car", "Motorcycle", "Tricycle"];
 const CURRENT_YEAR = new Date().getFullYear();
@@ -70,24 +72,125 @@ export const VehicleForm = forwardRef(function VehicleForm(
 ) {
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [vinStatus, setVinStatus] = useState({ state: "idle", message: "" });
 
   const isExisting = selectedVehicleId != null;
   const lockedClass = isExisting ? "bg-muted/50" : "";
 
+  // Latest values for async callbacks (VIN decode finishes after render).
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
+  const lastDecodedVin = useRef("");
+
+  const brandOptions = useMemo(() => getBrands(values.vehicleType), [values.vehicleType]);
+  const modelOptions = useMemo(
+    () => getModels(values.vehicleType, values.make),
+    [values.vehicleType, values.make]
+  );
+
+  const liveValidate = (name, value) => {
+    if (submitted) setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }));
+  };
+
   const handleChange = (name) => (e) => {
     const value = e.target.value;
     onFieldChange(name, value);
-    if (submitted) {
-      setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }));
-    }
+    liveValidate(name, value);
   };
 
   const handleTypeSelect = (type) => {
+    if (type === values.vehicleType) return;
+    // If the chosen brand was a known brand of the old type but doesn't exist
+    // for the new type (e.g. Toyota -> Motorcycle), clear brand + model.
+    const wasKnown = canonicalBrand(values.vehicleType, values.make);
+    const stillKnown = canonicalBrand(type, values.make);
+    if (wasKnown && !stillKnown) {
+      onFieldChange("make", "");
+      onFieldChange("model", "");
+    }
     onFieldChange("vehicleType", type);
-    if (submitted) {
-      setErrors((prev) => ({ ...prev, vehicleType: validateField("vehicleType", type) }));
+    liveValidate("vehicleType", type);
+  };
+
+  // Brand picked/typed. If the brand is a known one and the current model
+  // doesn't belong to it, clear the model so it can't be a stale mismatch.
+  const handleMakeChange = (value) => {
+    onFieldChange("make", value);
+    liveValidate("make", value);
+    const brand = canonicalBrand(values.vehicleType, value);
+    if (brand && values.model.trim()) {
+      const known = getModels(values.vehicleType, brand);
+      if (known.length > 0 && !canonicalModel(values.vehicleType, brand, values.model)) {
+        onFieldChange("model", "");
+      }
     }
   };
+
+  const handleModelChange = (value) => {
+    onFieldChange("model", value);
+    liveValidate("model", value);
+  };
+
+  // No blur-normalizing needed: the combobox only offers "Use “text”" when the
+  // text doesn't match a listed option (case-insensitive), so listed brands and
+  // models are always saved with their canonical spelling.
+
+  const handleVinChange = (e) => {
+    const value = e.target.value.toUpperCase().replace(/\s/g, "");
+    onFieldChange("vinNumber", value);
+    if (value.length !== 17) setVinStatus({ state: "idle", message: "" });
+    liveValidate("vinNumber", value);
+  };
+
+  // Auto-decode a full 17-character VIN. Best effort only: offline, timeout,
+  // or "not found" never blocks the user from filling the form by hand.
+  useEffect(() => {
+    const vin = (values.vinNumber ?? "").trim().toUpperCase();
+    if (isExisting || vin.length !== 17 || vin === lastDecodedVin.current) return;
+
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setVinStatus({ state: "offline", message: "You're offline. Fill in the vehicle details manually." });
+      return;
+    }
+
+    const ctrl = new AbortController();
+    setVinStatus({ state: "loading", message: "Looking up VIN..." });
+
+    decodeVin(vin, ctrl.signal)
+      .then((res) => {
+        lastDecodedVin.current = vin;
+        if (!res.found) {
+          setVinStatus({
+            state: "notfound",
+            message: "No data for this VIN (common for local-market vehicles). Fill in the details manually.",
+          });
+          return;
+        }
+
+        // Fill only what's still empty so we never overwrite what was typed.
+        const cur = valuesRef.current;
+        if (res.vehicleType && res.vehicleType !== cur.vehicleType) {
+          onFieldChange("vehicleType", res.vehicleType);
+        }
+        if (!cur.make.trim()) onFieldChange("make", res.make);
+        if (!cur.model.trim() && res.model) onFieldChange("model", res.model);
+        if (!cur.year.trim() && res.year) onFieldChange("year", String(res.year));
+
+        setVinStatus({
+          state: "ok",
+          message: `Found: ${[res.make, res.model, res.year].filter(Boolean).join(" ")}. Please double-check before continuing.`,
+        });
+      })
+      .catch(() => {
+        // Aborted because the VIN changed or the form unmounted: say nothing.
+        if (ctrl.signal.aborted) return;
+        setVinStatus({ state: "error", message: "Couldn't look up the VIN right now. Fill in the details manually." });
+      });
+
+    return () => ctrl.abort();
+    // onFieldChange is intentionally omitted: it changes identity every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values.vinNumber, isExisting]);
 
   const validateAll = () => {
     const names = [
@@ -111,6 +214,9 @@ export const VehicleForm = forwardRef(function VehicleForm(
   }));
 
   const showError = (name) => submitted && errors[name];
+
+  const vinStatusColor =
+    vinStatus.state === "ok" ? "text-primary" : "text-muted-foreground";
 
   return (
     <div>
@@ -173,7 +279,7 @@ export const VehicleForm = forwardRef(function VehicleForm(
         </div>
       )}
 
-      <form className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+      <form className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5" onSubmit={(e) => e.preventDefault()}>
         <div className="flex flex-col gap-1.5 sm:col-span-1">
           <Label>Vehicle Type</Label>
           <div className="flex gap-2 flex-wrap" role="radiogroup" aria-label="Vehicle type">
@@ -214,11 +320,13 @@ export const VehicleForm = forwardRef(function VehicleForm(
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="make">Make / Brand</Label>
-          <Input
+          <ComboboxInput
             id="make"
-            placeholder="Toyota"
+            placeholder="Select a brand"
+            searchPlaceholder="Search or type a brand..."
+            options={brandOptions}
             value={values.make}
-            onChange={handleChange("make")}
+            onChange={handleMakeChange}
             aria-invalid={!!showError("make")}
             readOnly={isExisting}
             className={lockedClass}
@@ -230,11 +338,13 @@ export const VehicleForm = forwardRef(function VehicleForm(
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="model">Model</Label>
-          <Input
+          <ComboboxInput
             id="model"
-            placeholder="Vios"
+            placeholder={modelOptions.length > 0 ? "Select a model" : "Enter a model"}
+            searchPlaceholder="Search or type a model..."
+            options={modelOptions}
             value={values.model}
-            onChange={handleChange("model")}
+            onChange={handleModelChange}
             aria-invalid={!!showError("model")}
             readOnly={isExisting}
             className={lockedClass}
@@ -281,7 +391,7 @@ export const VehicleForm = forwardRef(function VehicleForm(
             id="vinNumber"
             placeholder="e.g., 1HGCR2F8XHA000000"
             value={values.vinNumber}
-            onChange={handleChange("vinNumber")}
+            onChange={handleVinChange}
             aria-invalid={!!showError("vinNumber")}
             maxLength={17}
             readOnly={isExisting}
@@ -289,6 +399,11 @@ export const VehicleForm = forwardRef(function VehicleForm(
           />
           {showError("vinNumber") && (
             <p className="text-sm text-destructive">{errors.vinNumber}</p>
+          )}
+          {!isExisting && vinStatus.message && (
+            <p className={`text-xs ${vinStatusColor}`} role="status">
+              {vinStatus.message}
+            </p>
           )}
         </div>
 

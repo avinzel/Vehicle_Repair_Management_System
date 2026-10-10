@@ -300,7 +300,7 @@ class RepairOrderController {
 
         if (array_key_exists('mileage_at_service', $input)) {
             $mileage = $input['mileage_at_service'];
-            if (filter_var($mileage, FILTER_VALIDATE_INT) === false || (int)$mileage < 0) {
+            if ($mileage !== null && (filter_var($mileage, FILTER_VALIDATE_INT) === false || (int)$mileage < 0)) {
                 http_response_code(400);
                 echo json_encode(["status" => "error", "error" => "mileage_at_service must be a non-negative integer."]);
                 return;

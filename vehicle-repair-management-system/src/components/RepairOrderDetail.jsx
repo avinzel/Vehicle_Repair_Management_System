@@ -1,19 +1,35 @@
 "use client"
 
-import { X, Pencil, Trash2 } from "lucide-react";
+import { X, Pencil, Ban } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SheetClose } from "@/components/ui/sheet";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
 import { ORDER_STAGES } from "@/components/OrderStages";
 
+// Backend only allows cancelling before READY_TO_INVOICE.
+export const CANCELLABLE = [
+  "PENDING_DIAGNOSIS",
+  "AWAITING_DIAGNOSIS",
+  "PENDING_MECHANICS",
+  "IN_PROGRESS",
+  "AWAITING_PARTS",
+];
+
 // The Customer & Vehicle block and the header stay constant across every
 // status. The stage section in the middle is the only part that actually
 // changes shape as the order moves through the pipeline.
-export function RepairOrderDetail({ order, onUpdateOrder }) {
+//
+// The edit and cancel dialogs are NOT rendered here. They live in
+// ActiveRepairOrder as siblings of the drawer, so they aren't nested
+// inside the Sheet (nested dialogs lose their backdrop/blur).
+export function RepairOrderDetail({ order, onUpdateOrder, detailsLoading, onEditClick, onCancelClick }) {
   if (!order) return null;
 
   const statusLabel = formatStatusLabel(order.status);
   const StageComponent = ORDER_STAGES[statusLabel];
+  const canCancel = CANCELLABLE.includes(order.status);
+  // complaint only comes back from the detail endpoint, so wait for it before editing
+  const canEdit = !detailsLoading && order.complaint != null && order.status !== "CANCELLED";
 
   return (
     <div className="flex flex-col h-full">
@@ -28,21 +44,23 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            disabled
-            className="text-muted-foreground/40 cursor-not-allowed"
+            disabled={!canEdit}
+            onClick={() => onEditClick?.()}
+            className="text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label="Edit order"
-            title="Editing an order isn't available yet — no backend endpoint exists for it."
+            title={canEdit ? "Edit order" : "Order details are still loading"}
           >
             <Pencil className="w-4 h-4" />
           </button>
           <button
             type="button"
-            disabled
-            className="text-muted-foreground/40 cursor-not-allowed"
-            aria-label="Delete order"
-            title="Cancelling an order isn't available yet — no backend endpoint exists for it."
+            disabled={!canCancel}
+            onClick={() => onCancelClick?.()}
+            className="text-muted-foreground hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Cancel order"
+            title={canCancel ? "Cancel order" : "Orders can't be cancelled once they reach invoicing"}
           >
-            <Trash2 className="w-4 h-4" />
+            <Ban className="w-4 h-4" />
           </button>
           <SheetClose className="text-muted-foreground hover:text-foreground" aria-label="Close">
             <X className="w-5 h-5" />
@@ -88,7 +106,6 @@ export function RepairOrderDetail({ order, onUpdateOrder }) {
         ) : (
           <p className="text-sm text-destructive">Unknown status: {order.status}</p>
         )}
-
       </div>
     </div>
   );

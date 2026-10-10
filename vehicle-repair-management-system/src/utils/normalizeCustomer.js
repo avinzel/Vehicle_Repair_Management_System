@@ -9,6 +9,13 @@ export function formatCustomerId(rawId) {
   return `C-${String(rawId).padStart(3, "0")}`;
 }
 
+function formatDate(value) {
+  if (!value) return null;
+  const d = new Date(String(value).replace(" ", "T"));
+  return isNaN(d)
+    ? value
+    : d.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
+}
 // sp_get_customer_directory row -> table row
 export function normalizeCustomerRow(raw) {
   return {
@@ -28,15 +35,18 @@ export function normalizeCustomerDetails(data) {
   let main = null;
   let vehicles = [];
   let orders = [];
+  let maintenance = [];
 
   if (Array.isArray(data) && Array.isArray(data[0])) {
     main = data[0][0] ?? null;
     vehicles = Array.isArray(data[1]) ? data[1] : [];
     orders = Array.isArray(data[2]) ? data[2] : [];
+    maintenance = Array.isArray(data[3]) ? data[3] : [];
   } else if (data && typeof data === "object") {
     main = data.customer ?? null;
     vehicles = data.vehicles ?? [];
-    orders = data.orders ?? [];
+    orders = data.repair_history ?? data.orders ?? []; 
+    maintenance = data.maintenance ?? [];
   }
 
   if (!main) return null;
@@ -61,11 +71,23 @@ export function normalizeCustomerDetails(data) {
       currentMileage: v.current_mileage ?? "",
     })),
     orders: orders.map((o) => ({
-      id: o.order_id, // "RO-12"
-      rawId: o.raw_order_id,
+      id: `RO-${o.order_id}`,
+      rawId: o.order_id,
       status: o.status,
-      date: o.formatted_date,
-      plateNumber: o.plate_number ?? null,
+      date: formatDate(o.date_received),
+      vehicle: o.vehicle_info ?? null,
+      total: o.invoice_total ?? null,
     })),
+    maintenance: maintenance.map((m) => ({
+      id: m.history_id,
+      orderId: `RO-${m.order_id}`,
+      vehicle: [m.manufacturer, m.model, m.year_model].filter(Boolean).join(" "),
+      plateNumber: m.plate_number,
+      serviceDate: formatDate(m.service_date),
+      summary: m.service_summary ?? "",
+      nextDueDate: formatDate(m.next_service_due_date),
+      nextDueMileage: m.next_service_due_mileage ?? null,
+    })),
+  
   };
 }

@@ -96,16 +96,6 @@ export function LoginForm({ authenticateUser }) {
                         </button>
                     </form>
 
-                    {/* Registration Link */}
-                    <div className="mt-6 text-center text-sm text-gray-600">
-                        Don't have an account?{' '}
-                        <a
-                            href="/register"
-                            className="font-semibold text-[#c84b15] hover:underline transition-all duration-200"
-                        >
-                            Sign in
-                        </a>
-                    </div>
 
                     {/* Footer info */}
                     <div className="mt-6 text-center text-xs text-gray-400">

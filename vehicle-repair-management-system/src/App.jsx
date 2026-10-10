@@ -4,7 +4,6 @@ import { Routes, Route, Navigate, useNavigate } from "react-router"
 import { LoginPage } from "./pages/LoginPage/LoginPage";
 import { ServiceAdvisorPage } from './pages/ServiceAdvisorPage/ServiceAdvisorPage';
 import { NotFoundPage } from './pages/NotFoundPage/NotFoundPage';
-import { RegisterPage } from './pages/RegisterPage/RegisterPage';
 import { MechanicPage } from "./pages/MechanicPage/MechanicPage"
 import { Loading } from "./components/Loading"
 import { AdminPage } from './pages/AdminPage/AdminPage';
@@ -60,7 +59,6 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path="/register" element={<RegisterPage />} />
 
         <Route path="/" element={
           <LoginPage authenticateUser={authenticateUser} />

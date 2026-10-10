@@ -6,8 +6,21 @@ import { OrderFilterBar } from "@/components/OrderSearchFilter";
 import { OrderCard } from "@/components/OrderCard";
 import { DetailDrawer } from "@/components/DetailDrawer";
 import { RepairOrderDetail } from "@/components/RepairOrderDetail";
+import { RepairOrderFormDialog } from "@/components/dialogs/RepairOrderFormDialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
 import { normalizeOrderDetail } from "@/utils/normalizeOrder";
+
+const API = "http://localhost:8000/api.php";
+
+async function request(url, options) {
+  const res = await fetch(url, { credentials: "include", ...options });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || (json.status && json.status !== "success")) {
+    throw new Error(json.error ?? json.message ?? `Request failed (HTTP ${res.status})`);
+  }
+  return json;
+}
 
 // Merge helper: detail-endpoint data overwrites list-row data field by
 // field, but never with null/undefined — so a field the detail response
@@ -37,6 +50,13 @@ export function ActiveRepairOrder() {
   const [orderDetails, setOrderDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
+  // Dialog state lives here (page level), not inside the drawer, so the
+  // dialogs aren't nested in the Sheet and get their own backdrop/blur.
+  const [editOpen, setEditOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+
   // Refresh through the shared fetch when landing here, so changes made on
   // other tabs show up. Same state, no second copy.
   useEffect(() => {
@@ -58,7 +78,7 @@ export function ActiveRepairOrder() {
     setDetailsLoading(true);
     try {
       const response = await fetch(
-        `http://localhost:8000/api.php?action=repair-orders&category=active&order_id=${encodeURIComponent(rawOrderId)}`,
+        `${API}?action=repair-orders&category=active&order_id=${encodeURIComponent(rawOrderId)}`,
         { credentials: 'include' }
       );
       const json = await response.json();
@@ -124,6 +144,32 @@ export function ActiveRepairOrder() {
     }
   }
 
+  async function handleEditSubmit(changes) {
+    await request(`${API}?action=repair-orders&put-method=update-order`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_id: selectedOrder.rawId, ...changes }),
+    });
+    await handleUpdateOrder(selectedOrder.id); // refetch lists + this order's details
+  }
+
+  async function handleCancelConfirm() {
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      await request(`${API}?action=repair-orders&order_id=${encodeURIComponent(selectedOrder.rawId)}`, {
+        method: "DELETE",
+      });
+      setCancelOpen(false);
+      // Order drops off the active list, so selectedOrder becomes null and the drawer closes.
+      await handleUpdateOrder(selectedOrder.id);
+    } catch (err) {
+      setCancelError(err.message || "Failed to cancel the order.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return (
     <div className="w-full">
       <div className="sticky top-[73px] z-10 bg-card -mx-6 -mt-6 border-b border-border">
@@ -158,11 +204,48 @@ export function ActiveRepairOrder() {
       <DetailDrawer
         open={!!selectedOrder}
         onOpenChange={(open) => {
-          if (!open) setSelectedOrderId(null);
+          if (open) return;
+          // The dialogs are portaled outside the drawer, so the drawer sees
+          // clicks inside them as "outside" presses and asks to close.
+          // Ignore that while a dialog is open; the dialog handles its own dismissal.
+          if (editOpen || cancelOpen) return;
+          setSelectedOrderId(null);
         }}
       >
-        <RepairOrderDetail order={selectedOrder} onUpdateOrder={handleUpdateOrder} detailsLoading={detailsLoading} />
+        <RepairOrderDetail
+          order={selectedOrder}
+          onUpdateOrder={handleUpdateOrder}
+          detailsLoading={detailsLoading}
+          onEditClick={() => setEditOpen(true)}
+          onCancelClick={() => {
+            setCancelError(null);
+            setCancelOpen(true);
+          }}
+        />
       </DetailDrawer>
+
+      {/* Siblings of the drawer, not children, so they aren't "nested". */}
+      {selectedOrder && (
+        <>
+          <RepairOrderFormDialog
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            order={selectedOrder}
+            onSubmit={handleEditSubmit}
+          />
+          <ConfirmDialog
+            open={cancelOpen}
+            onOpenChange={(next) => !cancelling && setCancelOpen(next)}
+            title={`Cancel ${selectedOrder.id}?`}
+            description="Parts already issued to this order will be returned to inventory. This can't be undone."
+            confirmLabel="Cancel order"
+            destructive
+            loading={cancelling}
+            error={cancelError}
+            onConfirm={handleCancelConfirm}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -1590,7 +1590,7 @@ BEGIN
             OR v.plate_number LIKE CONCAT('%', p_search, '%')
             OR v.manufacturer LIKE CONCAT('%', p_search, '%')
             OR v.model LIKE CONCAT('%', p_search, '%')
-        )
+         )
 
     GROUP BY 
         c.customer_id,
@@ -3010,10 +3010,10 @@ BEGIN
             IF(v.year_model IS NOT NULL, CONCAT(' ', v.year_model), ''), 
             ' · ', v.plate_number) AS vehicle_summary,
         
-        -- Mechanic Assignment Position on this Order
+        -- The viewing mechanic's own position on this order
         mp.position_name AS assigned_position,
         
-        -- Aggregated Metrics (Parts & Total Assigned Mechanics)
+        -- Aggregated Metrics
         (
             SELECT COUNT(DISTINCT rop.part_id)
             FROM repair_order_parts rop
@@ -3025,8 +3025,34 @@ BEGIN
             SELECT COUNT(DISTINCT rom2.mechanic_id)
             FROM repair_order_mechanics rom2
             WHERE rom2.order_id = ro.order_id
-        ) AS total_mechanics_count
-
+        ) AS total_mechanics_count,
+ 
+        -- Full crew on this order (every mechanic, not just the viewer),
+        -- built as a JSON array string the same way sp_get_repair_order_details does.
+        CONCAT('[',
+            IFNULL(
+                (
+                    SELECT GROUP_CONCAT(
+                        CONCAT(
+                            '{"assignment_id":', r2.assignment_id,
+                            ',"mechanic_id":', r2.mechanic_id,
+                            ',"mechanic_name":', JSON_QUOTE(CONCAT(u2.first_name, ' ', u2.last_name)),
+                            ',"position_name":', JSON_QUOTE(mp2.position_name),
+                            '}'
+                        )
+                        ORDER BY r2.date_assigned
+                        SEPARATOR ','
+                    )
+                    FROM repair_order_mechanics r2
+                    JOIN mechanics m2 ON r2.mechanic_id = m2.mechanic_id
+                    JOIN users u2 ON m2.user_id = u2.user_id
+                    JOIN mechanic_positions mp2 ON r2.position_id = mp2.position_id
+                    WHERE r2.order_id = ro.order_id
+                ),
+                ''
+            ),
+        ']') AS assigned_mechanics
+ 
     FROM repair_order_mechanics rom
     INNER JOIN repair_orders ro 
         ON rom.order_id = ro.order_id
@@ -3038,7 +3064,7 @@ BEGIN
         ON rom.position_id = mp.position_id
     WHERE rom.mechanic_id = p_mechanic_id
     ORDER BY ro.date_received DESC;
-
+ 
 END$$
 
 DELIMITER ;
@@ -3083,6 +3109,7 @@ DELIMITER ;
 
 DELIMITER //
 
+DROP PROCEDURE IF EXISTS sp_GetCustomerDetailsWithHistory;
 CREATE PROCEDURE sp_GetCustomerDetailsWithHistory(
     IN p_customer_id INT
 )
@@ -3139,6 +3166,26 @@ BEGIN
     LEFT JOIN invoices i ON ro.order_id = i.order_id
     WHERE v.customer_id = p_customer_id
     ORDER BY ro.date_received DESC;
+	
+	-- Result Set 4: Maintenance History
+     SELECT
+        mh.history_id,
+        mh.order_id,
+        v.vehicle_id,
+        v.manufacturer,
+        v.model,
+        v.year_model,
+        v.plate_number,
+        mh.service_date,
+        mh.service_summary,
+        mh.next_service_due_date,
+        mh.next_service_due_mileage
+    FROM maintenance_history mh
+    JOIN repair_orders ro ON ro.order_id = mh.order_id
+    JOIN vehicles v       ON v.vehicle_id = ro.vehicle_id
+    WHERE v.customer_id = p_customer_id
+    ORDER BY mh.service_date DESC;
+    
 END //
 
 DELIMITER ;
