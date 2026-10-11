@@ -14,7 +14,6 @@ const API = "http://localhost:8000/api.php";
 
 const STATUS_STYLES = {
   ACTIVE: { label: "Active", cls: "bg-green-100 text-green-800 hover:bg-green-100" },
-  ON_LEAVE: { label: "On Leave", cls: "bg-amber-100 text-amber-800 hover:bg-amber-100" },
   INACTIVE: { label: "Inactive", cls: "bg-muted text-muted-foreground hover:bg-muted" },
 };
 

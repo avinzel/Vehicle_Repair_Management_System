@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ import {
 const VEHICLE_TYPES = ["CAR", "MOTORCYCLE", "TRICYCLE"];
 const VEHICLE_TYPE_LABEL = { CAR: "Car", MOTORCYCLE: "Motorcycle", TRICYCLE: "Tricycle" };
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const NAME_REGEX = /^[\p{L}\p{M}][\p{L}\p{M} .'-]*$/u;
+const PHONE_REGEX = /^(?:09\d{9}|\+639\d{9})$/;
 
 function Field({ label, optional = false, className = "", children }) {
   return (
@@ -78,11 +80,42 @@ function vehicleToPayload(v) {
   };
 }
 
-function vehicleIsValid(v) {
-  if (!v.plate_number.trim() || !v.manufacturer.trim() || !v.model.trim()) return false;
-  if (v.year_model.trim() && !/^\d{4}$/.test(v.year_model.trim())) return false;
-  if (v.current_mileage.trim() && !/^\d+$/.test(v.current_mileage.trim())) return false;
-  return true;
+function nameError(value, label, required = true) {
+  const name = value.trim();
+  if (!name && required) return `${label} is required.`;
+  if (name.length > 75) return `${label} must be 75 characters or fewer.`;
+  if (name && !NAME_REGEX.test(name)) {
+    return `${label} can contain letters, spaces, apostrophes, periods, and hyphens only.`;
+  }
+  return null;
+}
+
+function vehicleErrors(vehicle) {
+  const errors = {};
+  for (const [field, label, maxLength] of [
+    ["plate_number", "Plate number", 20],
+    ["manufacturer", "Manufacturer", 50],
+    ["model", "Model", 50],
+  ]) {
+    const value = vehicle[field].trim();
+    if (!value) errors[field] = `${label} is required.`;
+    else if (value.length > maxLength) errors[field] = `${label} must be ${maxLength} characters or fewer.`;
+  }
+  if (!VEHICLE_TYPES.includes(vehicle.vehicle_type)) {
+    errors.vehicle_type = "Select a valid vehicle type.";
+  }
+
+  const year = vehicle.year_model.trim();
+  if (year && (!/^\d{4}$/.test(year) || Number(year) < 1901 || Number(year) > 2155)) {
+    errors.year_model = "Enter a year between 1901 and 2155.";
+  }
+  const mileage = vehicle.current_mileage.trim();
+  if (mileage && (!/^\d+$/.test(mileage) || !Number.isSafeInteger(Number(mileage)))) {
+    errors.current_mileage = "Enter a non-negative whole number.";
+  }
+  if (vehicle.color.trim().length > 30) errors.color = "Color must be 30 characters or fewer.";
+  if (vehicle.vin_number.trim().length > 50) errors.vin_number = "VIN must be 50 characters or fewer.";
+  return errors;
 }
 
 // Edit-only modal (admins don't create customers here).
@@ -106,6 +139,9 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
   const [detailsLoaded, setDetailsLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [showValidation, setShowValidation] = useState(false);
+  const dialogContentRef = useRef(null);
+  const errorSummaryRef = useRef(null);
 
   const customerId = customer?.id;
 
@@ -115,6 +151,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
     let cancelled = false;
 
     setError(null);
+    setShowValidation(false);
     setDetailsLoaded(false);
     setLoadingDetails(true);
     // Paint what the list row already has, immediately.
@@ -165,21 +202,65 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
     setVehicles((prev) => prev.filter((v) => v.key !== key));
   }
 
-  const emailValid = !email.trim() || EMAIL_REGEX.test(email.trim());
-  const vehiclesValid = vehicles.every(vehicleIsValid);
-  const canSubmit =
-    !submitting &&
-    !loadingDetails &&
-    detailsLoaded &&
-    firstName.trim() &&
-    lastName.trim() &&
-    contactNo.trim() &&
-    emailValid &&
-    vehiclesValid;
+  const firstNameError = nameError(firstName, "First name");
+  const middleNameError = nameError(middleName, "Middle name", false);
+  const lastNameError = nameError(lastName, "Last name");
+  const contactDigits = contactNo.trim().replace(/[\s()-]/g, "");
+  const contactError = !contactNo.trim()
+    ? "Contact number is required."
+    : contactNo.trim().length > 20 || !PHONE_REGEX.test(contactDigits)
+      ? "Enter a valid Philippine mobile number (e.g. 09171234567 or +639171234567)."
+      : null;
+  const emailError = email.trim() && email.trim().length > 100
+    ? "Email must be 100 characters or fewer."
+    : email.trim() && !EMAIL_REGEX.test(email.trim())
+      ? "Enter a valid email address."
+      : null;
+  const addressError = address.length > 255 ? "Address must be 255 characters or fewer." : null;
+  const currentVehicleErrors = vehicles.map(vehicleErrors);
+  const vehiclesValid = currentVehicleErrors.every((errors) => Object.keys(errors).length === 0);
+  const customerValid = !firstNameError && !middleNameError && !lastNameError &&
+    !contactError && !emailError && !addressError && vehiclesValid;
+  const vehicleFieldLabels = {
+    vehicle_type: "Vehicle type",
+    plate_number: "Plate number",
+    manufacturer: "Manufacturer",
+    model: "Model",
+    year_model: "Year",
+    current_mileage: "Current mileage",
+    color: "Color",
+    vin_number: "VIN",
+  };
+  const validationIssues = [
+    ["First name", firstNameError],
+    ["Middle name", middleNameError],
+    ["Last name", lastNameError],
+    ["Contact number", contactError],
+    ["Email", emailError],
+    ["Address", addressError],
+    ...currentVehicleErrors.flatMap((errors, index) =>
+      Object.entries(errors).map(([field, message]) => [
+        `Vehicle ${index + 1} — ${vehicleFieldLabels[field]}`,
+        message,
+      ])
+    ),
+  ].filter(([, message]) => message);
+
+  function scrollToErrorSummary() {
+    requestAnimationFrame(() => {
+      dialogContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      errorSummaryRef.current?.focus({ preventScroll: true });
+    });
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!canSubmit) return;
+    setShowValidation(true);
+    if (submitting || loadingDetails || !detailsLoaded) return;
+    if (!customerValid) {
+      scrollToErrorSummary();
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -195,6 +276,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
       onOpenChange(false);
     } catch (err) {
       setError(err.message || "Something went wrong. Please try again.");
+      scrollToErrorSummary();
     } finally {
       setSubmitting(false);
     }
@@ -204,7 +286,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
 
   return (
     <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent ref={dialogContentRef} className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Customer</DialogTitle>
           <DialogDescription>
@@ -213,7 +295,32 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        {(error || (showValidation && validationIssues.length > 0)) && (
+          <div
+            ref={errorSummaryRef}
+            tabIndex={-1}
+            role="alert"
+            aria-live="assertive"
+            className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive outline-none"
+          >
+            {error ? (
+              <p>{error}</p>
+            ) : (
+              <>
+                <p className="font-semibold">
+                  Please fix {validationIssues.length} field{validationIssues.length === 1 ? "" : "s"} below.
+                </p>
+                <ul className="mt-1 list-inside list-disc space-y-0.5">
+                  {validationIssues.map(([field, message]) => (
+                    <li key={field}>{field}: {message}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} noValidate className="space-y-6">
           {/* Customer fields */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Field label="First name">
@@ -221,34 +328,55 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 placeholder="Jamie"
+                maxLength={75}
+                aria-invalid={showValidation && !!firstNameError}
                 disabled={disabled}
                 autoFocus
               />
+              {showValidation && firstNameError && (
+                <p className="text-sm text-destructive">{firstNameError}</p>
+              )}
             </Field>
             <Field label="Middle name" optional>
               <Input
                 value={middleName}
                 onChange={(e) => setMiddleName(e.target.value)}
+                maxLength={75}
+                aria-invalid={showValidation && !!middleNameError}
                 disabled={disabled}
               />
+              {showValidation && middleNameError && (
+                <p className="text-sm text-destructive">{middleNameError}</p>
+              )}
             </Field>
             <Field label="Last name">
               <Input
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 placeholder="Santos"
+                maxLength={75}
+                aria-invalid={showValidation && !!lastNameError}
                 disabled={disabled}
               />
+              {showValidation && lastNameError && (
+                <p className="text-sm text-destructive">{lastNameError}</p>
+              )}
             </Field>
 
             <Field label="Contact number" className="sm:col-span-1">
               <Input
+                type="tel"
+                inputMode="tel"
                 value={contactNo}
                 onChange={(e) => setContactNo(e.target.value)}
                 placeholder="09171234567"
                 maxLength={20}
+                aria-invalid={showValidation && !!contactError}
                 disabled={disabled}
               />
+              {showValidation && contactError && (
+                <p className="text-sm text-destructive">{contactError}</p>
+              )}
             </Field>
             <Field label="Email" optional className="sm:col-span-2">
               <Input
@@ -256,10 +384,13 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="jamie@example.com"
-                aria-invalid={!emailValid}
+                maxLength={100}
+                aria-invalid={showValidation && !!emailError}
                 disabled={disabled}
               />
-              {!emailValid && <p className="text-sm text-destructive">Enter a valid email address</p>}
+              {showValidation && emailError && (
+                <p className="text-sm text-destructive">{emailError}</p>
+              )}
             </Field>
 
             <Field label="Address" optional className="sm:col-span-3">
@@ -268,9 +399,13 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="House No., Street, Barangay, City/Municipality"
                 maxLength={255}
+                aria-invalid={showValidation && !!addressError}
                 disabled={disabled}
                 className="min-h-16 bg-background"
               />
+              {showValidation && addressError && (
+                <p className="text-sm text-destructive">{addressError}</p>
+              )}
             </Field>
           </div>
 
@@ -301,6 +436,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
 
             {vehicles.map((v, index) => {
               const isNew = v.vehicle_id == null;
+              const fieldErrors = currentVehicleErrors[index];
               return (
                 <div key={v.key} className="border border-border rounded-xl p-4 space-y-4">
                   <div className="flex items-center justify-between">
@@ -338,6 +474,9 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
                         </Button>
                       ))}
                     </div>
+                    {showValidation && fieldErrors.vehicle_type && (
+                      <p className="text-sm text-destructive">{fieldErrors.vehicle_type}</p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -347,8 +486,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
                         onChange={(e) => updateVehicle(v.key, { plate_number: e.target.value })}
                         placeholder="ABC-1234"
                         maxLength={20}
+                        aria-invalid={showValidation && !!fieldErrors.plate_number}
                         disabled={submitting}
                       />
+                      {showValidation && fieldErrors.plate_number && (
+                        <p className="text-sm text-destructive">{fieldErrors.plate_number}</p>
+                      )}
                     </Field>
                     <Field label="Manufacturer">
                       <Input
@@ -356,8 +499,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
                         onChange={(e) => updateVehicle(v.key, { manufacturer: e.target.value })}
                         placeholder="Toyota"
                         maxLength={50}
+                        aria-invalid={showValidation && !!fieldErrors.manufacturer}
                         disabled={submitting}
                       />
+                      {showValidation && fieldErrors.manufacturer && (
+                        <p className="text-sm text-destructive">{fieldErrors.manufacturer}</p>
+                      )}
                     </Field>
                     <Field label="Model">
                       <Input
@@ -365,8 +512,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
                         onChange={(e) => updateVehicle(v.key, { model: e.target.value })}
                         placeholder="Vios"
                         maxLength={50}
+                        aria-invalid={showValidation && !!fieldErrors.model}
                         disabled={submitting}
                       />
+                      {showValidation && fieldErrors.model && (
+                        <p className="text-sm text-destructive">{fieldErrors.model}</p>
+                      )}
                     </Field>
                     <Field label="Year" optional>
                       <Input
@@ -375,9 +526,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
                         placeholder="2021"
                         inputMode="numeric"
                         maxLength={4}
-                        aria-invalid={!!v.year_model.trim() && !/^\d{4}$/.test(v.year_model.trim())}
+                        aria-invalid={showValidation && !!fieldErrors.year_model}
                         disabled={submitting}
                       />
+                      {showValidation && fieldErrors.year_model && (
+                        <p className="text-sm text-destructive">{fieldErrors.year_model}</p>
+                      )}
                     </Field>
                     <Field label="Color" optional>
                       <Input
@@ -385,8 +539,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
                         onChange={(e) => updateVehicle(v.key, { color: e.target.value })}
                         placeholder="Silver"
                         maxLength={30}
+                        aria-invalid={showValidation && !!fieldErrors.color}
                         disabled={submitting}
                       />
+                      {showValidation && fieldErrors.color && (
+                        <p className="text-sm text-destructive">{fieldErrors.color}</p>
+                      )}
                     </Field>
                     <Field label="Current mileage" optional>
                       <Input
@@ -394,18 +552,25 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
                         onChange={(e) => updateVehicle(v.key, { current_mileage: e.target.value })}
                         placeholder="12000"
                         inputMode="numeric"
-                        aria-invalid={!!v.current_mileage.trim() && !/^\d+$/.test(v.current_mileage.trim())}
+                        aria-invalid={showValidation && !!fieldErrors.current_mileage}
                         disabled={submitting}
                       />
+                      {showValidation && fieldErrors.current_mileage && (
+                        <p className="text-sm text-destructive">{fieldErrors.current_mileage}</p>
+                      )}
                     </Field>
                     <Field label="VIN" optional className="sm:col-span-2">
                       <Input
                         value={v.vin_number}
                         onChange={(e) => updateVehicle(v.key, { vin_number: e.target.value })}
                         placeholder="e.g. 1HGCR2F8XHA000000"
-                        maxLength={17}
+                        maxLength={50}
+                        aria-invalid={showValidation && !!fieldErrors.vin_number}
                         disabled={submitting}
                       />
+                      {showValidation && fieldErrors.vin_number && (
+                        <p className="text-sm text-destructive">{fieldErrors.vin_number}</p>
+                      )}
                     </Field>
                   </div>
                 </div>
@@ -419,17 +584,11 @@ export function CustomerFormDialog({ open, onOpenChange, customer, loadDetails, 
             )}
           </div>
 
-          {error && (
-            <p role="alert" className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-              {error}
-            </p>
-          )}
-
           <DialogFooter>
             <Button type="button" variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!canSubmit}>
+            <Button type="submit" disabled={submitting || loadingDetails || !detailsLoaded}>
               {submitting ? "Saving..." : "Save changes"}
             </Button>
           </DialogFooter>

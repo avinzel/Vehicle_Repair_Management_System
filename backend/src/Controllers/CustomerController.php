@@ -178,9 +178,14 @@
         }
 
         private function validateCustomerPayload(array $input, bool $update) {
-            foreach (['first_name', 'last_name', 'contact_no'] as $required) {
+            $requiredFields = [
+                'first_name' => 'First name',
+                'last_name' => 'Last name',
+                'contact_no' => 'Contact number'
+            ];
+            foreach ($requiredFields as $required => $label) {
                 if (!isset($input[$required]) || !is_string($input[$required]) || trim($input[$required]) === '') {
-                    return ['error' => "{$required} is required and must be a non-empty string."];
+                    return ['error' => "{$label} is required."];
                 }
             }
 
@@ -211,11 +216,22 @@
             ];
             foreach ($limits as $field => $maxLength) {
                 if ($customer[$field] !== null && $this->stringLength($customer[$field]) > $maxLength) {
-                    return ['error' => "{$field} must not exceed {$maxLength} characters."];
+                    $label = ucwords(str_replace('_', ' ', $field));
+                    return ['error' => "{$label} must be {$maxLength} characters or fewer."];
                 }
             }
+            foreach (['first_name' => 'First name', 'middle_name' => 'Middle name', 'last_name' => 'Last name'] as $field => $label) {
+                if ($customer[$field] !== null
+                    && preg_match("/\\A[\\p{L}\\p{M}][\\p{L}\\p{M} .'-]*\\z/u", $customer[$field]) !== 1) {
+                    return ['error' => "{$label} can contain letters, spaces, apostrophes, periods, and hyphens only."];
+                }
+            }
+            $contactDigits = preg_replace('/[\\s()-]/u', '', $customer['contact_no']);
+            if (!is_string($contactDigits) || preg_match('/^(?:09[0-9]{9}|\\+639[0-9]{9})$/', $contactDigits) !== 1) {
+                return ['error' => "Enter a valid Philippine mobile number (e.g. 09171234567 or +639171234567)."];
+            }
             if ($customer['email'] !== null && filter_var($customer['email'], FILTER_VALIDATE_EMAIL) === false) {
-                return ['error' => "email must be a valid email address."];
+                return ['error' => "Enter a valid email address."];
             }
 
             $vehicles = $input['vehicles'] ?? [];
@@ -240,9 +256,15 @@
         }
 
         private function validateVehicle(array $vehicle, int $index) {
-            foreach (['plate_number', 'vehicle_type', 'manufacturer', 'model'] as $required) {
+            $labels = [
+                'plate_number' => 'plate number',
+                'vehicle_type' => 'type',
+                'manufacturer' => 'manufacturer',
+                'model' => 'model'
+            ];
+            foreach ($labels as $required => $label) {
                 if (!isset($vehicle[$required]) || !is_string($vehicle[$required]) || trim($vehicle[$required]) === '') {
-                    return ['error' => "vehicles[{$index}].{$required} is required."];
+                    return ['error' => "Vehicle " . ($index + 1) . " {$label} is required."];
                 }
             }
             $fields = [
@@ -258,37 +280,38 @@
                 if (!$required && array_key_exists($field, $vehicle)
                     && $vehicle[$field] !== null
                     && !is_string($vehicle[$field])) {
-                    return ['error' => "vehicles[{$index}].{$field} must be a string or null."];
+                    return ['error' => "Vehicle " . ($index + 1) . " {$field} must be text."];
                 }
                 $value = $required ? trim($vehicle[$field]) : $this->optionalString($vehicle[$field] ?? null);
                 if ($value !== null && $this->stringLength($value) > $maxLength) {
-                    return ['error' => "vehicles[{$index}].{$field} must not exceed {$maxLength} characters."];
+                    $label = $labels[$field] ?? ucwords(str_replace('_', ' ', $field));
+                    return ['error' => "Vehicle " . ($index + 1) . " {$label} must be {$maxLength} characters or fewer."];
                 }
                 $normalized[$field] = $value;
             }
             $normalized['vehicle_type'] = strtoupper($normalized['vehicle_type']);
             if (!in_array($normalized['vehicle_type'], ['CAR', 'MOTORCYCLE', 'TRICYCLE'], true)) {
-                return ['error' => "vehicles[{$index}].vehicle_type must be CAR, MOTORCYCLE, or TRICYCLE."];
+                return ['error' => "Vehicle " . ($index + 1) . " type must be Car, Motorcycle, or Tricycle."];
             }
 
             $year = $vehicle['year_model'] ?? null;
             if ($year === '' || $year === null) {
                 $normalized['year_model'] = null;
             } elseif (filter_var($year, FILTER_VALIDATE_INT) === false || (int)$year < 1901 || (int)$year > 2155) {
-                return ['error' => "vehicles[{$index}].year_model must be between 1901 and 2155."];
+                return ['error' => "Vehicle " . ($index + 1) . " year must be between 1901 and 2155."];
             } else {
                 $normalized['year_model'] = (int)$year;
             }
 
             $mileage = $vehicle['current_mileage'] ?? 0;
             if (filter_var($mileage, FILTER_VALIDATE_INT) === false || (int)$mileage < 0) {
-                return ['error' => "vehicles[{$index}].current_mileage must be a non-negative integer."];
+                return ['error' => "Vehicle " . ($index + 1) . " mileage must be a non-negative whole number."];
             }
             $normalized['current_mileage'] = (int)$mileage;
 
             $vehicleId = $vehicle['vehicle_id'] ?? null;
             if ($vehicleId !== null && (filter_var($vehicleId, FILTER_VALIDATE_INT) === false || (int)$vehicleId <= 0)) {
-                return ['error' => "vehicles[{$index}].vehicle_id must be a positive integer."];
+                return ['error' => "Vehicle " . ($index + 1) . " has an invalid record identifier."];
             }
             if ($vehicleId !== null) {
                 $normalized['vehicle_id'] = (int)$vehicleId;

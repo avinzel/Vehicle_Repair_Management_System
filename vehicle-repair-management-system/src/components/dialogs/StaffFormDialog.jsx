@@ -61,6 +61,8 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
   const [status, setStatus] = useState("ACTIVE");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const phoneDigits = phone.trim().replace(/[\s()-]/g, "");
+  const phoneValid = /^(?:09\d{9}|\+639\d{9})$/.test(phoneDigits);
 
   // Reset whenever the modal opens (or switches between add / edit).
   useEffect(() => {
@@ -83,7 +85,7 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
     lastName.trim() &&
     username.trim() &&
     email.trim() &&
-    phone.trim() &&
+    phoneValid &&
     roleId &&
     (isEdit || password.trim());
 
@@ -98,7 +100,7 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
         first_name: firstName.trim(),
         middle_name: middleName.trim() || null,
         last_name: lastName.trim(),
-        contact_no: phone.trim(),
+        contact_no: phoneDigits,
         email: email.trim(),
         role_id: Number(roleId),
         status,
@@ -190,12 +192,21 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
 
           <Field label="Phone">
             <Input
+              type="tel"
+              inputMode="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="e.g. 09171234567"
+              placeholder="e.g. 09171234567 or +639171234567"
               maxLength={20}
               disabled={submitting}
+              aria-invalid={phone.trim() !== "" && !phoneValid}
+              aria-describedby="staff-phone-error"
             />
+            {phone.trim() !== "" && !phoneValid && (
+              <span id="staff-phone-error" className="block text-xs text-destructive">
+                Enter a valid Philippine mobile number (09XXXXXXXXX or +639XXXXXXXXX).
+              </span>
+            )}
           </Field>
 
           <div className="grid grid-cols-2 gap-3">

@@ -2136,6 +2136,8 @@ BEGIN
     DECLARE v_mechanic_exists INT DEFAULT 0;
     DECLARE v_position_exists INT DEFAULT 0;
     DECLARE v_already_assigned INT DEFAULT 0;
+    DECLARE v_lead_position_id INT DEFAULT NULL;
+    DECLARE v_lead_assigned INT DEFAULT 0;
 
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
@@ -2148,7 +2150,8 @@ BEGIN
     -- 1. Check if repair order exists and retrieve current status
     SELECT status INTO v_current_status 
     FROM repair_orders 
-    WHERE order_id = p_order_id;
+    WHERE order_id = p_order_id
+    FOR UPDATE;
 
     IF v_current_status IS NULL THEN
         SIGNAL SQLSTATE '45000' 
@@ -2182,6 +2185,31 @@ BEGIN
     IF v_position_exists = 0 THEN
         SIGNAL SQLSTATE '45000' 
         SET MESSAGE_TEXT = 'Selected mechanic position does not exist.';
+    END IF;
+
+    -- A repair team must have exactly one Lead Mechanic, assigned before
+    -- any other repair position. Locking the order above serializes checks.
+    SELECT position_id INTO v_lead_position_id
+    FROM mechanic_positions
+    WHERE position_name = 'Lead Mechanic'
+    LIMIT 1;
+
+    IF v_lead_position_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Lead Mechanic position is not configured.';
+    END IF;
+
+    SELECT COUNT(*) INTO v_lead_assigned
+    FROM repair_order_mechanics
+    WHERE order_id = p_order_id
+      AND position_id = v_lead_position_id;
+
+    IF p_position_id <> v_lead_position_id AND v_lead_assigned = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Assign a Lead Mechanic before assigning other mechanic positions.';
+    ELSEIF p_position_id = v_lead_position_id AND v_lead_assigned > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'A Lead Mechanic is already assigned to this repair order.';
     END IF;
 
     -- 5. CHECK: Is mechanic ALREADY assigned to THIS repair order in ANY position?
@@ -2628,8 +2656,6 @@ sp_lbl: BEGIN
     DECLARE v_current_status VARCHAR(50);
     DECLARE v_invoice_id INT;	
     DECLARE v_invoice_status VARCHAR(20);
-    DECLARE v_service_summary TEXT DEFAULT '';
-    DECLARE v_current_mileage INT DEFAULT 0;
 
     -- Exit handler for atomic transaction rollback
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
@@ -2639,8 +2665,8 @@ sp_lbl: BEGIN
     END;
 
     -- 1. Validate Repair Order Existence & Status
-    SELECT status, IFNULL(mileage_at_service, 0)
-    INTO v_current_status, v_current_mileage
+    SELECT status
+    INTO v_current_status
     FROM repair_orders
     WHERE order_id = p_order_id;
 
@@ -2686,34 +2712,12 @@ sp_lbl: BEGIN
         received_by = p_received_by
     WHERE invoice_id = v_invoice_id;
 
-    -- 4. Transition Repair Order status to FULFILLED
+    -- 4. Mark the paid repair order ready for vehicle release.
     UPDATE repair_orders
     SET 
         status = 'READY_FOR_RELEASE',
         date_completed = NOW()
     WHERE order_id = p_order_id;
-
-    -- 5. Build summary from services performed
-    SELECT IFNULL(GROUP_CONCAT(sc.service_name SEPARATOR ', '), 'General Repair & Maintenance')
-    INTO v_service_summary
-    FROM repair_order_services ros
-    INNER JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
-    WHERE ros.order_id = p_order_id;
-
-    -- 6. Insert service record into MAINTENANCE_HISTORY
-    INSERT INTO maintenance_history (
-        order_id,
-        service_date,
-        service_summary,
-        next_service_due_date,
-        next_service_due_mileage
-    ) VALUES (
-        p_order_id,
-        NOW(),
-        v_service_summary,
-        DATE_ADD(NOW(), INTERVAL 6 MONTH),
-        v_current_mileage + 5000
-    );
 
     COMMIT;
 
@@ -3071,16 +3075,31 @@ DELIMITER ;
 
 DELIMITER $$
 
+DROP PROCEDURE IF EXISTS sp_fulfill_repair_order$$
+
 CREATE PROCEDURE sp_fulfill_repair_order(
     IN p_order_id INT
 )
 BEGIN
     DECLARE current_status VARCHAR(50);
+    DECLARE current_mileage INT DEFAULT 0;
+    DECLARE service_summary TEXT DEFAULT '';
+    DECLARE service_date DATETIME;
+    DECLARE maintenance_record_exists INT DEFAULT 0;
 
-    -- Check if the repair order exists and retrieve its current status
-    SELECT status INTO current_status
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    SELECT status, IFNULL(mileage_at_service, 0)
+    INTO current_status, current_mileage
     FROM repair_orders
-    WHERE order_id = p_order_id;
+    WHERE order_id = p_order_id
+    FOR UPDATE;
 
     IF current_status IS NULL THEN
         SIGNAL SQLSTATE '45000'
@@ -3094,6 +3113,35 @@ BEGIN
         SET status = 'FULFILLED',
             date_completed = NOW()
         WHERE order_id = p_order_id;
+
+        SELECT IFNULL(GROUP_CONCAT(sc.service_name SEPARATOR ', '), 'General Repair & Maintenance')
+        INTO service_summary
+        FROM repair_order_services ros
+        INNER JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
+        WHERE ros.order_id = p_order_id;
+
+        SELECT COUNT(*) INTO maintenance_record_exists
+        FROM maintenance_history
+        WHERE order_id = p_order_id;
+
+        IF maintenance_record_exists = 0 THEN
+            SET service_date = NOW();
+            INSERT INTO maintenance_history (
+                order_id,
+                service_date,
+                service_summary,
+                next_service_due_date,
+                next_service_due_mileage
+            ) VALUES (
+                p_order_id,
+                service_date,
+                service_summary,
+                DATE_ADD(service_date, INTERVAL 6 MONTH),
+                current_mileage + 5000
+            );
+        END IF;
+
+        COMMIT;
 
         SELECT 
             order_id, 
@@ -3109,7 +3157,7 @@ DELIMITER ;
 
 DELIMITER //
 
-DROP PROCEDURE IF EXISTS sp_GetCustomerDetailsWithHistory;
+
 CREATE PROCEDURE sp_GetCustomerDetailsWithHistory(
     IN p_customer_id INT
 )

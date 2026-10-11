@@ -29,7 +29,7 @@ export function PartsUsageTab() {
                 centered
                 label="Low Stock"
                 value={s.low_stock ?? 0}
-                sublabel="parts at or below reorder level"
+                sublabel="parts with 0–5 units on hand"
                 tone={(s.low_stock ?? 0) > 0 ? "red" : "green"}
               />
             </div>
@@ -58,7 +58,11 @@ export function PartsUsageTab() {
                 {stock.length > 0 ? (
                   <div className="space-y-4 max-h-[28rem] overflow-y-auto pr-2">
                     {stock.map((p) => {
-                      const low = p.quantity_on_hand <= p.reorder_level;
+                      const colorClass = p.quantity_on_hand <= 5
+                        ? "bg-red-500"
+                        : p.quantity_on_hand <= 20
+                          ? "bg-amber-400"
+                          : "bg-green-500";
                       return (
                         <BarRow
                           key={p.part_id}
@@ -67,7 +71,7 @@ export function PartsUsageTab() {
                           value={p.quantity_on_hand}
                           max={maxStock}
                           display={p.quantity_on_hand}
-                          colorClass={low ? "bg-yellow-400" : "bg-green-500"}
+                          colorClass={colorClass}
                         />
                       );
                     })}

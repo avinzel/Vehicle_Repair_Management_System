@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useOutletContext } from "react-router";
 import { Plus, Pencil, Trash2, PackagePlus  } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -14,25 +15,15 @@ import { normalizePart } from "@/utils/normalizeOrder";
 
 const API = "http://localhost:8000/api.php";
 
-// Stock level is derived from each part's own reorder_level:
-//   0 on hand            -> Out of Stock
-//   <= reorder_level     -> Low
-//   <= reorder_level * 2 -> Moderate
-//   anything above       -> In Stock
-// Change MODERATE_MULTIPLIER to widen/narrow the "Moderate" band.
-const MODERATE_MULTIPLIER = 2;
-
 const STOCK_LEVELS = {
-  OUT: { label: "Out of Stock", cls: "bg-red-100 text-red-800 hover:bg-red-100" },
-  LOW: { label: "Low", cls: "bg-red-100 text-red-800 hover:bg-red-100" },
-  MODERATE: { label: "Moderate", cls: "bg-amber-100 text-amber-800 hover:bg-amber-100" },
-  IN_STOCK: { label: "In Stock", cls: "bg-green-100 text-green-800 hover:bg-green-100" },
+  LOW: { label: "Low stock", cls: "border-red-200 bg-red-100 text-red-800 hover:bg-red-100" },
+  MODERATE: { label: "Moderate", cls: "border-amber-200 bg-amber-100 text-amber-800 hover:bg-amber-100" },
+  IN_STOCK: { label: "In stock", cls: "border-green-200 bg-green-100 text-green-800 hover:bg-green-100" },
 };
 
 function getStockLevel(part) {
-  if (part.quantity_on_hand <= 0) return "OUT";
-  if (part.quantity_on_hand <= part.reorder_level) return "LOW";
-  if (part.quantity_on_hand <= part.reorder_level * MODERATE_MULTIPLIER) return "MODERATE";
+  if (part.quantity_on_hand <= 5) return "LOW";
+  if (part.quantity_on_hand <= 20) return "MODERATE";
   return "IN_STOCK";
 }
 
@@ -42,7 +33,6 @@ const PILL_FILTERS = [
   { label: STOCK_LEVELS.IN_STOCK.label, kind: "stock" },
   { label: STOCK_LEVELS.MODERATE.label, kind: "stock" },
   { label: STOCK_LEVELS.LOW.label, kind: "stock" },
-  { label: STOCK_LEVELS.OUT.label, kind: "stock" },
   // vehicle type
   { label: "Car", kind: "vehicle" },
   { label: "Motorcycle", kind: "vehicle" },
@@ -101,6 +91,7 @@ async function request(url, options) {
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 export function PartsInventory() {
+  const { setOutOfStockCount } = useOutletContext() ?? {};
   const [parts, setParts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -117,6 +108,7 @@ export function PartsInventory() {
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  const [actionSuccess, setActionSuccess] = useState(null);
 
   // status=ACTIVE: removed parts are soft-deleted (DISCONTINUED) and
   // shouldn't show up in the admin list.
@@ -125,20 +117,24 @@ export function PartsInventory() {
     try {
       const json = await request(`${API}?action=parts&status=ACTIVE`);
       const rows = Array.isArray(json.data) ? json.data : [];
-      setParts(rows.map(normalizePart));
+      const normalizedParts = rows.map(normalizePart);
+      setParts(normalizedParts);
+      setOutOfStockCount?.(
+        normalizedParts.filter((part) => part.quantity_on_hand <= 5).length
+      );
     } catch (err) {
       setLoadError(err.message || "Failed to load parts");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setOutOfStockCount]);
 
   useEffect(() => {
     getParts();
   }, [getParts]);
 
   const lowStockCount = useMemo(
-    () => parts.filter((p) => ["LOW", "OUT"].includes(getStockLevel(p))).length,
+    () => parts.filter((p) => getStockLevel(p) === "LOW").length,
     [parts]
   );
 
@@ -155,11 +151,13 @@ export function PartsInventory() {
 
   function openAdd() {
     setEditing(null);
+    setActionSuccess(null);
     setFormOpen(true);
   }
 
   function openEdit(part) {
     setEditing(part);
+    setActionSuccess(null);
     setFormOpen(true);
   }
 
@@ -168,7 +166,7 @@ export function PartsInventory() {
       await request(`${API}?action=parts`, {
         method: "PUT",
         headers: JSON_HEADERS,
-        body: JSON.stringify({ ...payload, part_id: editing.id }),
+        body: JSON.stringify({ ...payload, part_id: editing.part_id }),
       });
     } else {
       await request(`${API}?action=parts`, {
@@ -178,13 +176,14 @@ export function PartsInventory() {
       });
     }
     await getParts();
+    setActionSuccess(`Part ${editing ? "updated" : "added"} successfully.`);
   }
 
   async function handleRestock(quantity) {
     await request(`${API}?action=parts&post-method=restock`, {
       method: "POST",
       headers: JSON_HEADERS,
-      body: JSON.stringify({ part_id: restocking.id, quantity }),
+      body: JSON.stringify({ part_id: restocking.part_id, quantity }),
     });
     await getParts();
   }
@@ -196,10 +195,11 @@ export function PartsInventory() {
       await request(`${API}?action=parts`, {
         method: "DELETE",
         headers: JSON_HEADERS,
-        body: JSON.stringify({ part_id: deleting.id }),
+        body: JSON.stringify({ part_id: deleting.part_id }),
       });
       setDeleting(null);
       await getParts();
+      setActionSuccess(`${deleting.part_name} was discontinued successfully.`);
     } catch (err) {
       setDeleteError(err.message || "Failed to remove part");
     } finally {
@@ -236,6 +236,12 @@ export function PartsInventory() {
           </CardHeader>
 
           <CardContent>
+            {actionSuccess && (
+              <p role="status" className="mb-4 text-sm text-green-800 bg-green-100 border border-green-200 rounded-lg p-3">
+                {actionSuccess}
+              </p>
+            )}
+
             {loadError && (
               <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
                 {loadError}
@@ -278,7 +284,7 @@ export function PartsInventory() {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={`Restock ${part.name}`}
+                            aria-label={`Restock ${part.part_name}`}
                             className="hover:text-muted-foreground"
                             onClick={() => setRestocking(part)}
                           >
@@ -287,7 +293,7 @@ export function PartsInventory() {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={`Edit ${part.name}`}
+                            aria-label={`Edit ${part.part_name}`}
                             className="hover:text-muted-foreground"
                             onClick={() => openEdit(part)}
                           >
@@ -296,10 +302,11 @@ export function PartsInventory() {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={`Remove ${part.name}`}
+                            aria-label={`Remove ${part.part_name}`}
                             className="hover:text-destructive"
                             onClick={() => {
                               setDeleteError(null);
+                              setActionSuccess(null);
                               setDeleting(part);
                             }}
                           >
@@ -355,7 +362,7 @@ export function PartsInventory() {
           open={!!deleting}
           onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}
           title="Remove part?"
-          description={`${deleting?.name ?? "This part"} will be discontinued and can no longer be logged on repair orders. Past orders keep their history.`}
+          description={`${deleting?.part_name ?? "This part"} will be discontinued and can no longer be logged on repair orders. Past orders keep their history.`}
           confirmLabel="Remove"
           destructive
           loading={deleteBusy}

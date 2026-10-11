@@ -27,6 +27,11 @@
                 echo json_encode(["error" => "Missing required fields"]);
                 return;
             }
+            if (!preg_match('/^(?:09[0-9]{9}|\+639[0-9]{9})$/', $contact_no)) {
+                http_response_code(400);
+                echo json_encode(["error" => "A valid Philippine mobile contact number is required."]);
+                return;
+            }
 
             // Hash the password before storing it
             $password_hash = password_hash($password, PASSWORD_DEFAULT);

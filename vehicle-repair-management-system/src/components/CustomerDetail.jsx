@@ -195,7 +195,14 @@ export function CustomerDetail({ customer }) {
                 >
                   <div>
                     <p className="text-sm font-medium">{order.id}</p>
-                    <p className="text-xs text-muted-foreground">{order.date}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Received: {order.dateReceived ?? "—"}
+                    </p>
+                    {order.dateCompleted && (
+                      <p className="text-xs text-muted-foreground">
+                        Completed: {order.dateCompleted}
+                      </p>
+                    )}
                   </div>
                   <StatusBadge status={order.status} />
                 </div>

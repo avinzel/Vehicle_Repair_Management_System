@@ -277,6 +277,14 @@
                             $reportsController->getRevenueByOrder();
                         }
                         break;
+                        case "monthly-revenue":{
+                            $reportsController->getMonthlyRevenue();
+                        }
+                        break;
+                        case "trending-parts-by-vehicle-model":{
+                            $reportsController->getTrendingPartsByVehicleModel();
+                        }
+                        break;
                         case "revenue-split":{
                             $reportsController->getRevenueSplit();
                         }

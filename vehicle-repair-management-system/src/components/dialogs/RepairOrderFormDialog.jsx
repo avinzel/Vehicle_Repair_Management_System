@@ -14,9 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const PRIORITIES = ["STANDARD", "URGENT", "RUSH"];
-const PRIORITY_LABEL = { STANDARD: "Standard", URGENT: "Urgent", RUSH: "Rush" };
-
 function Field({ label, optional = false, className = "", children }) {
   return (
     <label className={`block space-y-1.5 ${className}`}>
@@ -39,7 +36,7 @@ function Tile({ label, children }) {
 }
 
 // Edit-only modal. Only the fields the update-order endpoint accepts are
-// editable (complaint, priority, mileage_at_service, diagnosis_notes);
+// editable (complaint, mileage_at_service, diagnosis_notes);
 // everything else is shown read-only. Status can't be changed here — it
 // moves through the workflow actions.
 //
@@ -48,7 +45,6 @@ function Tile({ label, children }) {
 //            shows inside the modal.
 export function RepairOrderFormDialog({ open, onOpenChange, order, onSubmit }) {
   const [complaint, setComplaint] = useState("");
-  const [priority, setPriority] = useState("STANDARD");
   const [mileage, setMileage] = useState("");
   const [diagnosisNotes, setDiagnosisNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -58,7 +54,6 @@ export function RepairOrderFormDialog({ open, onOpenChange, order, onSubmit }) {
     if (!open || !order) return;
     setError(null);
     setComplaint(order.complaint ?? "");
-    setPriority(order.priority ?? "STANDARD");
     setMileage(order.mileage != null ? String(order.mileage) : "");
     setDiagnosisNotes(order.diagnosisNotes ?? "");
   }, [open, order]);
@@ -75,7 +70,6 @@ export function RepairOrderFormDialog({ open, onOpenChange, order, onSubmit }) {
       await onSubmit({
         order_id: order.rawId,
         complaint: complaint.trim(),
-        priority,
         mileage_at_service: mileage.trim() === "" ? null : Number(mileage.trim()),
         diagnosis_notes: diagnosisNotes.trim() || null,
       });
@@ -93,7 +87,7 @@ export function RepairOrderFormDialog({ open, onOpenChange, order, onSubmit }) {
         <DialogHeader>
           <DialogTitle>Edit Repair Order{order ? ` · ${order.id}` : ""}</DialogTitle>
           <DialogDescription>
-            Update the complaint, priority, mileage, or diagnosis notes. Status changes happen
+            Update the complaint, mileage, or diagnosis notes. Status changes happen
             through the normal workflow.
           </DialogDescription>
         </DialogHeader>
@@ -121,26 +115,6 @@ export function RepairOrderFormDialog({ open, onOpenChange, order, onSubmit }) {
               autoFocus
             />
           </Field>
-
-          <div className="space-y-1.5">
-            <span className="text-sm font-medium">Priority</span>
-            <div className="flex gap-2 flex-wrap" role="radiogroup" aria-label="Priority">
-              {PRIORITIES.map((p) => (
-                <Button
-                  key={p}
-                  type="button"
-                  size="sm"
-                  variant={priority === p ? "default" : "outline"}
-                  aria-pressed={priority === p}
-                  disabled={submitting}
-                  onClick={() => setPriority(p)}
-                  className="min-w-[90px]"
-                >
-                  {PRIORITY_LABEL[p]}
-                </Button>
-              ))}
-            </div>
-          </div>
 
           <Field label="Mileage at service" optional>
             <Input

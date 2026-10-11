@@ -395,5 +395,159 @@
                     ];
                 }
             }
+
+        public function getMonthlyRevenue($year)
+        {
+            try {
+                $stmt = self::$conn->prepare(
+                    "SELECT MONTH(payment_date) AS month_number, SUM(total_amount) AS revenue
+                     FROM invoices
+                     WHERE status = 'PAID'
+                       AND payment_date IS NOT NULL
+                       AND YEAR(payment_date) = ?
+                     GROUP BY MONTH(payment_date)
+                     ORDER BY month_number"
+                );
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error);
+                }
+
+                $yearValue = (int)$year;
+                $stmt->bind_param("i", $yearValue);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $revenueByMonth = [];
+                while ($row = $result->fetch_assoc()) {
+                    $revenueByMonth[(int)$row['month_number']] = (float)$row['revenue'];
+                }
+                $stmt->close();
+
+                $months = [];
+                $monthNames = [
+                    1 => "January", "February", "March", "April", "May", "June",
+                    "July", "August", "September", "October", "November", "December"
+                ];
+                $totalRevenue = 0.0;
+                foreach ($monthNames as $monthNumber => $monthName) {
+                    $revenue = $revenueByMonth[$monthNumber] ?? 0.0;
+                    $months[] = [
+                        "month" => $monthNumber,
+                        "label" => $monthName,
+                        "revenue" => $revenue
+                    ];
+                    $totalRevenue += $revenue;
+                }
+
+                return [
+                    "success" => true,
+                    "data" => [
+                        "year" => $yearValue,
+                        "total_revenue" => $totalRevenue,
+                        "months" => $months
+                    ]
+                ];
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error" => "Database operation failed: " . $e->getMessage()
+                ];
+            }
+        }
+
+        public function getTrendingPartsByVehicleModel()
+        {
+            try {
+                $query = "SELECT
+                              v.manufacturer,
+                              v.model,
+                              p.part_id,
+                              p.part_name,
+                              SUM(rop.quantity_used) AS total_used,
+                              SUM(rop.quantity_used * rop.unit_price) AS total_cost,
+                              p.unit_price AS current_unit_price,
+                              p.quantity_on_hand,
+                              p.reorder_level,
+                              (
+                                  SELECT GROUP_CONCAT(DISTINCT sc.service_name ORDER BY sc.service_name SEPARATOR ', ')
+                                  FROM repair_order_parts rop_service
+                                  JOIN repair_orders ro_service ON ro_service.order_id = rop_service.order_id
+                                  JOIN vehicles v_service ON v_service.vehicle_id = ro_service.vehicle_id
+                                  JOIN repair_order_services ros ON ros.order_id = ro_service.order_id
+                                  JOIN service_catalog sc ON sc.service_catalog_id = ros.service_catalog_id
+                                  WHERE rop_service.part_id = p.part_id
+                                    AND rop_service.status = 'ISSUED'
+                                    AND ro_service.status <> 'CANCELLED'
+                                    AND v_service.manufacturer = v.manufacturer
+                                    AND v_service.model = v.model
+                              ) AS associated_services
+                          FROM repair_order_parts rop
+                          JOIN repair_orders ro ON ro.order_id = rop.order_id
+                          JOIN vehicles v ON v.vehicle_id = ro.vehicle_id
+                          JOIN parts_inventory p ON p.part_id = rop.part_id
+                          WHERE rop.status = 'ISSUED'
+                            AND ro.status <> 'CANCELLED'
+                          GROUP BY
+                              v.manufacturer, v.model, p.part_id, p.part_name,
+                              p.unit_price, p.quantity_on_hand, p.reorder_level
+                          ORDER BY v.manufacturer, v.model, total_used DESC, p.part_name";
+                $result = self::$conn->query($query);
+                if (!$result) {
+                    throw new Exception("Query failed: " . self::$conn->error);
+                }
+
+                $models = [];
+                while ($row = $result->fetch_assoc()) {
+                    $modelName = trim($row['manufacturer'] . " " . $row['model']);
+                    if (!isset($models[$modelName])) {
+                        $models[$modelName] = [
+                            "vehicle_model" => $modelName,
+                            "total_used" => 0,
+                            "total_cost" => 0.0,
+                            "parts" => []
+                        ];
+                    }
+                    $totalUsed = (int)$row['total_used'];
+                    $totalCost = (float)$row['total_cost'];
+                    $models[$modelName]["total_used"] += $totalUsed;
+                    $models[$modelName]["total_cost"] += $totalCost;
+                    $models[$modelName]["parts"][] = [
+                        "part_id" => (int)$row['part_id'],
+                        "part_name" => $row['part_name'],
+                        "total_used" => $totalUsed,
+                        "total_cost" => $totalCost,
+                        "unit_price" => (float)$row['current_unit_price'],
+                        "quantity_on_hand" => (int)$row['quantity_on_hand'],
+                        "reorder_level" => (int)$row['reorder_level'],
+                        "associated_services" => $row['associated_services']
+                    ];
+                }
+                $result->free();
+
+                foreach ($models as &$model) {
+                    $topFiveUnits = 0;
+                    foreach ($model["parts"] as $index => &$part) {
+                        $part["share_percent"] = $model["total_used"] > 0
+                            ? ($part["total_used"] / $model["total_used"]) * 100
+                            : 0;
+                        if ($index < 5) {
+                            $topFiveUnits += $part["total_used"];
+                        }
+                    }
+                    unset($part);
+                    $model["other_used"] = max(0, $model["total_used"] - $topFiveUnits);
+                }
+                unset($model);
+
+                return [
+                    "success" => true,
+                    "data" => array_values($models)
+                ];
+            } catch (Exception $e) {
+                return [
+                    "success" => false,
+                    "error" => "Database operation failed: " . $e->getMessage()
+                ];
+            }
+        }
     }
 ?>

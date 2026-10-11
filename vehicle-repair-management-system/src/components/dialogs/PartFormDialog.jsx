@@ -59,10 +59,10 @@ export function PartFormDialog({ open, onOpenChange, part, onSubmit }) {
   useEffect(() => {
     if (!open) return;
     setError(null);
-    setName(part?.name ?? "");
+    setName(part?.part_name ?? "");
     setUnit(part?.unit ?? "pc");
-    setQuantity(part ? String(part.quantity) : "");
-    setUnitPrice(part ? String(part.unitPrice) : "");
+    setQuantity(part ? String(part.quantity_on_hand) : "");
+    setUnitPrice(part ? String(part.unit_price) : "");
   }, [open, part]);
 
   // Existing parts may carry a unit that isn't in the preset list; keep it

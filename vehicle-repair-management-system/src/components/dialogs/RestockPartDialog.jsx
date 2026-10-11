@@ -27,7 +27,7 @@ export function RestockPartDialog({ open, onOpenChange, part, onSubmit }) {
 
   const qtyNumber = Number(quantity);
   const qtyValid = quantity !== "" && Number.isInteger(qtyNumber) && qtyNumber > 0;
-  const current = part?.quantity ?? 0;
+  const current = part?.quantity_on_hand ?? 0;
   const unit = part?.unit ?? "pc";
 
   async function handleSubmit(e) {
@@ -50,7 +50,7 @@ export function RestockPartDialog({ open, onOpenChange, part, onSubmit }) {
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Restock Part</DialogTitle>
-          <DialogDescription>{part?.name}</DialogDescription>
+          <DialogDescription>{part?.part_name}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

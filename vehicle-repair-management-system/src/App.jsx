@@ -29,6 +29,8 @@ import { OverviewTab } from "./pages/AdminPage/reports/OverviewTab";
 import { PipelineTab } from "./pages/AdminPage/reports/PipelineTab";
 import { MechanicsTab } from "./pages/AdminPage/reports/MechanicsTab";
 import { PartsUsageTab } from "./pages/AdminPage/reports/PartsUsage";
+import { MonthlyRevenueTab } from "./pages/AdminPage/reports/MonthlyRevenue";
+import { PartsByVehicleTab } from "./pages/AdminPage/reports/PartsByVehicle";
 
 function App() {
   const [user, setUser] = useState(null)
@@ -83,8 +85,10 @@ function App() {
 
           <Route path="reports" element={<Reports />}>
             <Route index element={<OverviewTab />} />
+            <Route path="monthly-revenue" element={<MonthlyRevenueTab />} />
             <Route path="pipeline" element={<PipelineTab />} />
             <Route path="parts-usage" element={<PartsUsageTab />} />
+            <Route path="parts-by-vehicle" element={<PartsByVehicleTab />} />
             <Route path="mechanics" element={<MechanicsTab />} />
           </Route>
 
