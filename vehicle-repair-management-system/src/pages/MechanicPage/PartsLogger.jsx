@@ -20,6 +20,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { normalizePart, normalizeLoggedPart } from "@/utils/normalizeOrder";
+import { OrderFilterBar, matchesSearch } from "@/components/OrderSearchFilter";
+import { formatStatusLabel } from "@/utils/formatStatusLabel";
 
 const API = "http://localhost:8000/api.php";
 
@@ -27,6 +29,9 @@ const API = "http://localhost:8000/api.php";
 // sp_log_repair_order_part (IN_PROGRESS / AWAITING_PARTS) and
 // canLogParts in MechanicOrderStages.jsx.
 const LOGGABLE_STATUSES = ["IN_PROGRESS", "AWAITING_PARTS"];
+
+// Filter pills — only the statuses that can appear on this page.
+const TABS = ["All", "In Progress", "Awaiting Parts"];
 
 // --- Normalizers -----------------------------------------------------
 // These map the exact columns returned by the stored procedures, so they
@@ -67,6 +72,8 @@ export function PartsLogger() {
   const [confirmingCancelId, setConfirmingCancelId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
 
   // Refresh the shared order list when landing here.
   useEffect(() => {
@@ -78,6 +85,18 @@ export function PartsLogger() {
     const orders = Array.isArray(tableData) ? tableData : [];
     return orders.filter((o) => LOGGABLE_STATUSES.includes(o.status));
   }, [tableData]);
+
+  // Search + status pill filter for the left-hand order list. Selection
+  // logic below still uses eligibleOrders so filtering never deselects.
+  const filteredOrders = useMemo(
+    () =>
+      eligibleOrders.filter(
+        (o) =>
+          (statusFilter === "All" || formatStatusLabel(o.status) === statusFilter) &&
+          matchesSearch(search, o.id, o.customer, o.vehicle, o.plateNumber)
+      ),
+    [eligibleOrders, search, statusFilter]
+  );
 
   const fetchInventory = useCallback(async () => {
     try {
@@ -223,12 +242,24 @@ export function PartsLogger() {
 
   return (
     <div className="w-full">
+      {/* Full-bleed sticky filter bar, same treatment as Active Repair Orders. */}
+      <div className="sticky top-[73px] z-10 bg-card -mx-6 -mt-6 border-b border-border">
+        <OrderFilterBar
+          search={search}
+          onSearchChange={setSearch}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          placeholder="Search by order ID, customer, or vehicle..."
+          tabs={TABS}
+        />
+      </div>
+
       <div className="p-6 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
         {/* LEFT: order list, with the logging form expanding inline under the selected card. */}
         <div className="space-y-3">
           <h3 className="text-sm font-semibold">Repair Order</h3>
 
-          {eligibleOrders.map((order) => (
+          {filteredOrders.map((order) => (
             <div key={order.id} className="space-y-3">
               <OrderCard
                 order={order}
@@ -380,9 +411,11 @@ export function PartsLogger() {
             </div>
           ))}
 
-          {eligibleOrders.length === 0 && (
+          {filteredOrders.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              No orders currently eligible for parts logging.
+              {eligibleOrders.length === 0
+                ? "No orders currently eligible for parts logging."
+                : "No orders match your filters."}
             </p>
           )}
 

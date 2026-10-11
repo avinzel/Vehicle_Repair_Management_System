@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Pencil, XCircle } from "lucide-react";
+import { Pencil, Ban } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -276,7 +276,7 @@ export function OrdersPage() {
                               setCancelling(o);
                             }}
                           >
-                            <XCircle className="w-4 h-4" />
+                            <Ban className="w-4 h-4" />
                           </Button>
                         </div>
                       </TableCell>

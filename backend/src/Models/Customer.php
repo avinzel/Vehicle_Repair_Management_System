@@ -65,6 +65,7 @@
                 $vehicles = [];
                 $repairHistory = [];
                 $maintenanceHistory = [];
+                $maintenanceHistory = [];
 
                 // Retrieve Result Set 1: Customer Info
                 $result1 = $stmt->get_result();
@@ -100,6 +101,15 @@
                     }
                 }
 
+                // Move to Result Set 4: Maintenance History
+                if ($stmt->next_result()) {
+                    $result4 = $stmt->get_result();
+                    if ($result4) {
+                        $maintenanceHistory = $result4->fetch_all(MYSQLI_ASSOC);
+                        $result4->free();
+                    }
+                }
+
                 $stmt->close();
 
                 // Clear remaining stored procedure result sets from MySQLi connection buffer
@@ -122,7 +132,7 @@
                         "customer" => $customerInfo,
                         "vehicles" => $vehicles,
                         "repair_history" => $repairHistory,
-                        "maintenance_history" => $maintenanceHistory
+                        "maintenance" => $maintenanceHistory
                     ]
                 ];
 

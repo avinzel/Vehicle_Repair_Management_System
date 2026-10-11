@@ -62,15 +62,7 @@ export function MechanicPage({ user, setUser }) {
         // on each order, so the team is just them for now. Building it here
         // means every page reading tableData gets a complete order shape.
         // TODO: replace once the SP returns the full crew per order.
-        setTableData(
-          rows.map((row) => {
-            const order = normalizeMechanicWorkOrder(row);
-            return {
-              ...order,
-              team: [{ name: currentUserName, role: order.assignedPosition }],
-            };
-          })
-        );
+        setTableData(rows.map(normalizeMechanicWorkOrder));
       } else {
         // Log the whole payload — json.error is undefined when the server
         // "succeeded" but sent an unexpected shape.

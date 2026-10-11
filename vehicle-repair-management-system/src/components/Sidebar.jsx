@@ -55,13 +55,6 @@ const ROLE_LINKS = {
             ],
         },
         {
-            label: 'Records',
-            items: [
-                { name: 'Repair Orders', icon: FileText, href: '/admin/orders' },
-                { name: 'Customer Records', icon: User, href: '/admin/customers' },
-            ],
-        },
-        {
             label: 'Workspace',
             items: [
                 { name: 'Staff', icon: SquareUser, href: '/admin/staff' },
@@ -71,14 +64,36 @@ const ROLE_LINKS = {
                 { name: 'Reports', icon: BarChart3, href: '/admin/reports' },
             ],
         },
+        {
+            label: 'Records',
+            items: [
+                { name: 'Repair Orders', icon: FileText, href: '/admin/orders' },
+                { name: 'Customer Records', icon: User, href: '/admin/customers' },
+            ],
+        },
     ],
     'Service Advisor': [
-        { name: 'Dashboard', icon: LayoutDashboard, href: '/service-advisor' },
-        { name: 'New Vehicle Intake', icon: FilePlus, href: '/service-advisor/intake' },
-        { name: 'Active Repair Orders', icon: ClipboardList, href: '/service-advisor/orders', badgeKey: 'activeOrders' },//dynamic number of order in the badge
-        { name: 'Customer Records', icon: Users, href: '/service-advisor/customers' },
-        { name: 'Billing & Invoicing', icon: CreditCard, href: '/service-advisor/billing' },
-        { name: 'Repair Order History', icon: History, href: '/service-advisor/order-history' },
+        {
+            items: [
+                { name: 'Dashboard', icon: LayoutDashboard, href: '/service-advisor' },
+            ],
+        },
+        {
+            label: 'Workspace',
+            items: [
+                { name: 'New Vehicle Intake', icon: FilePlus, href: '/service-advisor/intake' },
+                { name: 'Active Repair Orders', icon: ClipboardList, href: '/service-advisor/orders', badgeKey: 'activeOrders' },//dynamic number of order in the badge
+                { name: 'Billing & Invoicing', icon: CreditCard, href: '/service-advisor/billing' },
+            ],
+        },
+        {
+            label: 'Records',
+            items: [
+                { name: 'Customer Records', icon: Users, href: '/service-advisor/customers' },
+                { name: 'Repair Order History', icon: History, href: '/service-advisor/order-history' },
+            ],
+        },
+
     ],
     Mechanic: [
         { name: 'Assigned Orders', icon: ClipboardList, href: '/mechanic', badgeKey: 'assignedOrders' },//dynamic number of order in the badge

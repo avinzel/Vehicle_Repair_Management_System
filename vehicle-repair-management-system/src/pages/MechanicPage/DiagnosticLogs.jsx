@@ -6,6 +6,8 @@ import { DetailDrawer } from "@/components/DetailDrawer";
 import { OrderCard } from "@/components/OrderCard";
 import { MechanicOrderDetail } from "@/components/MechanicOrderDetail";
 import { getMyPositionOnOrder } from "@/components/MechanicOrderStages";
+import { OrderFilterBar, matchesSearch } from "@/components/OrderSearchFilter";
+import { formatStatusLabel } from "@/utils/formatStatusLabel";
 
 // Orders where the viewer is the Diagnostician and diagnosis is still
 // theirs to file or revise: not yet submitted (AWAITING_DIAGNOSIS), or
@@ -16,6 +18,9 @@ import { getMyPositionOnOrder } from "@/components/MechanicOrderStages";
 // off this list.
 const VISIBLE_TO_DIAGNOSTIC_LOG_STATUSES = ["AWAITING_DIAGNOSIS", "PENDING_MECHANICS"];
 
+// Filter pills — only the statuses that can appear on this page.
+const TABS = ["All", "Awaiting Diagnosis", "Pending Mechanics"];
+
 export function DiagnosticLogs() {
   // tableData is the single source of truth for the mechanic's orders.
   // MechanicPage fetches + normalizes it (and builds each order's `team`),
@@ -25,6 +30,8 @@ export function DiagnosticLogs() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
 
   // Refresh through the shared fetch when landing here, so assignments or
   // status changes made elsewhere show up. Same state, no second copy.
@@ -45,6 +52,19 @@ export function DiagnosticLogs() {
     );
   }, [tableData, currentUserName]);
 
+  // Search + status pill filter, applied on top of the visible list.
+  const filteredOrders = useMemo(
+    () =>
+      visibleOrders.filter(
+        (o) =>
+          (statusFilter === "All" || formatStatusLabel(o.status) === statusFilter) &&
+          matchesSearch(search, o.id, o.customer, o.vehicle, o.plateNumber, o.complaint)
+      ),
+    [visibleOrders, search, statusFilter]
+  );
+
+  // Resolved from visibleOrders (not filteredOrders) so typing in the
+  // search box doesn't close a drawer that's already open.
   const selectedOrder = visibleOrders.find((o) => o.id === selectedOrderId) ?? null;
 
   // Redirect-and-open: Assigned Orders' "Open Diagnostic Log →" button
@@ -71,8 +91,20 @@ export function DiagnosticLogs() {
 
   return (
     <div className="w-full">
-      <div className="px-6 space-y-3">
-        {visibleOrders.map((order) => (
+      {/* Full-bleed sticky filter bar, same treatment as Active Repair Orders. */}
+      <div className="sticky top-[73px] z-10 bg-card -mx-6 -mt-6 border-b border-border">
+        <OrderFilterBar
+          search={search}
+          onSearchChange={setSearch}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          placeholder="Search by order ID, customer, or vehicle..."
+          tabs={TABS}
+        />
+      </div>
+
+      <div className="p-6 space-y-3">
+        {filteredOrders.map((order) => (
           <OrderCard
             key={order.id}
             order={order}
@@ -83,9 +115,11 @@ export function DiagnosticLogs() {
           />
         ))}
 
-        {visibleOrders.length === 0 && (
+        {filteredOrders.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-10">
-            No orders awaiting your diagnosis right now.
+            {visibleOrders.length === 0
+              ? "No orders awaiting your diagnosis right now."
+              : "No orders match your filters."}
           </p>
         )}
       </div>

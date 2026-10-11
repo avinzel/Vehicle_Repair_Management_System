@@ -224,6 +224,12 @@ export function normalizeMechanicWorkOrder(raw) {
     // available here. Consumers must use partsLoggedCount, or fetch
     // category=parts-by-order when the drawer opens.
     partsLogged: [],
+    team: asArray(raw.assigned_mechanics).map((m) => ({
+      id: m.mechanic_id,
+      assignmentId: m.assignment_id,
+      name: m.mechanic_name,
+      role: m.position_name,
+    })),
   };
 }
 

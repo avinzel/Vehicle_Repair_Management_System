@@ -99,6 +99,7 @@ export function CustomerDetail({ customer }) {
 
   const vehicles = details?.vehicles ?? [];
   const orders = details?.orders ?? [];
+  const maintenance = details?.maintenance ?? [];
 
   return (
     <div className="flex flex-col h-full">
@@ -202,6 +203,37 @@ export function CustomerDetail({ customer }) {
             </div>
           ) : (
             !error && <p className="text-sm text-muted-foreground">No repair orders yet.</p>
+          )}
+        </div>
+        <div>
+          <SectionTitle>Maintenance History</SectionTitle>
+          {loading && !details ? (
+            <p className="text-sm text-muted-foreground">Loading maintenance history...</p>
+          ) : maintenance.length > 0 ? (
+            <div className="space-y-2">
+              {maintenance.map((m) => (
+                <div key={m.id} className="bg-secondary/50 rounded-lg p-3 space-y-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">{m.serviceDate}</p>
+                    <p className="text-xs text-muted-foreground">{m.orderId}</p>
+                  </div>
+                  <p className="text-sm">{m.summary}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {m.vehicle} · {m.plateNumber}
+                  </p>
+                  {(m.nextDueDate || m.nextDueMileage) && (
+                    <p className="text-xs text-muted-foreground">
+                      Next service: {m.nextDueDate}
+                      {m.nextDueMileage
+                        ? ` or ${Number(m.nextDueMileage).toLocaleString("en-PH")} km`
+                        : ""}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            !error && <p className="text-sm text-muted-foreground">No maintenance records yet.</p>
           )}
         </div>
       </div>
