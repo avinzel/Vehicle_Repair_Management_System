@@ -1,0 +1,428 @@
+"use client"
+
+import { forwardRef, useImperativeHandle, useState, useMemo, useEffect, useRef } from "react";
+import { Check, Plus, Car } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ComboboxInput } from "@/components/ComboboxInput";
+import { getBrands, getModels, canonicalBrand, canonicalModel, decodeVin } from "@/utils/vehicleLookup";
+
+const VEHICLE_TYPES = ["Car", "Motorcycle", "Tricycle"];
+const CURRENT_YEAR = new Date().getFullYear();
+
+export const DEFAULT_VEHICLE_VALUES = {
+  vehicleType: "Car",
+  plateNumber: "",
+  make: "",
+  model: "",
+  year: "",
+  color: "",
+  vinNumber: "",
+  currentMileage: "",
+};
+
+// Pure validation function so it's easy to unit test / reuse
+function validateField(name, value) {
+  const trimmed = typeof value === "string" ? value.trim() : value;
+
+  switch (name) {
+    case "vehicleType":
+      if (!trimmed) return "Select a vehicle type";
+      return "";
+    case "plateNumber":
+      if (!trimmed) return "Plate number is required";
+      if (trimmed.length < 5) return "Enter a valid plate number";
+      return "";
+    case "make":
+      if (!trimmed) return "Make / brand is required";
+      return "";
+    case "model":
+      if (!trimmed) return "Model is required";
+      return "";
+    case "year":
+      if (!trimmed) return "Year is required";
+      if (!/^\d{4}$/.test(trimmed)) return "Enter a valid 4-digit year";
+      if (Number(trimmed) < 1980 || Number(trimmed) > CURRENT_YEAR + 1)
+        return `Year must be between 1980 and ${CURRENT_YEAR + 1}`;
+      return "";
+    case "color":
+      if (!trimmed) return "Color is required";
+      return "";
+    case "currentMileage":
+      if (trimmed && !/^\d+$/.test(trimmed)) return "Numbers only (no commas)";
+      return "";
+    default:
+      return "";
+  }
+}
+
+// `values` + `onFieldChange` come from the parent stepper so the data
+// survives switching between steps. This component only owns UI-only
+// state: which errors to show, and whether the user has tried to submit.
+//
+// existingVehicles / selectedVehicleId / onSelectVehicle are only passed when
+// the customer came from Customer Records. selectedVehicleId === null means
+// "Enter a new vehicle". When an existing vehicle is selected, its identity
+// fields (type, plate, make, model, year, VIN) are read-only; color and
+// mileage stay editable since the intake SP updates both for returning vehicles.
+export const VehicleForm = forwardRef(function VehicleForm(
+  { values, onFieldChange, existingVehicles = [], selectedVehicleId = null, onSelectVehicle },
+  ref
+) {
+  const [errors, setErrors] = useState({});
+  const [submitted, setSubmitted] = useState(false);
+  const [vinStatus, setVinStatus] = useState({ state: "idle", message: "" });
+
+  const isExisting = selectedVehicleId != null;
+  const lockedClass = isExisting ? "bg-muted/50" : "";
+
+  // Latest values for async callbacks (VIN decode finishes after render).
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
+  const lastDecodedVin = useRef("");
+
+  const brandOptions = useMemo(() => getBrands(values.vehicleType), [values.vehicleType]);
+  const modelOptions = useMemo(
+    () => getModels(values.vehicleType, values.make),
+    [values.vehicleType, values.make]
+  );
+
+  const liveValidate = (name, value) => {
+    if (submitted) setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }));
+  };
+
+  const handleChange = (name) => (e) => {
+    const value = e.target.value;
+    onFieldChange(name, value);
+    liveValidate(name, value);
+  };
+
+  const handleTypeSelect = (type) => {
+    if (type === values.vehicleType) return;
+    // If the chosen brand was a known brand of the old type but doesn't exist
+    // for the new type (e.g. Toyota -> Motorcycle), clear brand + model.
+    const wasKnown = canonicalBrand(values.vehicleType, values.make);
+    const stillKnown = canonicalBrand(type, values.make);
+    if (wasKnown && !stillKnown) {
+      onFieldChange("make", "");
+      onFieldChange("model", "");
+    }
+    onFieldChange("vehicleType", type);
+    liveValidate("vehicleType", type);
+  };
+
+  // Brand picked/typed. If the brand is a known one and the current model
+  // doesn't belong to it, clear the model so it can't be a stale mismatch.
+  const handleMakeChange = (value) => {
+    onFieldChange("make", value);
+    liveValidate("make", value);
+    const brand = canonicalBrand(values.vehicleType, value);
+    if (brand && values.model.trim()) {
+      const known = getModels(values.vehicleType, brand);
+      if (known.length > 0 && !canonicalModel(values.vehicleType, brand, values.model)) {
+        onFieldChange("model", "");
+      }
+    }
+  };
+
+  const handleModelChange = (value) => {
+    onFieldChange("model", value);
+    liveValidate("model", value);
+  };
+
+  // No blur-normalizing needed: the combobox only offers "Use “text”" when the
+  // text doesn't match a listed option (case-insensitive), so listed brands and
+  // models are always saved with their canonical spelling.
+
+  const handleVinChange = (e) => {
+    const value = e.target.value.toUpperCase().replace(/\s/g, "");
+    onFieldChange("vinNumber", value);
+    if (value.length !== 17) setVinStatus({ state: "idle", message: "" });
+    liveValidate("vinNumber", value);
+  };
+
+  // Auto-decode a full 17-character VIN. Best effort only: offline, timeout,
+  // or "not found" never blocks the user from filling the form by hand.
+  useEffect(() => {
+    const vin = (values.vinNumber ?? "").trim().toUpperCase();
+    if (isExisting || vin.length !== 17 || vin === lastDecodedVin.current) return;
+
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setVinStatus({ state: "offline", message: "You're offline. Fill in the vehicle details manually." });
+      return;
+    }
+
+    const ctrl = new AbortController();
+    setVinStatus({ state: "loading", message: "Looking up VIN..." });
+
+    decodeVin(vin, ctrl.signal)
+      .then((res) => {
+        lastDecodedVin.current = vin;
+        if (!res.found) {
+          setVinStatus({
+            state: "notfound",
+            message: "No data for this VIN (common for local-market vehicles). Fill in the details manually.",
+          });
+          return;
+        }
+
+        // Fill only what's still empty so we never overwrite what was typed.
+        const cur = valuesRef.current;
+        if (res.vehicleType && res.vehicleType !== cur.vehicleType) {
+          onFieldChange("vehicleType", res.vehicleType);
+        }
+        if (!cur.make.trim()) onFieldChange("make", res.make);
+        if (!cur.model.trim() && res.model) onFieldChange("model", res.model);
+        if (!cur.year.trim() && res.year) onFieldChange("year", String(res.year));
+
+        setVinStatus({
+          state: "ok",
+          message: `Found: ${[res.make, res.model, res.year].filter(Boolean).join(" ")}. Please double-check before continuing.`,
+        });
+      })
+      .catch(() => {
+        // Aborted because the VIN changed or the form unmounted: say nothing.
+        if (ctrl.signal.aborted) return;
+        setVinStatus({ state: "error", message: "Couldn't look up the VIN right now. Fill in the details manually." });
+      });
+
+    return () => ctrl.abort();
+    // onFieldChange is intentionally omitted: it changes identity every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values.vinNumber, isExisting]);
+
+  const validateAll = () => {
+    const names = [
+      "vehicleType", "plateNumber", "make", "model", "year", "currentMileage",
+      // Color is optional for an existing vehicle (SP keeps the old one if null).
+      ...(isExisting ? [] : ["color"]),
+    ];
+    const nextErrors = {};
+    names.forEach((name) => {
+      nextErrors[name] = validateField(name, values[name] ?? "");
+    });
+    setErrors(nextErrors);
+    setSubmitted(true);
+    return Object.values(nextErrors).every((err) => !err);
+  };
+
+  useImperativeHandle(ref, () => ({
+    validate: async () => validateAll(),
+    getValues: () => values,
+    submit: async () => (validateAll() ? values : null),
+  }));
+
+  const showError = (name) => submitted && errors[name];
+
+  const vinStatusColor =
+    vinStatus.state === "ok" ? "text-primary" : "text-muted-foreground";
+
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-6">Vehicle Details</h3>
+
+      {existingVehicles.length > 0 && (
+        <div className="mb-6 space-y-2 border-b border-border pb-6">
+          <p className="text-xs text-muted-foreground">
+            Select an existing vehicle or enter a new one below
+          </p>
+
+          {existingVehicles.map((v) => {
+            const selected = selectedVehicleId === v.id;
+            return (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => onSelectVehicle?.(v.id)}
+                className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                  selected ? "border-primary bg-primary/10" : "border-border hover:bg-secondary/50"
+                }`}
+              >
+                <div
+                  className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
+                    selected ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {selected ? <Check className="w-4 h-4" /> : <Car className="w-4 h-4" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {[v.make, v.model, v.year].filter(Boolean).join(" ")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{v.plateNumber}</p>
+                </div>
+                {selected && <span className="text-xs text-primary">Selected</span>}
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => onSelectVehicle?.(null)}
+            className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+              !isExisting
+                ? "border-primary bg-primary/10 border-solid"
+                : "border-dashed border-border hover:bg-secondary/50"
+            }`}
+          >
+            <div
+              className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
+                !isExisting ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+              }`}
+            >
+              {!isExisting ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            </div>
+            <span className="flex-1 text-sm">Enter a new vehicle</span>
+            {!isExisting && <span className="text-xs text-primary">Selected</span>}
+          </button>
+        </div>
+      )}
+
+      <form className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5" onSubmit={(e) => e.preventDefault()}>
+        <div className="flex flex-col gap-1.5 sm:col-span-1">
+          <Label>Vehicle Type</Label>
+          <div className="flex gap-2 flex-wrap" role="radiogroup" aria-label="Vehicle type">
+            {VEHICLE_TYPES.map((type) => (
+              <Button
+                key={type}
+                type="button"
+                variant={values.vehicleType === type ? "default" : "outline"}
+                onClick={() => handleTypeSelect(type)}
+                aria-pressed={values.vehicleType === type}
+                disabled={isExisting}
+                className="min-w-[110px]"
+              >
+                {type}
+              </Button>
+            ))}
+          </div>
+          {showError("vehicleType") && (
+            <p className="text-sm text-destructive">{errors.vehicleType}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="plateNumber">Plate Number</Label>
+          <Input
+            id="plateNumber"
+            placeholder="ABC-1234"
+            value={values.plateNumber}
+            onChange={handleChange("plateNumber")}
+            aria-invalid={!!showError("plateNumber")}
+            readOnly={isExisting}
+            className={lockedClass}
+          />
+          {showError("plateNumber") && (
+            <p className="text-sm text-destructive">{errors.plateNumber}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="make">Make / Brand</Label>
+          <ComboboxInput
+            id="make"
+            placeholder="Select a brand"
+            searchPlaceholder="Search or type a brand..."
+            options={brandOptions}
+            value={values.make}
+            onChange={handleMakeChange}
+            aria-invalid={!!showError("make")}
+            readOnly={isExisting}
+            className={lockedClass}
+          />
+          {showError("make") && (
+            <p className="text-sm text-destructive">{errors.make}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="model">Model</Label>
+          <ComboboxInput
+            id="model"
+            placeholder={modelOptions.length > 0 ? "Select a model" : "Enter a model"}
+            searchPlaceholder="Search or type a model..."
+            options={modelOptions}
+            value={values.model}
+            onChange={handleModelChange}
+            aria-invalid={!!showError("model")}
+            readOnly={isExisting}
+            className={lockedClass}
+          />
+          {showError("model") && (
+            <p className="text-sm text-destructive">{errors.model}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="year">Year</Label>
+          <Input
+            id="year"
+            placeholder="2021"
+            inputMode="numeric"
+            value={values.year}
+            onChange={handleChange("year")}
+            aria-invalid={!!showError("year")}
+            readOnly={isExisting}
+            className={lockedClass}
+          />
+          {showError("year") && (
+            <p className="text-sm text-destructive">{errors.year}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="color">Color</Label>
+          <Input
+            id="color"
+            placeholder="Silver"
+            value={values.color}
+            onChange={handleChange("color")}
+            aria-invalid={!!showError("color")}
+          />
+          {showError("color") && (
+            <p className="text-sm text-destructive">{errors.color}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="vinNumber">Vehicle Identification Number (optional)</Label>
+          <Input
+            id="vinNumber"
+            placeholder="e.g., 1HGCR2F8XHA000000"
+            value={values.vinNumber}
+            onChange={handleVinChange}
+            aria-invalid={!!showError("vinNumber")}
+            maxLength={17}
+            readOnly={isExisting}
+            className={lockedClass}
+          />
+          {showError("vinNumber") && (
+            <p className="text-sm text-destructive">{errors.vinNumber}</p>
+          )}
+          {!isExisting && vinStatus.message && (
+            <p className={`text-xs ${vinStatusColor}`} role="status">
+              {vinStatus.message}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="currentMileage">Current Mileage (optional)</Label>
+          <Input
+            id="currentMileage"
+            placeholder="e.g., 10000"
+            inputMode="numeric"
+            value={values.currentMileage}
+            onChange={handleChange("currentMileage")}
+            aria-invalid={!!showError("currentMileage")}
+            maxLength={6}
+          />
+          {showError("currentMileage") && (
+            <p className="text-sm text-destructive">{errors.currentMileage}</p>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+});

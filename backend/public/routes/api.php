@@ -1,4 +1,6 @@
 <?php
+    ini_set('display_errors', 0); 
+    error_reporting(E_ALL);
     session_set_cookie_params([
         'lifetime' => 86400,
         'path'     => '/',
@@ -33,26 +35,53 @@
     require_once __DIR__ . '../../../vendor/autoload.php';
 
     //imports
+
+    //models
+    use App\Models\RepairOrder;
+    use App\Models\Reports;
+    use App\Models\Mechanic;
+    use App\Models\Role;
+    use App\Auth\Auth;
     use App\Config\Database;
     use App\Models\User;
+    use App\Models\MechanicPosition;
+
+    //controllers
+    use App\Controllers\UserController;
+    use App\Controllers\MechanicController;
+    use App\Controllers\RepairOrderController;
+    use App\Controllers\CustomerController; 
+    use App\Controllers\InvoiceController;
     use App\Controllers\RegisterUserController;
     use App\Controllers\LoginController;
     use App\Controllers\RoleController;
-    use App\Models\Role;
-    use App\Auth\Auth;
-
+    use App\Controllers\PartController;
+    use App\Controllers\ServiceController;
+    use App\Controllers\ReportsController;
+    //instance
     $db = new Database();
-    
     $userModel = new User($db);
+    $auth = new Auth();
+    new MechanicPosition($db); 
+    $serviceAdvisorDashboard = new RepairOrder();
+
+    $userController = new UserController($userModel);
     $registerUserController = new RegisterUserController($userModel); 
     $loginController = new LoginController($userModel);
     $roleController = new RoleController(new Role($db));
-    $auth = new Auth();
+    $repairOrderController = new RepairOrderController();
+    $customerController = new CustomerController();
+    $mechanicsController = new MechanicController(new Mechanic); 
+    $invoiceController = new InvoiceController();
+    $partController = new PartController();  
+    $serviceController = new ServiceController(); 
+    $reportsController = new ReportsController();
 
+    
     $action = $_GET['action'] ?? null;
 
     // Define actions that do not require authentication
-    $publicActions = ['register', 'login', 'check-auth'];
+    $publicActions = ['register', 'login', 'check-auth',"logout"];
 
     // 1. Guard Clause: Block unauthenticated access to protected routes
     if (!in_array($action, $publicActions) && !$auth->isAuthenticated()) {
@@ -61,18 +90,22 @@
         exit();
     }
     //define role-based permissions for specific actions
-    $rolePermissions = [
-        "create-repair-order"=>[1,2,3]
-    ];
+    $rolePermissions = Auth::getRolePermissions(); 
+
+    $method = $_SERVER["REQUEST_METHOD"]; 
 
     if (isset($rolePermissions[$action])) {
         $userRoleId = $auth->getRoleId(); // Retrieve role_id stored in $_SESSION
-        if (!in_array($userRoleId, $rolePermissions[$action])) {
-            http_response_code(403); 
-            echo json_encode(["error" => "Access denied. Insufficient permissions for this action."]);
-            exit();
+        if (isset( $rolePermissions[$action][$method])) {
+            if (!in_array($userRoleId, $rolePermissions[$action][$method])) {
+                http_response_code(403); 
+                echo json_encode(["error" => "Access denied. Insufficient permissions for this action."]);
+                exit();
+            }
         }
     }
+
+
     //routes
     switch ($action){
         //public routes
@@ -88,17 +121,364 @@
             $auth->checkAuthentication();
             break;
         }
-        //protected routes
         case "logout":{
             $loginController->logoutUser();
             break;
         }
+        //protected routes
         case "test-auth":{
             echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated." ]);
         }
+            break;
+        case "repair-orders":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET") {
+                $category = $_GET["category"] ?? null;
+                // 2. Default Dashboard (No category param)
+                if (!$category) {
+                    $dashboardData = $serviceAdvisorDashboard->getServiceAdvisorTable();
+                    http_response_code(200);
+                    echo json_encode(["data" => $dashboardData]);
+                    exit();
+                }
 
-        case "create-repair-order":{
-            echo json_encode(["message" => "Hello World " . $auth->getUsername() . "! You are authenticated and have permission to create a repair order." ]);
+                // 3. Category Router
+                switch ($category) {
+                    case "management":
+                        $repairOrderController->getOrderManagementList();
+                        exit();
+
+                    case "active":
+                        if (isset($_GET["order_id"])) {
+                            $repairOrderController->getRepairOrderDetails();
+                            exit();
+                        }
+                        $repairOrderController->getActiveRepairOrders();
+                        break;
+
+                    case "inactive":
+                        $invoiceController->getBillingAndInvoicingRecords();
+                        break;
+
+                    case "history":
+                        $repairOrderController->getOrderHistory();
+                        break;
+                    case "parts-by-order":
+                        $repairOrderController->getPartsByRepairOrder();
+                        break;
+                    case "assigned":
+                        $repairOrderController->getMechanicWorkOrders();
+                        break;
+                    default:
+                        http_response_code(400);
+                        echo json_encode(["error" => "Invalid category parameter"]);
+                        exit();
+                }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+                if (!isset($_GET["post-method"])) {
+                    if ((int)$auth->getRoleId() !== 2) {
+                        http_response_code(403);
+                        echo json_encode(["status" => "error", "error" => "Only Service Advisors can create repair orders."]);
+                        exit();
+                    }
+                    $repairOrderController->createVehicleIntake();
+                    exit();
+                }
+                $method = $_GET["post-method"]; 
+ 
+               switch($method){
+                    case "assign-diagnostician": {
+                        $repairOrderController->assignDiagnostician(); 
+                    }
+                    break; 
+                    case "submit-diagnosis":{
+                        $repairOrderController->submitDiagnosis();
+                    }
+                    break;
+                    case "assign-mechanic":{
+                        $repairOrderController->assignMechanic();
+                    }
+                    break;
+                    case "log-part":{
+                        $repairOrderController->logPart(); 
+                    }
+                    break;
+                    case "mark-ready-to-invoice":{
+                        $repairOrderController->markReadyToInvoice(); 
+                    }
+                    break;
+                    default:
+                        http_response_code(400);
+                        echo json_encode(["error" => "Invalid post-method parameter"]);
+                        exit();
+                    break;
+               }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+                if (isset($_GET["put-method"])) {
+                    $putMethod = $_GET["put-method"]; 
+                    switch($putMethod){
+                        case "update-order": {
+                            if (!in_array((int)$auth->getRoleId(), [1, 2], true)) {
+                                http_response_code(403);
+                                echo json_encode(["status" => "error", "error" => "Only Admins and Service Advisors can update repair order information."]);
+                                exit();
+                            }
+                            $repairOrderController->updateRepairOrder();
+                            exit();
+                        }
+                        case "cancel-order-part": {
+                            $repairOrderController->cancelRepairOrderPart(); 
+                        }
+                        break;
+                        default : {
+                            http_response_code(400);
+                            echo json_encode(["error" => "Invalid put-method parameter"]);
+                            exit();
+                        }
+                    }
+                } else {
+                    http_response_code(400);
+                    echo json_encode([
+                        "status" => "error",
+                        "error" => "Missing required put-method parameter."
+                    ]);
+                    exit();
+                }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE") {
+                $repairOrderController->cancelRepairOrder();
+                exit();
+            }
         }
+        break;
+        case "users": {
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                $userController->getStaffMembers();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               $userController->updateUser();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+               $userController->deleteUser();
+            }
+        }
+        break;
+        case "reports":{
+            if($_SERVER["REQUEST_METHOD"] === "GET"){
+                if (isset($_GET["category"])) {
+                    $category = $_GET["category"];
+                    switch($category){
+                        case "admin-cards":{
+                            $reportsController->getAdminCards();
+                        }
+                        break;
+                        case "pipeline-status":{
+                            $reportsController->getPipelineStatusCounts();
+                        }
+                        break;
+                        case "recent-orders":{
+                            $reportsController->getRecentRepairOrders();
+                        }   
+                        break;
+                        case "top-revenue-by-order":{
+                            $reportsController->getRevenueByOrder();
+                        }
+                        break;
+                        case "revenue-split":{
+                            $reportsController->getRevenueSplit();
+                        }
+                        break;
+                        case "pipeline-status-analytics":{
+                            $reportsController->getPipelineStatusCountsOverall();
+                        }
+                        break;
+                        case "parts-inventory-cards":{
+                            $reportsController->getPartsInventoryCards();
+                        }
+                        break;
+                        case "top-parts-used":{
+                            $reportsController->getTopPartsUsed();
+                        }
+                        break;
+                        case "mechanics-order-load":{
+                            $reportsController->getMechanicOrderLoad();
+                        }
+                        break;
+                        case "mechanics-cards":{
+                            $reportsController->getMechanicOrderCards();
+                        }
+                        break;
+                        default:{
+                            http_response_code(404);
+                            echo json_encode(["error" => "404 not found"]);
+                            exit();
+                        }   
+                    }
+                }
+                $dashboardData = (new Reports())->getServiceAdvisorCards();
+                http_response_code(200);
+                echo json_encode(["data" => $dashboardData]);
+                exit();
+            }
+        }
+        break;
+        case "customers":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                $input = json_decode(file_get_contents('php://input'), true);
+                if (isset($_GET["customer_id"]) || isset($_GET["customerId"]) || isset($input["customer_id"])) {
+                    $customerController->getCustomerDetailsWithHistory(); 
+                    exit; 
+                }
+                $customerController->getCustomerRecordsByServiceProvider();
+
+
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+                $customerController->updateCustomer();
+                exit();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+                $customerController->createCustomer();
+                exit();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+                $customerController->deactivateCustomer();
+                exit();
+            }
+        }
+        break;
+        case "mechanics":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                if (isset($_GET["available"])) {
+                   $mechanicsController->getAvailableMechanics(); 
+                   exit();
+                }
+               $mechanicsController->getAllMechanics();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               $mechanicsController->updateMechanics();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+               $mechanicsController->createMechanic();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+               $mechanicsController->deleteMechanic();
+            }
+        }
+        break;
+        case "parts": {
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                if(Auth::getRoleId() === 1){
+                    $partController->getPartsInventoryAdmin(); 
+                    exit();
+                }
+                $partController->getParts();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+                $partController->updatePart();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+                if (isset($_GET["post-method"])) {
+                    $postMethod = $_GET["post-method"]; 
+                    switch($postMethod){
+                        case "restock":{ 
+                            $partController->restockPart(); 
+                        }
+                        break;
+                        default:                                              
+                            http_response_code(404);
+                            echo json_encode(["error" => "404 not found"]);
+                            exit();
+                        break;
+                    }
+                } else {
+                    if (Auth::getRoleId() !== 1) {
+                            http_response_code(403);
+                            echo json_encode(["error" => "Access denied. Only administrators can create inventory parts."]);
+                            exit();
+                    }
+                    $partController->createPart();
+                }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+                $partController->deletePart();
+            }
+        }
+        break;
+        case "invoices":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                $input = json_decode(file_get_contents('php://input'), true);
+                $order_id = $input["order_id"]; 
+                if (isset($_GET["order_id"]) || isset($order_id)) {
+                    $invoiceController->getInvoiceDetails(); 
+                    exit;
+                }
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+                if (isset($_GET["post-method"])) {
+                    $postMethod = $_GET["post-method"]; 
+                    switch($postMethod){
+                        case "release-vehicle":{
+                            $invoiceController->fulfillRepairOrder(); 
+                        }
+                        break;
+                        case "payment":{
+                            $invoiceController->processInvoicePayment(); 
+                        }
+                        break;
+                        default:                                              
+                            http_response_code(404);
+                            echo json_encode(["error" => "post-method not found"]);
+                            exit();
+                        break;
+                    }
+                    exit(); 
+                }
+                $invoiceController->generateInvoice(); 
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+              
+            }
+        }
+        break;
+        case "services":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                $serviceController->getServices();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               $serviceController->updateService();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+                $serviceController->addService();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+                $serviceController->deleteService();
+            }
+        }
+        break;
+        case "mechanic-position":{
+            if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                MechanicPosition::getAllMechanicPositions();
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "PUT"){
+               
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "POST"){
+
+            }
+            if ($_SERVER["REQUEST_METHOD"] === "DELETE"){
+              
+            }
+        }
+        break;
+        default:
+            http_response_code(404);
+            echo json_encode(["error" => "404 not found"]);
+            exit();
+        break;
     }
 ?>

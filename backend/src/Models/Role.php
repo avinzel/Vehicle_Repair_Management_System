@@ -11,7 +11,7 @@
         }
 
         public static function getAllRoles(){
-            $query = "SELECT * FROM roles"; //procedure
+            $query = "SELECT * FROM roles"; //procedure  
             $stmt = self::$conn->prepare($query);
             try {
                 $stmt->execute();

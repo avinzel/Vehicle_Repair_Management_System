@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link, useLocation } from "react-router";
 import {
     Wrench,
     LayoutDashboard,
@@ -15,7 +16,12 @@ import {
     MoreVertical,
     LogOut,
     X,
-    Menu,
+    SquareUser,
+    Toolbox,
+    User,
+    FileText,
+    ChevronDown,
+    
 } from 'lucide-react';
 
 import {
@@ -27,54 +33,152 @@ import {
     SidebarGroupContent,
     SidebarMenu,
     SidebarMenuItem,
-    SidebarMenuButton,
-    SidebarProvider,
-    SidebarInset,
-    SidebarTrigger,
+    SidebarMenuButton
 } from '@/components/ui/sidebar';
+// Install if missing: npx shadcn@latest add collapsible
+import {
+    Collapsible,
+    CollapsibleTrigger,
+    CollapsibleContent,
+} from '@/components/ui/collapsible';
 import { useNavigate } from 'react-router';
 
 // Nav links per role. Add/remove items here as the system's role-based
 // access rules change, rather than editing the render logic below.
 const ROLE_LINKS = {
+    // Admin is the only role with grouped sections (each has a `label`).
+    // Other roles stay flat arrays; see `sections` below.
     Admin: [
-        { name: 'Dashboard', icon: LayoutDashboard, href: '#dashboard' },
-        { name: 'Active Repair Orders', icon: ClipboardList, href: '#orders', badgeKey: 'activeOrders' }, //dynamic number of order in the badge
-        { name: 'Customer Records', icon: Users, href: '#customers' },
-        { name: 'Mechanics', icon: MechanicIcon, href: '#mechanics' },
-        { name: 'Parts Inventory', icon: Boxes, href: '#parts', badgeKey: 'lowStock' },
-        { name: 'Billing & Invoicing', icon: CreditCard, href: '#billing' },
-        { name: 'Reports', icon: BarChart3, href: '#reports' },
+        {
+            items: [
+                { name: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
+            ],
+        },
+        {
+            label: 'Workspace',
+            items: [
+                { name: 'Staff', icon: SquareUser, href: '/admin/staff' },
+                { name: 'Mechanics', icon: MechanicIcon, href: '/admin/mechanics' },
+                { name: 'Services', icon: Toolbox, href: '/admin/services' },
+                { name: 'Parts Inventory', icon: Boxes, href: '/admin/parts', badgeKey: 'lowStock' },
+                { name: 'Reports', icon: BarChart3, href: '/admin/reports' },
+            ],
+        },
+        {
+            label: 'Records',
+            items: [
+                { name: 'Repair Orders', icon: FileText, href: '/admin/orders' },
+                { name: 'Customer Records', icon: User, href: '/admin/customers' },
+            ],
+        },
     ],
     'Service Advisor': [
-        { name: 'Dashboard', icon: LayoutDashboard, href: '#dashboard' },
-        { name: 'New Vehicle Intake', icon: FilePlus, href: '#intake' },
-        { name: 'Active Repair Orders', icon: ClipboardList, href: '#orders', badgeKey: 'activeOrders' },//dynamic number of order in the badge
-        { name: 'Customer Records', icon: Users, href: '#customers' },
-        { name: 'Billing & Invoicing', icon: CreditCard, href: '#billing' },
-        { name: 'Repair Order History', icon: History, href: '#order-history' },
+        {
+            items: [
+                { name: 'Dashboard', icon: LayoutDashboard, href: '/service-advisor' },
+            ],
+        },
+        {
+            label: 'Workspace',
+            items: [
+                { name: 'New Vehicle Intake', icon: FilePlus, href: '/service-advisor/intake' },
+                { name: 'Active Repair Orders', icon: ClipboardList, href: '/service-advisor/orders', badgeKey: 'activeOrders' },//dynamic number of order in the badge
+                { name: 'Billing & Invoicing', icon: CreditCard, href: '/service-advisor/billing' },
+            ],
+        },
+        {
+            label: 'Records',
+            items: [
+                { name: 'Customer Records', icon: Users, href: '/service-advisor/customers' },
+                { name: 'Repair Order History', icon: History, href: '/service-advisor/order-history' },
+            ],
+        },
+
     ],
     Mechanic: [
-        { name: 'Assigned Repair Orders', icon: ClipboardList, href: '#assigned', badgeKey: 'assignedOrders' },//dynamic number of order in the badge
-        { name: 'Diagnostic Log', icon: SquareText, href: '#diagnostic-log' },
-        { name: 'Parts Logger', icon: Cog, href: '#parts-logger' },
+        { name: 'Assigned Orders', icon: ClipboardList, href: '/mechanic', badgeKey: 'assignedOrders' },//dynamic number of order in the badge
+        { name: 'Diagnostic Log', icon: SquareText, href: '/mechanic/diagnostic-log' },
+        { name: 'Parts Logger', icon: Cog, href: '/mechanic/part-logger' },
     ],
 };
 
+// Roles that render a dark sidebar. The actual colors live in index.css
+// under [data-role="..."] as --sidebar-* overrides, so the JSX below can
+// stay role-agnostic and just reference sidebar tokens.
+const DARK_SIDEBAR_ROLES = ['Mechanic'];
+
+const ROOT_HREFS = ['/admin', '/service-advisor', '/mechanic'];
+
+function isLinkActive(href, pathname) {
+    const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+    if (ROOT_HREFS.includes(href)) return path === href;
+    return path === href || path.startsWith(href + '/');
+}
 
 export function AppSidebar({
     role = 'Service Advisor',
     userName = 'Juan Dela Cruz',//name should be dynamic 
-    activeHref = '#dashboard',
-    badges = { activeOrders: 6, lowStock: 2, assignedOrders: 3 },
-    setUser
+    badges = { activeOrders: 0, lowStock: 0, assignedOrders: 0 },
+    setUser,
+    user,
 }) {
+
+    const location = useLocation();
+
+    console.log(location.pathname); // e.g. "/service-advisor/intake"
+    let activeHref = '';
+
+    if (location.pathname === "/service-advisor/intake") {
+        console.log("Intake page is active");
+    }
+    switch (user["role_id"]) {
+        case 1: activeHref = "/admin"
+            break;
+        case 2: activeHref = "/service-advisor"
+            break;
+        case 3: activeHref = "/mechanic"
+            break;
+    }
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [showMenuDropdown, setShowMenuDropdown] = useState(false);
     const menuRef = useRef(null);
     const navigate = useNavigate();
 
-    const links = ROLE_LINKS[role] ?? ROLE_LINKS['Service Advisor'];
+    const roleLinks = ROLE_LINKS[role] ?? ROLE_LINKS['Service Advisor'];
+    // Grouped roles already have { label, items }; flat roles become one unlabeled section.
+    const sections = roleLinks[0]?.items ? roleLinks : [{ label: null, items: roleLinks }];
+    const isDarkRole = DARK_SIDEBAR_ROLES.includes(role);
+
+    // Open/closed state per labeled group, keyed by label. A group starts
+    // open only if it contains the current page, so the active link is
+    // never hidden on load. Unlabeled sections (e.g. Dashboard) are never
+    // collapsible, so they don't need an entry here.
+    const [openGroups, setOpenGroups] = useState(() =>
+        Object.fromEntries(
+            sections
+                .filter((s) => s.label)
+                .map((s) => [s.label, true])
+        )
+    );
+
+    // When navigation lands inside a collapsed group (e.g. via a redirect
+    // or a link from another page), open it. Never force-closes anything,
+    // so the user's manual toggles are respected.
+    useEffect(() => {
+        setOpenGroups((prev) => {
+            const next = { ...prev };
+            let changed = false;
+            for (const s of sections) {
+                if (s.label && !next[s.label] && s.items.some((l) => isLinkActive(l.href, location.pathname))) {
+                    next[s.label] = true;
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location.pathname, role]);
+
     const initials = userName
         .split(' ')
         .map((part) => part[0])
@@ -92,101 +196,141 @@ export function AppSidebar({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-      async function logout() {
+    // Shared by collapsible and non-collapsible sections.
+    function renderMenu(items) {
+        return (
+            <SidebarMenu className="space-y-1">
+                {items.map((link) => {
+                    const Icon = link.icon;
+                    const isActive = isLinkActive(link.href, location.pathname);
+                    const badgeValue = link.badgeKey ? badges[link.badgeKey] : null;
+                    return (
+                        <SidebarMenuItem key={link.name}>
+                            <SidebarMenuButton
+                                asChild
+                                isActive={isActive}
+                                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
+                                    ? '!bg-sidebar-primary !text-sidebar-primary-foreground shadow-sm hover:!bg-sidebar-primary/90 hover:!text-sidebar-primary-foreground'
+                                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                                    }`}
+                            >
+                                <Link
+                                    to={link.href}
+                                    className="flex items-center justify-between w-full"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <Icon className={`w-4 h-4 ${isActive ? 'text-sidebar-primary-foreground' : 'text-sidebar-foreground/60'}`} />
+                                        <span>{link.name}</span>
+                                    </div>
+                                    {badgeValue != null && (
+                                        <span
+                                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground' : 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                                }`}
+                                        >
+                                            {badgeValue}
+                                        </span>
+                                    )}
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    );
+                })}
+            </SidebarMenu>
+        );
+    }
+
+    async function logout() {
         const response = await fetch("http://localhost:8000/api.php?action=logout", {
-          credentials: "include"
+            credentials: "include"
         });
         const data = await response.json();
-    
+
         if (!response.ok) {
-          alert(data.error);//taost notification
+            alert(data.error);//taost notification
         } else {
-          setUser(null)
-             navigate("/", { replace: true });
+            setUser(null)
+            navigate("/", { replace: true });
         }
-      }
+    }
 
     return (
         <>
-            <Sidebar className="border-r border-border bg-background">
-                <SidebarHeader className="p-4">
+            <Sidebar
+                data-role={isDarkRole ? 'mechanic' : undefined}
+                className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
+            >
+                <SidebarHeader className="p-2 border-b border-sidebar-border">
                     <div className="flex items-center gap-3 px-2 py-2">
-                        <div className="bg-primary text-primary-foreground p-2 rounded-xl flex items-center justify-center shadow-sm">
+                        <div className="bg-sidebar-primary text-sidebar-primary-foreground p-2 rounded-xl flex items-center justify-center shadow-sm">
                             <Wrench className="w-5 h-5" />
                         </div>
                         <div>
-                            <h1 className="font-bold text-foreground text-base tracking-tight">Vehicle Repair MS</h1>
-                            <p className="text-xs text-muted-foreground">Internal Portal</p>
+                            <h1 className="font-bold text-sidebar-foreground text-base tracking-tight">Vehicle Repair MS</h1>
+                            <p className="text-xs text-sidebar-foreground/60">Internal Portal</p>
                         </div>
                     </div>
                 </SidebarHeader>
 
                 <SidebarContent className="px-4 py-2">
-                    <SidebarGroup>
-                        <SidebarGroupContent>
-                            <SidebarMenu className="space-y-1">
-                                {links.map((link) => {
-                                    const Icon = link.icon;
-                                    const isActive = link.href === activeHref;
-                                    const badgeValue = link.badgeKey ? badges[link.badgeKey] : null;
-                                    return (
-                                        <SidebarMenuItem key={link.name}>
-                                            <SidebarMenuButton
-                                                asChild
-                                                isActive={isActive}
-                                                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
-                                                        ? '!bg-primary !text-primary-foreground shadow-sm hover:!bg-primary/90 hover:!text-primary-foreground'
-                                                        : 'text-foreground hover:bg-secondary hover:text-foreground'
-                                                    }`}
-                                            >
-                                                <a
-                                                    href={link.href}
-                                                    onClick={(e) => {
-                                                        if (onNavigate) {
-                                                            e.preventDefault();
-                                                            onNavigate(link.href);
-                                                        }
-                                                    }}
-                                                    className="flex items-center justify-between w-full"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <Icon className={`w-4 h-4 ${isActive ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
-                                                        <span>{link.name}</span>
-                                                    </div>
-                                                    {badgeValue != null && (
-                                                        <span
-                                                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-secondary text-foreground'
-                                                                }`}
-                                                        >
-                                                            {badgeValue}
-                                                        </span>
-                                                    )}
-                                                </a>
-                                            </SidebarMenuButton>
-                                        </SidebarMenuItem>
-                                    );
-                                })}
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </SidebarGroup>
+                    {sections.map((section, sectionIndex) => {
+                        // Unlabeled section (Dashboard, or every flat role):
+                        // plain list, not collapsible.
+                        if (!section.label) {
+                            return (
+                                <SidebarGroup key={sectionIndex} className="py-2 mb-2 last:mb-0">
+                                    <SidebarGroupContent>{renderMenu(section.items)}</SidebarGroupContent>
+                                </SidebarGroup>
+                            );
+                        }
+
+                        const isOpen = !!openGroups[section.label];
+                        return (
+                            <Collapsible
+                                key={section.label}
+                                open={isOpen}
+                                onOpenChange={(open) =>
+                                    setOpenGroups((prev) => ({ ...prev, [section.label]: open }))
+                                }
+                                className="mb-2 last:mb-0"
+                            >
+                                <SidebarGroup className="p-0 ">
+                                    <CollapsibleTrigger
+                                        className="group/trigger flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                    >
+                                        <span className="font-normal text-md text-sidebar-foreground">
+                                            {section.label}
+                                        </span>
+                                        <ChevronDown
+                                            className={`w-4 h-4 text-sidebar-foreground/60 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
+                                        />
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                        <SidebarGroupContent className="pt-1">
+                                            {renderMenu(section.items)}
+                                        </SidebarGroupContent>
+                                    </CollapsibleContent>
+                                </SidebarGroup>
+                            </Collapsible>
+                        );
+                    })}
                 </SidebarContent>
 
-                <SidebarFooter className="p-4 border-t border-border">
+                <SidebarFooter className="p-4 border-t border-sidebar-border">
                     <div className="flex items-center justify-between px-2 relative">
                         <div className="flex items-center gap-3 overflow-hidden">
-                            <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
+                            <div className="w-9 h-9 rounded-full bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
                                 {initials}
                             </div>
                             <div className="overflow-hidden">
-                                <p className="text-sm font-semibold text-foreground truncate">{userName}</p>
-                                <p className="text-xs text-muted-foreground truncate">{role}</p>
+                                <p className="text-sm font-semibold text-sidebar-foreground truncate">{userName}</p>
+                                <p className="text-xs text-sidebar-foreground/60 truncate">{role}</p>
                             </div>
                         </div>
 
                         <div className="relative" ref={menuRef}>
                             <button
                                 onClick={() => setShowMenuDropdown((prev) => !prev)}
-                                className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                                className="p-1.5 rounded-lg hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
                                 aria-label="User options menu"
                                 aria-expanded={showMenuDropdown}
                             >
@@ -194,13 +338,19 @@ export function AppSidebar({
                             </button>
 
                             {showMenuDropdown && (
-                                <div className="absolute bottom-full right-0 mb-2 w-40 bg-card border border-border rounded-lg shadow-lg py-1 z-50">
+                                <div className={`absolute bottom-full right-0 mb-2 w-40 border rounded-lg shadow-lg py-1 z-50 ${isDarkRole
+                                    ? 'bg-sidebar-accent border-sidebar-border'
+                                    : 'bg-card border-border'
+                                    }`}>
                                     <button
                                         onClick={() => {
                                             setShowMenuDropdown(false);
                                             setShowLogoutModal(true);
                                         }}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 text-left transition-colors"
+                                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-left transition-colors ${isDarkRole
+                                            ? 'text-red-400 hover:bg-red-500/10'
+                                            : 'text-red-600 hover:bg-red-50'
+                                            }`}
                                     >
                                         <LogOut className="w-3.5 h-3.5" />
                                         <span>Logout</span>
@@ -218,7 +368,7 @@ export function AppSidebar({
                         <div className="flex justify-between items-center">
                             <h3 className="font-bold text-lg text-foreground">Confirm logout</h3>
                             <button
-                                onClick={() => logout()}
+                                onClick={() => setShowLogoutModal(false)}
                                 className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-secondary transition-colors"
                                 aria-label="Close"
                             >
