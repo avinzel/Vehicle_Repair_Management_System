@@ -413,8 +413,12 @@
         case "invoices":{
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
                 $input = json_decode(file_get_contents('php://input'), true);
-                $order_id = $input["order_id"]; 
-                if (isset($_GET["order_id"]) || isset($order_id)) {
+                $order_id = $_GET["order_id"] ?? $_GET["orderId"] ?? $input["order_id"] ?? $input["orderId"] ?? null;
+                if (($_GET["format"] ?? null) === "pdf") {
+                    $invoiceController->downloadInvoicePdf();
+                    exit;
+                }
+                if ($order_id !== null) {
                     $invoiceController->getInvoiceDetails(); 
                     exit;
                 }

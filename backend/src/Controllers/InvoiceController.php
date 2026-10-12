@@ -4,6 +4,8 @@
     use App\Models\Invoice;
     use App\Auth\Auth; 
     use Exception;
+    use Dompdf\Dompdf;
+    use Dompdf\Options;
 
     class InvoiceController {
         private static $model;
@@ -308,6 +310,145 @@
             }
             exit();
         }
+
+        public function downloadInvoicePdf() {
+            $orderId = $_GET['order_id'] ?? $_GET['orderId'] ?? null;
+            if (filter_var($orderId, FILTER_VALIDATE_INT) === false || (int)$orderId <= 0) {
+                http_response_code(400);
+                header('Content-Type: application/json');
+                echo json_encode([
+                    "status" => "error",
+                    "error" => "A valid order_id is required."
+                ]);
+                exit();
+            }
+
+            try {
+                $response = self::$model->getInvoicePdfData((int)$orderId);
+                if (!($response['success'] ?? false)) {
+                    error_log("Invoice PDF data lookup failed: " . ($response['error'] ?? 'Unknown database error'));
+                    http_response_code(500);
+                    header('Content-Type: application/json');
+                    echo json_encode([
+                        "status" => "error",
+                        "error" => "Failed to generate invoice PDF."
+                    ]);
+                    exit();
+                }
+                if (empty($response['data'])) {
+                    http_response_code(404);
+                    header('Content-Type: application/json');
+                    echo json_encode([
+                        "status" => "error",
+                        "error" => "No invoice has been created for this repair order."
+                    ]);
+                    exit();
+                }
+
+                $invoice = $response['data'];
+                $escape = static function ($value): string {
+                    return htmlspecialchars((string)($value ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                };
+                $money = static function ($value): string {
+                    return 'PHP ' . number_format((float)$value, 2);
+                };
+
+                $serviceRows = '';
+                foreach ($invoice['services'] as $service) {
+                    $serviceRows .= '<tr><td>' . $escape($service['service_name']) .
+                        '</td><td class="amount">' . $money($service['standard_labor_cost']) . '</td></tr>';
+                }
+                if ($serviceRows === '') {
+                    $serviceRows = '<tr><td colspan="2" class="muted">No services recorded</td></tr>';
+                }
+
+                $partRows = '';
+                foreach ($invoice['parts'] as $part) {
+                    $lineTotal = (float)$part['quantity_used'] * (float)$part['unit_price'];
+                    $partRows .= '<tr><td>' . $escape($part['part_name']) .
+                        '<span class="muted"> (' . $escape($part['part_code']) . ') x ' .
+                        (int)$part['quantity_used'] . '</span></td><td class="amount">' .
+                        $money($lineTotal) . '</td></tr>';
+                }
+                if ($partRows === '') {
+                    $partRows = '<tr><td colspan="2" class="muted">No parts recorded</td></tr>';
+                }
+
+                $customerName = trim(implode(' ', array_filter([
+                    $invoice['first_name'],
+                    $invoice['middle_name'],
+                    $invoice['last_name']
+                ], static fn($value) => $value !== null && trim((string)$value) !== '')));
+                $vehicleName = trim(implode(' ', array_filter([
+                    $invoice['manufacturer'],
+                    $invoice['model'],
+                    $invoice['year_model']
+                ], static fn($value) => $value !== null && trim((string)$value) !== '')));
+                $invoiceStatus = strtoupper((string)$invoice['invoice_status']);
+
+                $html = '<!doctype html><html><head><meta charset="UTF-8"><style>
+                    body{font-family:DejaVu Sans,sans-serif;color:#222;font-size:12px}
+                    h1{font-size:24px;margin:0}h2{font-size:14px;margin:22px 0 8px}
+                    .top{border-bottom:2px solid #333;padding-bottom:14px}
+                    .meta{width:100%;margin-top:16px}.meta td{vertical-align:top;padding:3px 8px 3px 0}
+                    table.lines{width:100%;border-collapse:collapse;margin-top:6px}
+                    .lines th,.lines td{padding:8px;border-bottom:1px solid #ddd;text-align:left}
+                    .lines th{background:#f2f2f2}.amount{text-align:right!important;white-space:nowrap}
+                    .totals{width:48%;margin:18px 0 0 auto;border-collapse:collapse}
+                    .totals td{padding:5px 8px}.total{font-weight:bold;border-top:2px solid #333;font-size:14px}
+                    .status{font-weight:bold}.muted{color:#666}.footer{margin-top:30px;color:#666;font-size:10px}
+                    </style></head><body>
+                    <div class="top"><h1>INVOICE</h1>
+                    <div>Invoice #' . $escape($invoice['invoice_id']) . ' &nbsp; | &nbsp; Order #' .
+                    $escape('RO-' . $invoice['order_id']) . '</div></div>
+                    <table class="meta"><tr><td><strong>Invoice date:</strong> ' .
+                    $escape($invoice['invoice_date']) . '</td><td><strong>Invoice status:</strong> <span class="status">' .
+                    $escape($invoiceStatus) . '</span></td></tr>
+                    <tr><td><strong>Customer:</strong> ' . $escape($customerName) .
+                    '</td><td><strong>Vehicle:</strong> ' . $escape($vehicleName) . '</td></tr>
+                    <tr><td><strong>Contact:</strong> ' . $escape($invoice['contact_no']) .
+                    '</td><td><strong>Plate:</strong> ' . $escape($invoice['plate_number']) . '</td></tr>
+                    <tr><td><strong>Email:</strong> ' . $escape($invoice['email']) .
+                    '</td><td><strong>Order status:</strong> ' . $escape($invoice['order_status']) . '</td></tr>
+                    <tr><td colspan="2"><strong>Address:</strong> ' . $escape($invoice['address']) . '</td></tr></table>
+                    <h2>Services / Labor</h2><table class="lines"><thead><tr><th>Description</th><th class="amount">Amount</th></tr></thead><tbody>' .
+                    $serviceRows . '</tbody></table>
+                    <h2>Parts</h2><table class="lines"><thead><tr><th>Description</th><th class="amount">Amount</th></tr></thead><tbody>' .
+                    $partRows . '</tbody></table>
+                    <table class="totals">
+                    <tr><td>Labor</td><td class="amount">' . $money($invoice['labor_total']) . '</td></tr>
+                    <tr><td>Parts</td><td class="amount">' . $money($invoice['parts_total']) . '</td></tr>
+                    <tr><td>Discount</td><td class="amount">- ' . $money($invoice['discount']) . '</td></tr>
+                    <tr><td>Tax</td><td class="amount">' . $money($invoice['tax_amount']) . '</td></tr>
+                    <tr class="total"><td>Total</td><td class="amount">' . $money($invoice['total_amount']) . '</td></tr>
+                    </table>
+                    <h2>Payment</h2><div><strong>Method:</strong> ' .
+                    $escape($invoice['payment_method'] ?: 'Not paid') . '</div><div><strong>Reference:</strong> ' .
+                    $escape($invoice['payment_reference'] ?: 'Not recorded') . '</div><div><strong>Payment date:</strong> ' .
+                    $escape($invoice['payment_date'] ?: 'Not paid') . '</div>
+                    <div class="footer">Generated from the saved invoice record.</div>
+                    </body></html>';
+
+                $options = new Options();
+                $options->set('defaultFont', 'DejaVu Sans');
+                $dompdf = new Dompdf($options);
+                $dompdf->loadHtml($html, 'UTF-8');
+                $dompdf->setPaper('A4', 'portrait');
+                $dompdf->render();
+                $dompdf->stream('invoice-' . (int)$invoice['invoice_id'] . '.pdf', ['Attachment' => true]);
+                exit();
+            } catch (\Throwable $e) {
+                error_log("Invoice PDF generation failed: " . $e->getMessage());
+                http_response_code(500);
+                header('Content-Type: application/json');
+                echo json_encode([
+                    "status" => "error",
+                    "error" => "Failed to generate invoice PDF."
+                ]);
+                exit();
+            }
+        }
+
         /**
          * POST: Fulfill and release a repair order (READY_FOR_RELEASE -> FULFILLED)
          */

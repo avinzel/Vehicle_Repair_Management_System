@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react";
-import { X } from "lucide-react";
+import { Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { normalizeInvoiceDetail } from "@/utils/normalizeOrder";
+import { downloadInvoicePdf } from "@/utils/downloadInvoicePdf";
 
 const API = "http://localhost:8000/api.php";
 
@@ -78,6 +79,7 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
   const [taxRate, setTaxRate] = useState("0");
   const [discount, setDiscount] = useState("0");
   const [submitting, setSubmitting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
 
   const rawId = order?.rawId;
@@ -194,6 +196,18 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
     order_id: Number(rawId),
   });
 }
+
+  async function handleDownloadInvoicePdf() {
+    setDownloading(true);
+    setError(null);
+    try {
+      await downloadInvoicePdf(rawId);
+    } catch (err) {
+      setError(err.message || "Could not download invoice PDF. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -380,6 +394,23 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
             {details?.paymentReference && <p>Reference: {details.paymentReference}</p>}
             {details?.paymentDate && <p>Paid on: {details.paymentDate}</p>}
           </div>
+        )}
+
+        {details?.invoiceStatus && (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={downloading || loading}
+            onClick={handleDownloadInvoicePdf}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {downloading
+              ? "Preparing PDF..."
+              : details.invoiceStatus === "VOID"
+                ? "Download VOID Invoice PDF"
+                : "Download Invoice PDF"}
+          </Button>
         )}
 
         {isReadyForRelease && (
