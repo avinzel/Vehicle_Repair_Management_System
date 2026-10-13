@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { ServiceFormDialog } from "@/components/dialogs/ServiceFormDialog";
 import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
 
 const API = "http://localhost:8000/api.php";
+const STATUS_TABS = ["All", "Active", "Inactive"];
 
 // Row shape follows the service_catalog table / GET action=services
 // (service_catalog_id, service_name, description, standard_labor_cost).
@@ -20,6 +21,7 @@ function normalizeService(raw) {
     name: raw.service_name ?? raw.name ?? "—",
     description: raw.description ?? "",
     laborCost: Number(raw.standard_labor_cost ?? raw.laborCost ?? 0),
+    status: raw.status ?? "ACTIVE",
   };
 }
 
@@ -46,6 +48,7 @@ export function Services() {
   const [loadError, setLoadError] = useState(null);
 
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // service row or null (= add)
@@ -53,11 +56,13 @@ export function Services() {
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  const [reactivatingId, setReactivatingId] = useState(null);
+  const [reactivateError, setReactivateError] = useState(null);
 
   const getServices = useCallback(async () => {
     setLoadError(null);
     try {
-      const json = await request(`${API}?action=services`);
+      const json = await request(`${API}?action=services&status=ALL`);
       const rows = json.data ?? json.services ?? (Array.isArray(json) ? json : []);
       setServices(rows.map(normalizeService));
     } catch (err) {
@@ -72,8 +77,13 @@ export function Services() {
   }, [getServices]);
 
   const filteredServices = useMemo(
-    () => services.filter((s) => matchesSearch(search, s.id, s.name, s.description)),
-    [services, search]
+    () =>
+      services.filter(
+        (s) =>
+          (statusFilter === "All" || s.status === statusFilter.toUpperCase()) &&
+          matchesSearch(search, s.id, s.name, s.description)
+      ),
+    [services, search, statusFilter]
   );
 
   function openAdd() {
@@ -121,14 +131,35 @@ export function Services() {
     }
   }
 
+  async function handleReactivate(service) {
+    setReactivatingId(service.id);
+    setReactivateError(null);
+    try {
+      await request(`${API}?action=services`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ service_catalog_id: service.id, status: "ACTIVE" }),
+      });
+      setServices((current) =>
+        current.map((item) => item.id === service.id ? { ...item, status: "ACTIVE" } : item)
+      );
+    } catch (err) {
+      setReactivateError(err.message || "Failed to reactivate service");
+    } finally {
+      setReactivatingId(null);
+    }
+  }
+
   return (
     <div className="w-full">
       <div className="sticky top-[73px] z-10 bg-card -mx-6 -mt-6 border-b border-border">
         <FilterBar
           search={search}
           onSearchChange={setSearch}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
           placeholder="Search by service name or description..."
-          showTabs={false}
+          tabs={STATUS_TABS}
         />
       </div>
 
@@ -138,7 +169,8 @@ export function Services() {
             <div>
               <CardTitle className="font-bold pb-1">Service Catalogue</CardTitle>
               <CardDescription>
-                {services.length} service{services.length === 1 ? "" : "s"}
+                {filteredServices.length} service{filteredServices.length === 1 ? "" : "s"}
+                {statusFilter === "All" && ` · ${services.filter((service) => service.status === "ACTIVE").length} active`}
               </CardDescription>
             </div>
             <Button onClick={openAdd} className="gap-1.5">
@@ -153,6 +185,11 @@ export function Services() {
                 {loadError}
               </p>
             )}
+            {reactivateError && (
+              <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                {reactivateError}
+              </p>
+            )}
 
             <Table>
               <TableHeader>
@@ -161,6 +198,7 @@ export function Services() {
                   <TableHead className="text-sm font-medium text-tertiary">Service Name</TableHead>
                   <TableHead className="text-sm font-medium text-tertiary">Description</TableHead>
                   <TableHead className="text-sm font-medium text-tertiary">Standard Labor Cost</TableHead>
+                  <TableHead className="text-sm font-medium text-tertiary">Status</TableHead>
                   <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -173,29 +211,49 @@ export function Services() {
                       <span className="line-clamp-2">{s.description || "—"}</span>
                     </TableCell>
                     <TableCell className="font-medium">{formatPeso(s.laborCost)}</TableCell>
+                    <TableCell>
+                      <span className={s.status === "ACTIVE" ? "text-green-700" : "text-muted-foreground"}>
+                        {s.status === "ACTIVE" ? "Active" : "Inactive"}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Edit ${s.name}`}
-                          className="hover:text-muted-foreground"
-                          onClick={() => openEdit(s)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Delete ${s.name}`}
-                          className="hover:text-destructive"
-                          onClick={() => {
-                            setDeleteError(null);
-                            setDeleting(s);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {s.status === "ACTIVE" ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Edit ${s.name}`}
+                              className="hover:text-muted-foreground"
+                              onClick={() => openEdit(s)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Delete ${s.name}`}
+                              className="hover:text-destructive"
+                              onClick={() => {
+                                setDeleteError(null);
+                                setDeleting(s);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Reactivate ${s.name}`}
+                            title="Reactivate service"
+                            disabled={reactivatingId === s.id}
+                            onClick={() => handleReactivate(s)}
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -203,21 +261,21 @@ export function Services() {
 
                 {!loading && services.length > 0 && filteredServices.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-10">
-                      No services match your search.
+                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-10">
+                      No services match your filters.
                     </TableCell>
                   </TableRow>
                 )}
                 {!loading && services.length === 0 && !loadError && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-10">
+                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-10">
                       No services yet. Add one so diagnosticians can pick it on repair orders.
                     </TableCell>
                   </TableRow>
                 )}
                 {loading && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-10">
+                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-10">
                       Loading services...
                     </TableCell>
                   </TableRow>

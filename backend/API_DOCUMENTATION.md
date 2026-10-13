@@ -155,6 +155,8 @@ Optional:
 
 - `middle_name`
 
+When `role_id` is `3` (Mechanic), also provide `specialization` (up to 100 characters) and `date_hired` (`YYYY-MM-DD`). The account and mechanic record are created together; `status` may be `ACTIVE` or `INACTIVE` and defaults to `ACTIVE`.
+
 Success:
 
 - HTTP `201`
@@ -1042,6 +1044,7 @@ Action: `services`
 - Auth required
 - Optional query param:
   - `search`
+  - `status` (`ACTIVE`, `INACTIVE`, or `ALL`; defaults to `ACTIVE`)
 - Returns the service catalog entries.
 
 ### 13.1 Add service
@@ -1079,7 +1082,15 @@ Returns `201` with `service_catalog_id`; duplicate names return `409`.
 
 Returns `200` on success, `400` for invalid fields, `404` if the active service is not found, and `409` for a duplicate name.
 
-### 13.3 Delete service
+### 13.3 Reactivate service
+
+- `PUT /api.php?action=services`
+- Admin role (`role_id = 1`) required.
+- JSON body: `{"service_catalog_id":4,"status":"ACTIVE"}`
+- Sets an inactive service back to `ACTIVE`, making it available in active service lists.
+- Returns `200` on success or `404` if no inactive service matches.
+
+### 13.4 Delete service
 
 - `DELETE /api.php?action=services`
 - Admin role (`role_id = 1`) required.

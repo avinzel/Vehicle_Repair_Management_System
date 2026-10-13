@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { Download, X } from "lucide-react";
 import { SheetClose } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
+import { downloadInvoicePdf } from "@/utils/downloadInvoicePdf";
 
 const API = "http://localhost:8000/api.php";
 
@@ -57,6 +59,8 @@ export function OrderHistoryDetail({ order }) {
   const [parts, setParts] = useState([]);
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
+  const [invoiceDownloadError, setInvoiceDownloadError] = useState(null);
 
   const rawId = order?.rawId;
 
@@ -66,6 +70,7 @@ export function OrderHistoryDetail({ order }) {
     setDetails(null);
     setParts([]);
     setInvoice(null);
+    setInvoiceDownloadError(null);
     setLoading(true);
 
     const id = encodeURIComponent(rawId);
@@ -91,6 +96,18 @@ export function OrderHistoryDetail({ order }) {
   const services = Array.isArray(details?.services) ? details.services : [];
   const mechanics = Array.isArray(details?.assigned_mechanics) ? details.assigned_mechanics : [];
 
+  async function handleDownloadInvoicePdf() {
+    setDownloadingInvoice(true);
+    setInvoiceDownloadError(null);
+    try {
+      await downloadInvoicePdf(rawId);
+    } catch (error) {
+      setInvoiceDownloadError(error.message || "Could not download invoice PDF. Please try again.");
+    } finally {
+      setDownloadingInvoice(false);
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-start justify-between gap-3 p-6 border-b border-border">
@@ -100,6 +117,22 @@ export function OrderHistoryDetail({ order }) {
             <StatusBadge status="FULFILLED" />
           </div>
           <p className="text-sm text-muted-foreground mt-1">Completed {order.completedDate ?? "—"}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            disabled={downloadingInvoice}
+            onClick={handleDownloadInvoicePdf}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {downloadingInvoice ? "Preparing PDF..." : "Download Invoice PDF"}
+          </Button>
+          {invoiceDownloadError && (
+            <p role="alert" className="mt-2 text-sm text-destructive">
+              {invoiceDownloadError}
+            </p>
+          )}
         </div>
         <SheetClose className="text-muted-foreground hover:text-foreground" aria-label="Close">
           <X className="w-5 h-5" />

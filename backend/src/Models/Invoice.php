@@ -205,6 +205,127 @@
                 ];
             }
         }
+
+        public function getInvoicePdfData(int $orderId) {
+            $stmt = null;
+            try {
+                $query = "
+                    SELECT
+                        i.invoice_id,
+                        i.order_id,
+                        i.invoice_date,
+                        i.labor_total,
+                        i.parts_total,
+                        i.discount,
+                        i.tax_amount,
+                        i.total_amount,
+                        i.payment_method,
+                        i.payment_reference,
+                        i.payment_date,
+                        i.status AS invoice_status,
+                        ro.status AS order_status,
+                        c.first_name,
+                        c.middle_name,
+                        c.last_name,
+                        c.contact_no,
+                        c.email,
+                        c.address,
+                        v.plate_number,
+                        v.vehicle_type,
+                        v.manufacturer,
+                        v.model,
+                        v.year_model,
+                        v.current_mileage
+                    FROM invoices i
+                    INNER JOIN repair_orders ro ON ro.order_id = i.order_id
+                    INNER JOIN vehicles v ON v.vehicle_id = ro.vehicle_id
+                    INNER JOIN customers c ON c.customer_id = v.customer_id
+                    WHERE i.order_id = ?
+                    LIMIT 1
+                ";
+                $stmt = self::$conn->prepare($query);
+                if (!$stmt) {
+                    throw new Exception("Invoice PDF query prepare failed: " . self::$conn->error, self::$conn->errno);
+                }
+                $stmt->bind_param("i", $orderId);
+                if (!$stmt->execute()) {
+                    throw new Exception("Invoice PDF query failed: " . $stmt->error, $stmt->errno);
+                }
+                $result = $stmt->get_result();
+                $invoice = $result ? $result->fetch_assoc() : null;
+                if ($result) {
+                    $result->free();
+                }
+                $stmt->close();
+                $stmt = null;
+
+                if (!$invoice) {
+                    return ["success" => true, "data" => null];
+                }
+
+                $stmt = self::$conn->prepare("
+                    SELECT sc.service_name, sc.standard_labor_cost
+                    FROM repair_order_services ros
+                    INNER JOIN service_catalog sc ON sc.service_catalog_id = ros.service_catalog_id
+                    WHERE ros.order_id = ?
+                    ORDER BY ros.order_service_id
+                ");
+                if (!$stmt) {
+                    throw new Exception("Invoice services query prepare failed: " . self::$conn->error, self::$conn->errno);
+                }
+                $stmt->bind_param("i", $orderId);
+                if (!$stmt->execute()) {
+                    throw new Exception("Invoice services query failed: " . $stmt->error, $stmt->errno);
+                }
+                $result = $stmt->get_result();
+                $invoice['services'] = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+                if ($result) {
+                    $result->free();
+                }
+                $stmt->close();
+                $stmt = null;
+
+                $stmt = self::$conn->prepare("
+                    SELECT
+                        pi.part_code,
+                        pi.part_name,
+                        rop.quantity_used,
+                        rop.unit_price,
+                        rop.status AS part_status
+                    FROM repair_order_parts rop
+                    INNER JOIN parts_inventory pi ON pi.part_id = rop.part_id
+                    WHERE rop.order_id = ?
+                      AND rop.status <> 'CANCELLED'
+                    ORDER BY rop.order_part_id
+                ");
+                if (!$stmt) {
+                    throw new Exception("Invoice parts query prepare failed: " . self::$conn->error, self::$conn->errno);
+                }
+                $stmt->bind_param("i", $orderId);
+                if (!$stmt->execute()) {
+                    throw new Exception("Invoice parts query failed: " . $stmt->error, $stmt->errno);
+                }
+                $result = $stmt->get_result();
+                $invoice['parts'] = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+                if ($result) {
+                    $result->free();
+                }
+                $stmt->close();
+                $stmt = null;
+
+                return ["success" => true, "data" => $invoice];
+            } catch (\Throwable $e) {
+                if ($stmt) {
+                    $stmt->close();
+                }
+                return [
+                    "success" => false,
+                    "error" => $e->getMessage(),
+                    "code" => (int)$e->getCode()
+                ];
+            }
+        }
+
         /**
          * Fulfill and release a repair order by updating its status from READY_FOR_RELEASE to FULFILLED
          * 
