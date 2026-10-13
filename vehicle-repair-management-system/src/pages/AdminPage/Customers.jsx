@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CustomerFormDialog } from "@/components/dialogs/CustomerFormDialog";
 import { FilterBar } from "@/components/OrderSearchFilter";
+import { DetailDrawer } from "@/components/DetailDrawer";
+import { CustomerDetail } from "@/components/CustomerDetail";
 
 const API = "http://localhost:8000/api.php";
 
@@ -26,6 +28,21 @@ function normalizeCustomer(raw) {
     status: raw.status ?? "ACTIVE",
     vehicleCount: Number(raw.vehicle_count ?? 0),
     lastVisit: raw.last_visit ?? null,
+  };
+}
+
+// CustomerDetail (shared with the Service Advisor's Customer Records) reads
+// the advisor row shape: rawId = numeric id, id = display id ("C-001"),
+// and null (not "") for missing phone/email so it can show "—".
+function toDrawerCustomer(c) {
+  return {
+    rawId: c.id,
+    id: c.formattedId,
+    name: c.name,
+    phone: c.phone || null,
+    email: c.email || null,
+    vehicleCount: c.vehicleCount,
+    lastVisit: c.lastVisit,
   };
 }
 
@@ -62,6 +79,10 @@ export function CustomersPage() {
   const [deactivating, setDeactivating] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+
+  // Keep the selected row itself (not just its id) so the drawer stays open
+  // even if a later search filters that customer out of the table.
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   const getCustomers = useCallback(async (query = "", signal) => {
     setLoadError(null);
@@ -120,6 +141,8 @@ export function CustomersPage() {
       await request(`${API}?action=customers&customer_id=${encodeURIComponent(deactivating.id)}`, {
         method: "DELETE",
       });
+      // Close the drawer if it's showing the customer that was just deactivated.
+      if (selectedCustomer?.id === deactivating.id) setSelectedCustomer(null);
       setDeactivating(null);
       await getCustomers(search);
     } catch (err) {
@@ -169,52 +192,74 @@ export function CustomersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {customers.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="text-xs text-muted-foreground">{c.formattedId}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
-                          {c.name?.[0]?.toUpperCase() ?? "?"}
+                {customers.map((c) => {
+                  const isSelected = selectedCustomer?.id === c.id;
+                  return (
+                    <TableRow
+                      key={c.id}
+                      tabIndex={0}
+                      data-state={isSelected ? "selected" : undefined}
+                      onClick={() => setSelectedCustomer(c)}
+                      onKeyDown={(e) => {
+                        // Ignore key presses that bubble up from the action buttons.
+                        if (e.target !== e.currentTarget) return;
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedCustomer(c);
+                        }
+                      }}
+                      className="cursor-pointer data-[state=selected]:bg-primary/10"
+                    >
+                      <TableCell className="text-xs text-muted-foreground">{c.formattedId}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
+                            {c.name?.[0]?.toUpperCase() ?? "?"}
+                          </div>
+                          <span className="font-medium">{c.name}</span>
                         </div>
-                        <span className="font-medium">{c.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-medium">{c.phone || "—"}</p>
-                      <p className="text-xs text-muted-foreground">{c.email || "—"}</p>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{vehicleLabel(c.vehicleCount)}</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{c.lastVisit ?? "—"}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Edit ${c.name}`}
-                          className="hover:text-muted-foreground"
-                          onClick={() => openEdit(c)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Deactivate ${c.name}`}
-                          className="hover:text-destructive"
-                          onClick={() => {
-                            setDeleteError(null);
-                            setDeactivating(c);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-medium">{c.phone || "—"}</p>
+                        <p className="text-xs text-muted-foreground">{c.email || "—"}</p>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{vehicleLabel(c.vehicleCount)}</Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{c.lastVisit ?? "—"}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Edit ${c.name}`}
+                            className="hover:text-muted-foreground"
+                            onClick={(e) => {
+                              // Don't also open the detail drawer.
+                              e.stopPropagation();
+                              openEdit(c);
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Deactivate ${c.name}`}
+                            className="hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteError(null);
+                              setDeactivating(c);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
 
                 {!loading && customers.length === 0 && !loadError && (
                   <TableRow>
@@ -254,6 +299,19 @@ export function CustomersPage() {
           error={deleteError}
           onConfirm={handleDeactivate}
         />
+
+        {/* Same drawer the Service Advisor sees, minus the "New Repair Order" button. */}
+        <DetailDrawer
+          open={!!selectedCustomer}
+          onOpenChange={(open) => {
+            if (!open) setSelectedCustomer(null);
+          }}
+        >
+          <CustomerDetail
+            customer={selectedCustomer ? toDrawerCustomer(selectedCustomer) : null}
+            showNewRepairOrder={false}
+          />
+        </DetailDrawer>
       </div>
     </div>
   );
