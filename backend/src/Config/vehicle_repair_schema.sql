@@ -328,6 +328,7 @@ INSERT INTO mechanic_positions (position_id, position_name, description) VALUES
 (2, 'Lead Mechanic', 'Leads the repair work'),
 (3, 'Electrical Specialist', 'Handles electrical repairs');
 
+insert into mechanic_positions(position_name, description) values ("Engine Specialist", "Handles engine repairs");
 -- =====================================================================
 -- SERVICE CATALOG (1-20)
 -- =====================================================================
