@@ -474,8 +474,12 @@ export function PartsLogger() {
           )}
         </div>
 
-        {/* RIGHT: order-specific log + inventory snapshot. Sticky, capped to viewport height. */}
-        <div className="space-y-4 sticky top-[73px] max-h-[calc(100vh-97px)] overflow-y-auto pr-1">
+        {/* RIGHT: order-specific log + inventory snapshot. Sticky, capped to viewport height.
+            Offsets account for BOTH sticky layers above it: the page Header (73px) and the
+            OrderFilterBar (~129px: search row + pills). top = 73 + 129 + 16px gap = 218px.
+            max-h = 100vh - top - 24px bottom breathing room. If the filter bar's height
+            changes, adjust both numbers together. */}
+        <div className="space-y-4 sticky top-[218px] max-h-[calc(100vh-242px)] overflow-y-auto pr-1">
           {selectedOrder && (
             <div className="border border-border rounded-xl p-4 space-y-3">
               <h3 className="text-sm font-semibold text-muted-foreground tracking-wide ">
