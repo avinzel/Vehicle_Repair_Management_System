@@ -285,6 +285,14 @@
                             $reportsController->getRevenueByOrder();
                         }
                         break;
+                        case "monthly-revenue":{
+                            $reportsController->getMonthlyRevenue();
+                        }
+                        break;
+                        case "trending-parts-by-vehicle-model":{
+                            $reportsController->getTrendingPartsByVehicleModel();
+                        }
+                        break;
                         case "revenue-split":{
                             $reportsController->getRevenueSplit();
                         }
@@ -369,6 +377,10 @@
         break;
         case "parts": {
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                if (isset($_GET["order_id"])) {
+                    $partController->getParts();
+                    exit();
+                }
                 if(Auth::getRoleId() === 1){
                     $partController->getPartsInventoryAdmin(); 
                     exit();

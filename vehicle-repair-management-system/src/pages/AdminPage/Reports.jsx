@@ -9,8 +9,10 @@ const API = "http://localhost:8000/api.php";
 // matching every child path.
 const TABS = [
   { label: "Overview", to: "/admin/reports", end: true },
+  { label: "Monthly Revenue", to: "/admin/reports/monthly-revenue" },
   { label: "Pipeline", to: "/admin/reports/pipeline" },
   { label: "Parts Usage", to: "/admin/reports/parts-usage" },
+  { label: "Parts by Vehicle", to: "/admin/reports/parts-by-vehicle" },
   { label: "Mechanics", to: "/admin/reports/mechanics" },
 ];
 

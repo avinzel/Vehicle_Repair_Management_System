@@ -65,6 +65,7 @@
                 $vehicles = [];
                 $repairHistory = [];
                 $maintenanceHistory = [];
+                $maintenanceHistory = [];
 
                 // Retrieve Result Set 1: Customer Info
                 $result1 = $stmt->get_result();
@@ -88,6 +89,15 @@
                     if ($result3) {
                         $repairHistory = $result3->fetch_all(MYSQLI_ASSOC);
                         $result3->free();
+                    }
+                }
+
+                // Move to Result Set 4: Maintenance History
+                if ($stmt->next_result()) {
+                    $result4 = $stmt->get_result();
+                    if ($result4) {
+                        $maintenanceHistory = $result4->fetch_all(MYSQLI_ASSOC);
+                        $result4->free();
                     }
                 }
 

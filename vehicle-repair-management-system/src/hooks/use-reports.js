@@ -179,6 +179,42 @@ async function loadPartsUsage() {
   };
 }
 
+async function loadMonthlyRevenue(year) {
+  const json = await fetchReport("monthly-revenue", { year });
+  return {
+    year: num(json.year),
+    total_revenue: num(json.total_revenue),
+    months: rows(json.months).map((month) => ({
+      month: num(month.month),
+      label: month.label,
+      revenue: num(month.revenue),
+    })),
+  };
+}
+
+async function loadPartsByVehicle() {
+  const json = await fetchReport("trending-parts-by-vehicle-model");
+  return {
+    models: rows(json.data).map((model) => ({
+      vehicle_model: model.vehicle_model,
+      total_used: num(model.total_used),
+      total_cost: num(model.total_cost),
+      other_used: num(model.other_used),
+      parts: rows(model.parts).map((part) => ({
+        part_id: part.part_id,
+        part_name: part.part_name,
+        total_used: num(part.total_used),
+        total_cost: num(part.total_cost),
+        unit_price: num(part.unit_price),
+        quantity_on_hand: num(part.quantity_on_hand),
+        reorder_level: num(part.reorder_level),
+        share_percent: num(part.share_percent),
+        associated_services: part.associated_services ?? "",
+      })),
+    })),
+  };
+}
+
 // AdminDashboardTab
 //   admin-cards      sp_get_dashboard_summary_cards
 //   pipeline-status  sp_get_pipeline_status_counts: one row, a column per status
@@ -225,6 +261,8 @@ const LOADERS = {
   pipeline: loadPipeline,
   mechanics: loadMechanics,
   "parts-usage": loadPartsUsage,
+  "monthly-revenue": loadMonthlyRevenue,
+  "parts-by-vehicle": loadPartsByVehicle,
 };
 
 // ---------------------------------------------------------------------------
@@ -232,7 +270,7 @@ const LOADERS = {
 //   const report = useReport("overview");
 //   -> { data, loading, error, refetch }
 // ---------------------------------------------------------------------------
-export function useReport(key) {
+export function useReport(key, { year } = {}) {
   const [state, setState] = useState({ data: null, loading: true, error: null });
   const requestId = useRef(0); // ignore responses from a previous key / unmounted tab
 
@@ -247,7 +285,7 @@ export function useReport(key) {
 
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const data = await loader();
+      const data = await loader(year);
       if (id === requestId.current) setState({ data, loading: false, error: null });
     } catch (err) {
       console.error(`Failed to load report "${key}"`, err);
@@ -255,7 +293,7 @@ export function useReport(key) {
         setState({ data: null, loading: false, error: err.message || "Failed to load report" });
       }
     }
-  }, [key]);
+  }, [key, year]);
 
   useEffect(() => {
     load();

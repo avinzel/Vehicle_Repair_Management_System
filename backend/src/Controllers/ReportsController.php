@@ -372,5 +372,65 @@ use Exception;
             }
             exit();
         }
+
+        public function getMonthlyRevenue() {
+            header('Content-Type: application/json');
+            $year = $_GET['year'] ?? date('Y');
+            $validatedYear = filter_var($year, FILTER_VALIDATE_INT);
+            if ($validatedYear === false || $validatedYear < 1000 || $validatedYear > 9999) {
+                http_response_code(400);
+                echo json_encode(["status" => "error", "error" => "A valid year is required."]);
+                exit();
+            }
+
+            try {
+                $response = self::$model->getMonthlyRevenue($validatedYear);
+                if (!empty($response['success'])) {
+                    http_response_code(200);
+                    echo json_encode(["status" => "success"] + $response['data']);
+                } else {
+                    http_response_code(500);
+                    echo json_encode([
+                        "status" => "error",
+                        "error" => $response['error'] ?? "Failed to fetch monthly revenue"
+                    ]);
+                }
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error" => "Controller operation failed: " . $e->getMessage()
+                ]);
+            }
+            exit();
+        }
+
+        public function getTrendingPartsByVehicleModel() {
+            header('Content-Type: application/json');
+            try {
+                $response = self::$model->getTrendingPartsByVehicleModel();
+                if (!empty($response['success'])) {
+                    http_response_code(200);
+                    echo json_encode([
+                        "status" => "success",
+                        "count" => count($response['data']),
+                        "data" => $response['data']
+                    ]);
+                } else {
+                    http_response_code(500);
+                    echo json_encode([
+                        "status" => "error",
+                        "error" => $response['error'] ?? "Failed to fetch trending parts by vehicle model"
+                    ]);
+                }
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode([
+                    "status" => "error",
+                    "error" => "Controller operation failed: " . $e->getMessage()
+                ]);
+            }
+            exit();
+        }
     }
 ?>

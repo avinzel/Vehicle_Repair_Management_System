@@ -5,7 +5,6 @@ import { Pencil, Ban } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { RepairOrderFormDialog } from "@/components/dialogs/RepairOrderFormDialog";
@@ -38,12 +37,6 @@ const NOT_CANCELLABLE = [
   "CANCELLED",
 ];
 
-const PRIORITY_STYLE = {
-  STANDARD: "bg-secondary text-secondary-foreground",
-  URGENT: "bg-amber-100 text-amber-800 hover:bg-amber-100",
-  RUSH: "bg-red-100 text-red-800 hover:bg-red-100",
-};
-
 // Row shape follows GET action=repair-orders&category=management.
 function normalizeRepairOrder(raw) {
   const vehicle = [raw.manufacturer, raw.model, raw.year_model].filter(Boolean).join(" ");
@@ -56,7 +49,6 @@ function normalizeRepairOrder(raw) {
     vehicleType: raw.vehicle_type ?? null,
     plateNumber: raw.plate_number ?? null,
     status: raw.status,
-    priority: raw.priority ?? "STANDARD",
     complaint: raw.complaint ?? "",
     diagnosisNotes: raw.diagnosis_notes ?? "",
     mileage: raw.mileage_at_service ?? null,
@@ -87,7 +79,7 @@ async function request(url, options) {
 
 // Endpoints (Repair Orders API):
 //   GET    action=repair-orders&category=management[&status=][&search=]  -> { data: [...] }
-//   PUT    action=repair-orders&put-method=update-order  { order_id, complaint, priority, mileage_at_service, diagnosis_notes }
+//   PUT    action=repair-orders&put-method=update-order  { order_id, complaint, mileage_at_service, diagnosis_notes }
 //   DELETE action=repair-orders&order_id=X                (cancel; 409 once READY_TO_INVOICE or later)
 // No create here: new orders come from Vehicle Intake (service advisor).
 export function OrdersPage() {
@@ -209,7 +201,6 @@ export function OrdersPage() {
                   <TableHead className="text-sm font-medium text-tertiary">Customer</TableHead>
                   <TableHead className="text-sm font-medium text-tertiary">Vehicle</TableHead>
                   <TableHead className="text-sm font-medium text-tertiary">Status</TableHead>
-                  <TableHead className="text-sm font-medium text-tertiary">Priority</TableHead>
                   <TableHead className="text-sm font-medium text-tertiary">Mechanics</TableHead>
                   <TableHead className="text-sm font-medium text-tertiary">Invoice</TableHead>
                   <TableHead className="text-right text-sm font-medium text-tertiary">Actions</TableHead>
@@ -237,11 +228,6 @@ export function OrdersPage() {
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={o.status} />
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className={PRIORITY_STYLE[o.priority]}>
-                          {o.priority.charAt(0) + o.priority.slice(1).toLowerCase()}
-                        </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground max-w-[180px] whitespace-normal">
                         <span className="line-clamp-2">{o.mechanics || "Unassigned"}</span>
@@ -286,7 +272,7 @@ export function OrdersPage() {
 
                 {!loading && filteredOrders.length === 0 && !loadError && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
                       {search.trim() || statusFilter !== "All"
                         ? "No repair orders match your filters."
                         : "No repair orders yet."}
@@ -295,7 +281,7 @@ export function OrdersPage() {
                 )}
                 {loading && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
                       Loading repair orders...
                     </TableCell>
                   </TableRow>

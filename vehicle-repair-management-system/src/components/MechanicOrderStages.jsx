@@ -501,5 +501,7 @@ export function resolveMechanicStage(order, currentUserName, { allowDiagnosisFor
 // Shared lookup — same logic MechanicOrderDetail needs for its header
 // badge, so both read from one place rather than reimplementing the find.
 export function getMyPositionOnOrder(order, currentUserName) {
-  return order.team?.find((m) => m.name === currentUserName)?.role ?? null;
+  return order.assignedPosition
+    ?? order.team?.find((m) => m.name === currentUserName)?.role
+    ?? null;
 }

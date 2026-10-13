@@ -227,16 +227,18 @@ function DiagnosisStage({ order }) {
   );
 }
 
-// --- Pending Mechanics: the ONLY stage where the repair team is built. ---
+// --- Pending Mechanics / in-progress: build or complete the repair team. ---
 // Available mechanics: GET action=mechanics&available=true&order_id=X
 // (already excludes anyone on this order, including the diagnostician).
 // Positions: GET action=mechanic-position.
 // Submit: one POST assign-mechanic per row, SEQUENTIALLY — sp_assign_mechanic
 // flips the order PENDING_MECHANICS -> IN_PROGRESS on the first success, and
 // later rows are valid only because IN_PROGRESS is also accepted.
-function AssignMechanicsStage({ order, onUpdateOrder }) {
+function AssignMechanicsStage({ order, onUpdateOrder, inProgress = false }) {
   const diagnostician = getDiagnostician(order);
   const orderRawId = order.rawId ?? order.id;
+  const existingTeam = getTeam(order);
+  const leadAssigned = existingTeam.some((member) => member.role === "Lead Mechanic");
 
   const [mechanics, setMechanics] = useState([]);
   const [positions, setPositions] = useState([]);
@@ -288,10 +290,21 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
     };
   }, [orderRawId]);
 
-  const positionItems = positions.map((p) => ({
-    value: String(p.position_id),
-    label: p.position_name,
-  }));
+  const leadPosition = positions.find((p) => p.position_name === "Lead Mechanic");
+
+  function getPositionsForRow(index) {
+    const leadSelectedEarlier = rows
+      .slice(0, index)
+      .some((row) => String(row.positionId) === String(leadPosition?.position_id));
+    const leadMustComeFirst = !leadAssigned && !leadSelectedEarlier;
+    return positions.filter((position) => {
+      if (leadMustComeFirst) return position.position_name === "Lead Mechanic";
+      if (leadAssigned || leadSelectedEarlier || position.position_name === "Lead Mechanic") {
+        return position.position_name !== "Lead Mechanic";
+      }
+      return true;
+    });
+  }
 
   const pickedIds = new Set(rows.map((r) => r.mechanicId).filter(Boolean));
 
@@ -307,7 +320,12 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
     setRows((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, ...changes } : r)));
   }
 
-  const isComplete = rows.length > 0 && rows.every((r) => r.mechanicId && r.positionId);
+  const firstRowIsLead =
+    leadAssigned || (leadPosition && String(rows[0]?.positionId) === String(leadPosition.position_id));
+  const isComplete =
+    rows.length > 0 &&
+    firstRowIsLead &&
+    rows.every((r) => r.mechanicId && r.positionId);
 
   async function handleSubmit() {
     setSubmitting(true);
@@ -350,7 +368,7 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
 
   return (
     <div className="space-y-5">
-      <div className="space-y-3">
+      {!inProgress && <div className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">Diagnosis</h3>
 
         <div className="flex flex-col gap-2 bg-primary/5 border border-primary/15 rounded-lg p-4">
@@ -377,18 +395,24 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
             <p className="text-sm text-tertiary">{order.diagnosticNotes}</p>
           </div>
         </div>
-      </div>
+      </div>}
 
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">
-          Assigned Mechanics
+          {inProgress ? "Add Mechanics" : "Assigned Mechanics"}
         </h3>
-        {diagnostician && <MechanicChip name={diagnostician.name} role={diagnostician.role} />}
+        {!inProgress && diagnostician && <MechanicChip name={diagnostician.name} role={diagnostician.role} />}
+        {!leadAssigned && (
+          <p className="text-sm text-muted-foreground">
+            Assign a Lead Mechanic first. Other positions become available after the lead is assigned.
+          </p>
+        )}
 
         {loadError && <p className="text-sm text-destructive">{loadError}</p>}
 
-        {rows.map((row) => {
+        {rows.map((row, index) => {
           const mechanic = mechanics.find((m) => String(m.mechanic_id) === row.mechanicId);
+          const rowPositions = getPositionsForRow(index);
           const options = mechanics.filter(
             (m) => !pickedIds.has(String(m.mechanic_id)) || String(m.mechanic_id) === row.mechanicId
           );
@@ -444,7 +468,10 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
               </Popover>
 
               <Select
-                items={positionItems}
+                items={rowPositions.map((position) => ({
+                  value: String(position.position_id),
+                  label: position.position_name,
+                }))}
                 value={row.positionId || null}
                 onValueChange={(value) => updateRow(row.rowId, { positionId: value ?? "" })}
                 disabled={loading || submitting}
@@ -453,7 +480,7 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
                   <SelectValue placeholder="Position..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {positions.map((p) => (
+                  {rowPositions.map((p) => (
                     <SelectItem key={p.position_id} value={String(p.position_id)}>
                       {p.position_name}
                     </SelectItem>
@@ -492,7 +519,7 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
         )}
 
         <Button type="button" className="w-full" disabled={!isComplete || submitting || loading} onClick={handleSubmit}>
-          {submitting ? "Assigning..." : "Assign Mechanics & Start Repair"}
+          {submitting ? "Assigning..." : inProgress ? "Assign Mechanics" : "Assign Mechanics & Start Repair"}
         </Button>
       </div>
     </div>
@@ -501,7 +528,7 @@ function AssignMechanicsStage({ order, onUpdateOrder }) {
 
 // --- In Progress: read-only. Marking the job complete belongs to the Lead
 // Mechanic's own interface, and the roster is locked once work starts. ---
-function RepairInProgressStage({ order }) {
+function RepairInProgressStage({ order, onUpdateOrder }) {
   const team = getTeam(order);
   const serviceNames = getServiceNames(order);
 
@@ -518,6 +545,8 @@ function RepairInProgressStage({ order }) {
           <p className="text-sm text-muted-foreground">No mechanics assigned.</p>
         )}
       </div>
+
+      <AssignMechanicsStage order={order} onUpdateOrder={onUpdateOrder} inProgress />
 
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">Diagnosis</h3>

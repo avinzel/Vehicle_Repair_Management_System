@@ -173,7 +173,7 @@
                     if ($activeOrderCount > 0) {
                         self::$conn->rollback();
                         throw new Exception(
-                            "Cannot deactivate mechanic: this mechanic still has active orders. Complete or reassign them first.",
+                            "Cannot deactivate this mechanic because they are assigned to active repair orders. Complete or reassign those orders first.",
                             1644
                         );
                     }
@@ -234,7 +234,7 @@
                 if ($this->getActiveOrderCount((int)$mechanicId) > 0) {
                     self::$conn->rollback();
                     throw new Exception(
-                        "Cannot deactivate mechanic: this mechanic still has active orders. Complete or reassign them first.",
+                        "Cannot deactivate this mechanic because they are assigned to active repair orders. Complete or reassign those orders first.",
                         1644
                     );
                 }
@@ -263,6 +263,9 @@
                     $stmt->close();
                 }
                 self::$conn->rollback();
+                if ((int)$e->getCode() === 1644) {
+                    throw new Exception($e->getMessage(), 1644, $e);
+                }
                 throw new Exception("Failed to deactivate mechanic and linked account: " . $e->getMessage(), (int)$e->getCode(), $e);
             }
         }

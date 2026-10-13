@@ -30,6 +30,7 @@ function getPageMeta(pathname) {
 export function AdminPage({ user, setUser }) {
   const [tableData, setTableData] = useState([]);
   const [card, setCard] = useState([]);
+  const [outOfStockCount, setOutOfStockCount] = useState(0);
   const location = useLocation();
 
   // 1. Stable Fetch Functions
@@ -57,11 +58,29 @@ export function AdminPage({ user, setUser }) {
     }
   }, []);
 
+  const refreshOutOfStockCount = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api.php?action=parts&status=ACTIVE', {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data.data)) {
+        throw new Error(data.error ?? `Failed to fetch inventory (HTTP ${response.status})`);
+      }
+      setOutOfStockCount(
+        data.data.filter((part) => Number(part.quantity_on_hand) <= 5).length
+      );
+    } catch (err) {
+      console.error("Failed to fetch low-stock inventory count", err);
+    }
+  }, []);
+
   // 2. Initial Mount Fetch
   useEffect(() => {
     getCardData();
     getTableData();
-  }, [getCardData, getTableData]);
+    refreshOutOfStockCount();
+  }, [getCardData, getTableData, refreshOutOfStockCount]);
 
   // 3. Metadata and User Format
   const displayName = user?.name ?? `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
@@ -87,11 +106,19 @@ export function AdminPage({ user, setUser }) {
     setCard,
     getCardData,
     getTableData,
-  }), [user, setUser, tableData, card, getCardData, getTableData]);
+    outOfStockCount,
+    setOutOfStockCount,
+  }), [user, setUser, tableData, card, getCardData, getTableData, outOfStockCount]);
 
   return (
     <SidebarProvider>
-      <AppSidebar role="Admin" userName={displayName} user={user} setUser={setUser} />
+      <AppSidebar
+        role="Admin"
+        userName={displayName}
+        user={user}
+        setUser={setUser}
+        badges={{ lowStock: outOfStockCount }}
+      />
       <SidebarInset>
         <Header title={meta.title} subtitle={meta.subtitle} />
         <main className="p-6">

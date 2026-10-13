@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useOutletContext } from "react-router";
 import { Check, ChevronsUpDown, ArrowUpDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -63,6 +63,11 @@ export function PartsLogger() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [inventory, setInventory] = useState([]);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [inventoryError, setInventoryError] = useState(null);
+  const [orderParts, setOrderParts] = useState([]);
+  const inventoryRequestId = useRef(0);
+  const orderPartsRequestId = useRef(0);
   const [loggedPartsByOrder, setLoggedPartsByOrder] = useState({});
 
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -98,19 +103,58 @@ export function PartsLogger() {
     [eligibleOrders, search, statusFilter]
   );
 
+  const selectedOrder = eligibleOrders.find((o) => o.id === selectedOrderId) ?? null;
+
   const fetchInventory = useCallback(async () => {
+    const requestId = ++inventoryRequestId.current;
+    setInventoryLoading(true);
+    setInventoryError(null);
     try {
       const response = await fetch(`${API}?action=parts&status=ACTIVE`, {
         credentials: "include",
       });
       const json = await response.json();
-      if (Array.isArray(json.data)) {
+      if (!response.ok || !Array.isArray(json.data)) {
+        throw new Error(json.error ?? `Failed to load inventory (HTTP ${response.status})`);
+      }
+      if (requestId === inventoryRequestId.current) {
         setInventory(json.data.map(normalizePart));
-      } else {
-        console.error("Failed to fetch parts inventory:", json.error ?? json);
       }
     } catch (err) {
-      console.error("Failed to fetch parts inventory:", err);
+      if (requestId === inventoryRequestId.current) {
+        console.error("Failed to fetch parts inventory:", err);
+        setInventoryError(err.message || "Failed to load inventory");
+      }
+    } finally {
+      if (requestId === inventoryRequestId.current) {
+        setInventoryLoading(false);
+      }
+    }
+  }, []);
+
+  const fetchOrderParts = useCallback(async (orderId) => {
+    const requestId = ++orderPartsRequestId.current;
+    if (orderId == null) {
+      setOrderParts([]);
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${API}?action=parts&status=ACTIVE&order_id=${encodeURIComponent(orderId)}`,
+        { credentials: "include" }
+      );
+      const json = await response.json();
+      if (Array.isArray(json.data)) {
+        if (requestId === orderPartsRequestId.current) {
+          setOrderParts(json.data.map(normalizePart));
+        }
+      } else {
+        throw new Error(json.error ?? "Unexpected compatible-parts response");
+      }
+    } catch (err) {
+      if (requestId === orderPartsRequestId.current) {
+        console.error("Failed to fetch parts compatible with the repair order:", err);
+      }
     }
   }, []);
 
@@ -133,7 +177,9 @@ export function PartsLogger() {
     fetchInventory();
   }, [fetchInventory]);
 
-  const selectedOrder = eligibleOrders.find((o) => o.id === selectedOrderId) ?? null;
+  useEffect(() => {
+    fetchOrderParts(selectedOrder?.rawId);
+  }, [fetchOrderParts, selectedOrder?.rawId]);
 
   // Load this order's logged parts as soon as it's selected.
   useEffect(() => {
@@ -155,7 +201,7 @@ export function PartsLogger() {
     if (selectedOrderId != null && !selectedOrder) setSelectedOrderId(null);
   }, [selectedOrderId, selectedOrder]);
 
-  const selectedPart = inventory.find((p) => p.part_id === selectedPartId) ?? null;
+  const selectedPart = orderParts.find((p) => p.part_id === selectedPartId) ?? null;
   const loggedForSelectedOrder = selectedOrder ? loggedPartsByOrder[selectedOrder.rawId] ?? [] : [];
   const visibleLogged = loggedForSelectedOrder.filter((r) => r.status !== "CANCELLED");
 
@@ -172,6 +218,7 @@ export function PartsLogger() {
     setActionError(null);
     setConfirmingCancelId(null);
     resetPartSelection();
+    fetchInventory();
   }
 
   async function handleLogPart() {
@@ -195,7 +242,7 @@ export function PartsLogger() {
       if (response.ok && json.status === "success") {
         // The SP decides ISSUED vs PENDING_PARTS server-side (and may flip the
         // order to AWAITING_PARTS), so refetch everything instead of guessing.
-        await Promise.all([fetchInventory(), fetchLoggedParts(selectedOrder.rawId), getTableData()]);
+        await Promise.all([fetchInventory(), fetchOrderParts(selectedOrder.rawId), fetchLoggedParts(selectedOrder.rawId), getTableData()]);
         resetPartSelection();
       } else {
         setActionError(json.error ?? json.message ?? `Failed to log part (HTTP ${response.status})`);
@@ -226,7 +273,7 @@ export function PartsLogger() {
       const json = await response.json().catch(() => ({}));
 
       if (response.ok && json.status === "success") {
-        await Promise.all([fetchInventory(), fetchLoggedParts(selectedOrder.rawId), getTableData()]);
+        await Promise.all([fetchInventory(), fetchOrderParts(selectedOrder.rawId), fetchLoggedParts(selectedOrder.rawId), getTableData()]);
       } else {
         setActionError(json.error ?? json.message ?? `Failed to cancel part (HTTP ${response.status})`);
       }
@@ -294,7 +341,7 @@ export function PartsLogger() {
                           <CommandList>
                             <CommandEmpty>No part found.</CommandEmpty>
                             <CommandGroup>
-                              {inventory.map((part) => (
+                              {orderParts.map((part) => (
                                 <CommandItem
                                   key={part.part_id}
                                   value={part.part_name}
@@ -496,20 +543,33 @@ export function PartsLogger() {
             <h3 className="text-sm font-semibold text-muted-foreground tracking-wide">
               Inventory Snapshot
             </h3>
+            {inventoryLoading && (
+              <p className="text-sm text-muted-foreground">Loading inventory...</p>
+            )}
+            {inventoryError && (
+              <p role="alert" className="text-sm text-destructive">{inventoryError}</p>
+            )}
             {inventory.map((part) => {
-              const low = part.quantity_on_hand <= part.reorder_level;
+              const stockClass = part.quantity_on_hand <= 5
+                ? "bg-red-100 text-red-800 hover:bg-red-100"
+                : part.quantity_on_hand <= 20
+                  ? "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                  : "bg-green-100 text-green-800 hover:bg-green-100";
               return (
                 <div key={part.part_id} className="flex items-center justify-between text-sm py-1">
                   <span>{part.part_name}</span>
                   <Badge
                     variant="secondary"
-                    className={low ? "bg-amber-100 text-amber-800 hover:bg-amber-100" : "bg-green-100 text-green-800 hover:bg-green-100"}
+                    className={stockClass}
                   >
                     {part.quantity_on_hand} left
                   </Badge>
                 </div>
               );
             })}
+            {!inventoryLoading && !inventoryError && inventory.length === 0 && (
+              <p className="text-sm text-muted-foreground">No active parts in inventory.</p>
+            )}
           </div>
         </div>
       </div>
