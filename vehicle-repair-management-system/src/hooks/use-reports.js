@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { formatPartId } from "@/utils/normalizeOrder";
 
 const API = "http://localhost:8000/api.php";
 
@@ -48,13 +49,15 @@ async function loadOverview() {
 
   return {
     total_revenue: num(c.total_revenue),
-    fulfilled_count: num(c.fulfilled_orders_count),
+    paid_invoice_count: num(c.paid_invoice_count),
     active_orders: num(c.active_orders_count),
     avg_order_value: num(c.avg_order_value),
     inventory_value: num(c.total_inventory_value),
     sku_count: num(c.total_part_skus),
     labor_total: num(s.labor_total),
     parts_total: num(s.parts_total),
+    unallocated_total: num(s.unallocated_total),
+    split_total: num(s.total_revenue),
     orders: rows(revenue.data).map((o) => ({
       raw_order_id: o.order_id,
       order_number: o.formatted_order_id,
@@ -157,7 +160,10 @@ async function loadPartsUsage() {
   const stock = rows(partsList.data)
     .map((p) => ({
       part_id: p.part_id,
-      part_code: p.formatted_part_id ?? `P-${String(p.part_id).padStart(3, "0")}`,
+      part_code:
+        !p.part_code || p.part_code.startsWith("AUTO-")
+          ? formatPartId(p.part_id)
+          : p.part_code ?? p.formatted_part_id,
       part_name: p.part_name,
       quantity_on_hand: num(p.quantity_on_hand),
       reorder_level: num(p.reorder_level),
@@ -236,7 +242,7 @@ async function loadDashboard() {
 
   return {
     totalRevenue: num(c.total_revenue),
-    fulfilledOrders: num(c.fulfilled_orders_count),
+    paidInvoices: num(c.paid_invoice_count),
     activeOrders: num(c.active_orders_count),
     activeStaff: num(c.active_staff_count),
     totalStaff: num(c.total_staff_count),

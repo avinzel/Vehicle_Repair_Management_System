@@ -131,13 +131,17 @@
                 echo json_encode(["status" => "error", "error" => $validated['error']]);
                 return;
             }
+            if (!array_key_exists('vehicle_types', $input)) {
+                $validated['vehicle_types'] = null;
+            }
 
             $result = Part::updatePart(
                 (int)$partId,
                 $validated['part_name'],
                 $validated['unit'],
                 $validated['quantity_on_hand'],
-                $validated['unit_price']
+                $validated['unit_price'],
+                $validated['vehicle_types']
             );
             if (!empty($result['success'])) {
                 http_response_code(200);

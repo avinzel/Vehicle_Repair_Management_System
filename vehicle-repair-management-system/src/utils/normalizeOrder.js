@@ -17,6 +17,8 @@ function parseRawId(value) {
 const formatRO = (rawId) => (rawId == null ? null : `RO-${rawId}`);
 
 const num = (v) => (v == null ? null : Number(v));
+export const formatPartId = (partId) =>
+  partId == null ? "N/A" : `PRT-${String(partId).padStart(3, "0")}`;
 
 // MySQL DATETIME "2026-08-25 11:40:00" -> "Aug 25, 2026"
 function formatDate(dt) {
@@ -236,9 +238,11 @@ export function normalizeMechanicWorkOrder(raw) {
 // ---------- Parts: inventory row ----------
 // sp_get_parts_inventory
 export function normalizePart(raw = {}) {
+  const partId = num(raw.part_id);
+  const partCode = raw.part_code?.trim();
   return {
-    part_id: num(raw.part_id),
-    part_code: raw.part_code?.trim() || "N/A",
+    part_id: partId,
+    part_code: !partCode || partCode.startsWith("AUTO-") ? formatPartId(partId) : partCode,
     part_name: raw.part_name?.trim() || "Unnamed Part",
     category: raw.category?.trim() || "Uncategorized",
     // Clean and format vehicle_types
@@ -257,11 +261,13 @@ export function normalizePart(raw = {}) {
 // sp_get_parts_by_repair_order
 // NOTE: part_status (not status), unit_price_at_use (not unit_price).
 export function normalizeLoggedPart(raw) {
+  const partId = num(raw.part_id);
+  const partCode = raw.part_code?.trim();
   return {
     order_part_id: num(raw.order_part_id),
     order_id: num(raw.order_id),
-    part_id: num(raw.part_id),
-    part_code: raw.part_code,
+    part_id: partId,
+    part_code: !partCode || partCode.startsWith("AUTO-") ? formatPartId(partId) : partCode,
     part_name: raw.part_name,
     category: raw.category,
     unit: raw.unit,

@@ -29,10 +29,14 @@ function SectionTitle({ children }) {
   );
 }
 
-// `customer` is the normalized table row (id, name, phone, email, vehicleCount,
-// lastVisit) — enough to paint the header and contact tiles immediately. The
-// address, vehicles and repair history load from the detail endpoint.
-export function CustomerDetail({ customer }) {
+// `customer` is the normalized table row (id, rawId, name, phone, email,
+// vehicleCount, lastVisit) — enough to paint the header and contact tiles
+// immediately. The address, vehicles and repair history load from the
+// detail endpoint.
+//
+// showNewRepairOrder: the Service Advisor view keeps the "New Repair Order"
+// button (default). The Admin view passes false to hide it.
+export function CustomerDetail({ customer, showNewRepairOrder = true }) {
   const navigate = useNavigate();
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -114,16 +118,18 @@ export function CustomerDetail({ customer }) {
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <Button
-            type="button"
-            size="sm"
-            disabled={!details}
-            onClick={handleNewRepairOrder}
-            className="gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            New Repair Order
-          </Button>
+          {showNewRepairOrder && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={!details}
+              onClick={handleNewRepairOrder}
+              className="gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Repair Order
+            </Button>
+          )}
           <SheetClose className="text-muted-foreground hover:text-foreground" aria-label="Close">
             <X className="w-5 h-5" />
           </SheetClose>

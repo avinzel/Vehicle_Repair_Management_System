@@ -18,9 +18,10 @@ export function OverviewTab() {
         const orders = d.orders ?? [];
         const maxAmount = Math.max(0, ...orders.map((o) => o.amount));
 
-        const split = d.labor_total + d.parts_total;
+        const split = d.split_total;
         const laborPct = split > 0 ? Math.round((d.labor_total / split) * 100) : 0;
-        const partsPct = split > 0 ? 100 - laborPct : 0;
+        const unallocatedPct = split > 0 ? Math.round((d.unallocated_total / split) * 100) : 0;
+        const partsPct = split > 0 ? 100 - laborPct - unallocatedPct : 0;
 
         return (
           <div className="space-y-6">
@@ -28,7 +29,7 @@ export function OverviewTab() {
               <StatCard
                 label="Total Revenue"
                 value={formatPeso(d.total_revenue)}
-                sublabel={`${pluralize(d.fulfilled_count, "fulfilled order")}`}
+                sublabel={`${pluralize(d.paid_invoice_count, "paid invoice")}`}
                 icon={DollarSign}
                 tone="primary"
               />
@@ -42,7 +43,7 @@ export function OverviewTab() {
               <StatCard
                 label="Avg Order Value"
                 value={formatPeso(d.avg_order_value)}
-                sublabel="per completed repair"
+                sublabel="per paid invoice"
                 icon={Activity}
                 tone="purple"
               />
@@ -80,7 +81,7 @@ export function OverviewTab() {
                 )}
               </ReportCard>
 
-              <ReportCard title="Revenue Split" description="Paid invoices, labor vs parts">
+              <ReportCard title="Revenue Split" description="Paid totals allocated by labor and parts share">
                 <div className="space-y-4">
                   <BarRow
                     label={`Labor (${laborPct}%)`}
@@ -96,6 +97,15 @@ export function OverviewTab() {
                     display={formatPeso(d.parts_total)}
                     colorClass="bg-orange-300"
                   />
+                  {d.unallocated_total > 0 && (
+                    <BarRow
+                      label={`Unallocated (${unallocatedPct}%)`}
+                      value={d.unallocated_total}
+                      max={split}
+                      display={formatPeso(d.unallocated_total)}
+                      colorClass="bg-muted-foreground/50"
+                    />
+                  )}
                   <div className="flex items-center justify-between border-t border-border pt-3 text-sm">
                     <span className="text-muted-foreground">Total</span>
                     <span className="font-bold">{formatPeso(split)}</span>

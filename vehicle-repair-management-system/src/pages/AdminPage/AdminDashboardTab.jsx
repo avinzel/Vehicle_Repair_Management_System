@@ -61,7 +61,7 @@ export function AdminDashboardTab() {
         <StatCard
           label="Total Revenue"
           value={formatPeso(dashboard?.totalRevenue)}
-          hint={`${dashboard?.fulfilledOrders ?? 0} fulfilled order${dashboard?.fulfilledOrders === 1 ? "" : "s"}`}
+          hint={`${dashboard?.paidInvoices ?? 0} paid invoice${dashboard?.paidInvoices === 1 ? "" : "s"}`}
           icon={Banknote}
           iconClass="bg-primary/10 text-primary"
           valueClass="text-primary"

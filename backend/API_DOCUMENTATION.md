@@ -642,6 +642,7 @@ Supported sort order:
 {
   "part_name": "Engine Oil (1L)",
   "unit": "bottle",
+  "vehicle_types": "CAR,MOTORCYCLE",
   "quantity_on_hand": 10,
   "unit_price": 350
 }
@@ -651,7 +652,7 @@ Required: `part_name` (up to 150 characters), `unit` (up to 20 characters), `qua
 
 Part names are compared case-insensitively after trimming; a duplicate name returns HTTP `409` with `A part with this name already exists.` This check includes inactive records.
 
-The backend generates `part_code` and `batch_number` when omitted. Optional schema fields are `part_code`, `category`, `vehicle_types` (comma-separated `CAR`, `MOTORCYCLE`, and/or `TRICYCLE`), `reorder_level` (non-negative integer; defaults to `5`), and `batch_number`.
+The backend generates `part_code` in the `PRT-###` format using the new database `part_id`, and generates `batch_number` when omitted. Optional schema fields are `part_code`, `category`, `vehicle_types` (comma-separated `CAR`, `MOTORCYCLE`, and/or `TRICYCLE`; defaults to all supported vehicle types), `reorder_level` (non-negative integer; defaults to `5`), and `batch_number`.
 
 Returns `201` with `part_id`; duplicate supplied part codes return `409`.
 
@@ -666,12 +667,13 @@ Returns `201` with `part_id`; duplicate supplied part codes return `409`.
   "part_id": 7,
   "part_name": "Engine Oil (1L)",
   "unit": "bottle",
+  "vehicle_types": "CAR,MOTORCYCLE",
   "quantity_on_hand": 10,
   "unit_price": 350
 }
 ```
 
-All fields shown are required. Only active parts can be edited. Returns `200` on success, `400` for invalid fields, and `404` if no active part matches.
+All fields shown are required. Include `vehicle_types` as a comma-separated selection of one or more supported values; editing updates this field. Only active parts can be edited. Returns `200` on success, `400` for invalid fields, and `404` if no active part matches.
 Updating to another existing part name returns HTTP `409` with `A part with this name already exists.`
 
 ### 8.5 Delete part
@@ -1126,6 +1128,7 @@ Database upgrade required for existing installations:
 - Databases that already ran the customer-management migration must run [`src/Config/customer_intake_identity_migration.sql`](./src/Config/customer_intake_identity_migration.sql) once to update vehicle-intake identity matching and conflict handling.
 - Existing databases must run [`src/Config/get_parts_by_repair_order_migration.sql`](./src/Config/get_parts_by_repair_order_migration.sql) once to install the missing repair-order parts lookup procedure.
 - Existing databases must run [`src/Config/order_update_fields_migration.sql`](./src/Config/order_update_fields_migration.sql) once to enable partial order updates and editable diagnosis notes.
+- Existing databases must run [`src/Config/revenue_integrity_migration.sql`](./src/Config/revenue_integrity_migration.sql) once to align revenue cards and splits with paid invoices. Fresh databases receive these procedure definitions from `vehicle_repair_schema.sql`.
 - Role permissions are keyed to actual HTTP verbs (`PUT`), so the configured restrictions apply to edit routes.
 
 ## 16) Order lifecycle summary
