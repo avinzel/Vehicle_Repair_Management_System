@@ -40,21 +40,6 @@ const PILL_FILTERS = [
 ];
 
 const FILTER_TABS = PILL_FILTERS.map((f) => f.label);
-// Row shape comes from sp_get_parts_inventory.
-// function normalizePart(raw) {
-//   const id = raw.part_id ?? raw.id;
-//   return {
-//     id,
-//     code: `P-${String(id).padStart(3, "0")}`,
-//     name: raw.part_name ?? raw.name ?? "—",
-//     category: raw.category ?? "—",
-//     vehicle_types: raw.vehicle_types ?? "—",
-//     unit: raw.unit ?? "pc",
-//     quantity: Number(raw.quantity_on_hand ?? 0),
-//     unitPrice: Number(raw.unit_price ?? 0),
-//     reorderLevel: Number(raw.reorder_level ?? 0),
-//   };
-// }
 function matchesPill(part, label) {
   const pill = PILL_FILTERS.find((f) => f.label === label);
   if (!pill || pill.kind === "all") return true;
@@ -98,7 +83,6 @@ export function PartsInventory() {
 
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
-  const [vehicleFilter, setVehicleFilter] = useState("All");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // part row or null (= add)

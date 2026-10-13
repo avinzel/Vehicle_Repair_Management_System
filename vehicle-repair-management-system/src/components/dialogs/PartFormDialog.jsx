@@ -28,18 +28,32 @@ export const PART_UNITS = [
   { value: "bottle", label: "Bottle" },
 ];
 
+const VEHICLE_TYPES = [
+  { value: "CAR", label: "Car" },
+  { value: "MOTORCYCLE", label: "Motorcycle" },
+  { value: "TRICYCLE", label: "Tricycle" },
+];
+
+function parseVehicleTypes(value) {
+  const types = Array.isArray(value) ? value : String(value ?? "").split(",");
+  return types.map((type) => type.trim().toUpperCase()).filter((type) =>
+    VEHICLE_TYPES.some((vehicleType) => vehicleType.value === type)
+  );
+}
+
 export function unitLabel(unit) {
   const match = PART_UNITS.find((u) => u.value === unit);
   if (match) return match.label;
   return unit ? unit.charAt(0).toUpperCase() + unit.slice(1) : "—";
 }
 
-function Field({ label, children }) {
+function Field({ label, children, asGroup = false }) {
+  const Wrapper = asGroup ? "div" : "label";
   return (
-    <label className="block space-y-1.5">
+    <Wrapper className="block space-y-1.5">
       <span className="text-sm font-medium">{label}</span>
       {children}
-    </label>
+    </Wrapper>
   );
 }
 
@@ -50,6 +64,7 @@ export function PartFormDialog({ open, onOpenChange, part, onSubmit }) {
 
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("pc");
+  const [vehicleTypes, setVehicleTypes] = useState(VEHICLE_TYPES.map((type) => type.value));
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -61,6 +76,7 @@ export function PartFormDialog({ open, onOpenChange, part, onSubmit }) {
     setError(null);
     setName(part?.part_name ?? "");
     setUnit(part?.unit ?? "pc");
+    setVehicleTypes(part ? parseVehicleTypes(part.vehicle_types) : VEHICLE_TYPES.map((type) => type.value));
     setQuantity(part ? String(part.quantity_on_hand) : "");
     setUnitPrice(part ? String(part.unit_price) : "");
   }, [open, part]);
@@ -75,7 +91,15 @@ export function PartFormDialog({ open, onOpenChange, part, onSubmit }) {
   const priceNumber = Number(unitPrice);
   const qtyValid = quantity !== "" && Number.isInteger(qtyNumber) && qtyNumber >= 0;
   const priceValid = unitPrice !== "" && Number.isFinite(priceNumber) && priceNumber >= 0;
-  const canSubmit = !submitting && name.trim() && unit && qtyValid && priceValid;
+  const canSubmit = !submitting && name.trim() && unit && vehicleTypes.length > 0 && qtyValid && priceValid;
+
+  function toggleVehicleType(value) {
+    setVehicleTypes((selected) =>
+      selected.includes(value)
+        ? selected.filter((type) => type !== value)
+        : [...selected, value]
+    );
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -86,6 +110,7 @@ export function PartFormDialog({ open, onOpenChange, part, onSubmit }) {
       await onSubmit({
         part_name: name.trim(),
         unit,
+        vehicle_types: vehicleTypes.join(","),
         quantity_on_hand: qtyNumber,
         unit_price: priceNumber,
       });
@@ -118,6 +143,27 @@ export function PartFormDialog({ open, onOpenChange, part, onSubmit }) {
               maxLength={150}
               disabled={submitting}
             />
+          </Field>
+
+          <Field label="Vehicle type" asGroup>
+            <div className="flex flex-wrap gap-4 rounded-md border border-input bg-background px-3 py-2.5">
+              {VEHICLE_TYPES.map((type) => (
+                <label key={type.value} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={vehicleTypes.includes(type.value)}
+                    onChange={() => toggleVehicleType(type.value)}
+                    disabled={submitting}
+                    className="size-4 accent-primary"
+                    aria-label={type.label}
+                  />
+                  {type.label}
+                </label>
+              ))}
+            </div>
+            {vehicleTypes.length === 0 && (
+              <span className="block text-xs text-destructive">Select at least one vehicle type.</span>
+            )}
           </Field>
 
           <div className="grid grid-cols-3 gap-3">

@@ -84,6 +84,7 @@ export function AssignedOrders() {
     }
     let cancelled = false;
     const id = encodeURIComponent(selectedRawId);
+    setExtra({ rawId: selectedRawId, requiredServices: null, servicesLoading: true });
 
     Promise.all([
       // sp_get_repair_order_details -> full crew with positions
@@ -112,10 +113,25 @@ export function AssignedOrders() {
             }))
           : null;
 
-        setExtra({ rawId: selectedRawId, team: detail?.team ?? null, partsLogged: parts });
+        setExtra({
+          rawId: selectedRawId,
+          team: detail?.team ?? null,
+          partsLogged: parts,
+          requiredServices: detail?.requiredServices ?? null,
+          servicesLoading: false,
+          servicesError: detail ? null : detailJson.error ?? "Could not load required services.",
+        });
       })
       .catch((err) => {
-        if (!cancelled) console.error("Failed to load crew/parts for order", selectedRawId, err);
+        if (!cancelled) {
+          console.error("Failed to load crew/parts for order", selectedRawId, err);
+          setExtra({
+            rawId: selectedRawId,
+            requiredServices: null,
+            servicesLoading: false,
+            servicesError: "Could not load required services.",
+          });
+        }
       });
 
     return () => {
@@ -132,6 +148,9 @@ export function AssignedOrders() {
           ? {
               team: extra.team?.length ? extra.team : baseSelected.team,
               partsLogged: extra.partsLogged ?? baseSelected.partsLogged,
+              requiredServices: extra.requiredServices,
+              servicesLoading: extra.servicesLoading,
+              servicesError: extra.servicesError,
             }
           : {}),
       }

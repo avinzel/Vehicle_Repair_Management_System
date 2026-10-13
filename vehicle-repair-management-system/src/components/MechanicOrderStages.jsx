@@ -406,6 +406,30 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
 
       <div>
         <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
+          Required Services
+        </h3>
+        {order.servicesLoading ? (
+          <p className="text-sm text-muted-foreground">Loading required services...</p>
+        ) : order.servicesError ? (
+          <p role="alert" className="text-sm text-destructive">{order.servicesError}</p>
+        ) : order.requiredServices?.length > 0 ? (
+          <div className="space-y-2">
+            {order.requiredServices.map((service, index) => (
+              <div
+                key={`${service}-${index}`}
+                className="rounded-lg bg-secondary/50 px-3 py-2 text-sm font-medium"
+              >
+                {service}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No services specified for this order.</p>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground tracking-wide mb-3">
           Repair Parts
         </h3>
         {partsLoading ? (

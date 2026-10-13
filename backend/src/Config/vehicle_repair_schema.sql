@@ -85,7 +85,7 @@
 		model           VARCHAR(50) NOT NULL,
 		year_model      YEAR,
 		color           VARCHAR(30),
-		vin_number      VARCHAR(50) UNIQUE,
+		vin_number      VARCHAR(50) ,
 		current_mileage INT DEFAULT 0,
 		date_registered DATETIME DEFAULT CURRENT_TIMESTAMP,
 		CONSTRAINT fk_vehicles_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
@@ -2510,7 +2510,10 @@ BEGIN
 
     SELECT
         part_id,
-        part_code,
+        CASE
+            WHEN part_code LIKE 'AUTO-%' THEN CONCAT('PRT-', LPAD(part_id, 3, '0'))
+            ELSE part_code
+        END AS part_code,
         part_name,
         category,
         vehicle_types,
@@ -3393,8 +3396,9 @@ DROP PROCEDURE IF EXISTS sp_get_dashboard_summary_cards //
 CREATE PROCEDURE sp_get_dashboard_summary_cards()
 BEGIN
     SELECT 
-        -- Card 1: Total Revenue & Fulfilled Orders
+        -- Card 1: Collected revenue and paid invoices
         IFNULL((SELECT SUM(total_amount) FROM invoices WHERE status = 'PAID'), 0.00) AS total_revenue,
+        (SELECT COUNT(*) FROM invoices WHERE status = 'PAID') AS paid_invoice_count,
         (SELECT COUNT(*) FROM repair_orders WHERE status = 'FULFILLED') AS fulfilled_orders_count,
 
         -- Card 2: Active Orders (pipeline)
@@ -3412,7 +3416,7 @@ BEGIN
            AND status = 'ACTIVE'
         ) AS low_stock_alerts_count,
 
-        -- Card 5: Average Order Value (per completed/fulfilled repair)
+        -- Card 5: Average collected value per paid invoice
         IFNULL(
             (SELECT AVG(total_amount) 
              FROM invoices 
@@ -3547,7 +3551,7 @@ DELIMITER ;
 		END IF;
 
 		SELECT 
-			CONCAT('P-', LPAD(part_id, 3, '0')) AS formatted_part_id,
+			CONCAT('PRT-', LPAD(part_id, 3, '0')) AS formatted_part_id,
 			part_id,
 			part_code,
 			part_name,
@@ -3567,11 +3571,11 @@ DELIMITER ;
 			date_added
 		FROM parts_inventory
 		WHERE status = 'ACTIVE'
-		  -- Search Filter (Matches part_id, formatted P-001 ID, part_code, part_name, category, or vehicle_types)
+		  -- Search Filter (Matches part_id, formatted PRT-001 ID, part_code, part_name, category, or vehicle_types)
 		  AND (
 				p_search IS NULL
 				OR CAST(part_id AS CHAR) = p_search
-				OR CONCAT('P-', LPAD(part_id, 3, '0')) LIKE CONCAT('%', p_search, '%')
+				OR CONCAT('PRT-', LPAD(part_id, 3, '0')) LIKE CONCAT('%', p_search, '%')
 				OR part_code LIKE CONCAT('%', p_search, '%')
 				OR part_name LIKE CONCAT('%', p_search, '%')
 				OR category LIKE CONCAT('%', p_search, '%')
@@ -3733,30 +3737,44 @@ CREATE PROCEDURE sp_get_revenue_split()
 BEGIN
     DECLARE v_labor_total DECIMAL(10,2) DEFAULT 0.00;
     DECLARE v_parts_total DECIMAL(10,2) DEFAULT 0.00;
+    DECLARE v_unallocated_total DECIMAL(10,2) DEFAULT 0.00;
     DECLARE v_grand_total DECIMAL(10,2) DEFAULT 0.00;
     DECLARE v_labor_pct DECIMAL(5,2) DEFAULT 0.00;
     DECLARE v_parts_pct DECIMAL(5,2) DEFAULT 0.00;
+    DECLARE v_unallocated_pct DECIMAL(5,2) DEFAULT 0.00;
 
-    -- Calculate Labor/Services Total from non-cancelled repair orders
-    SELECT IFNULL(SUM(sc.standard_labor_cost), 0.00) INTO v_labor_total
-    FROM repair_order_services ros
-    JOIN service_catalog sc ON ros.service_catalog_id = sc.service_catalog_id
-    JOIN repair_orders ro ON ros.order_id = ro.order_id
-    WHERE ro.status != 'CANCELLED';
+    -- Allocate each paid invoice's collected amount by its labor/parts share.
+    -- This includes discounts and tax while preserving each invoice total.
+    SELECT
+        IFNULL(SUM(
+            CASE
+                WHEN labor_total + parts_total > 0
+                THEN ROUND(total_amount * labor_total / (labor_total + parts_total), 2)
+                ELSE 0.00
+            END
+        ), 0.00),
+        IFNULL(SUM(
+            CASE
+                WHEN labor_total + parts_total > 0
+                THEN total_amount - ROUND(total_amount * labor_total / (labor_total + parts_total), 2)
+                ELSE 0.00
+            END
+        ), 0.00),
+        IFNULL(SUM(
+            CASE
+                WHEN labor_total + parts_total <= 0 THEN total_amount
+                ELSE 0.00
+            END
+        ), 0.00),
+        IFNULL(SUM(total_amount), 0.00)
+    INTO v_labor_total, v_parts_total, v_unallocated_total, v_grand_total
+    FROM invoices
+    WHERE status = 'PAID';
 
-    -- Calculate Parts Total from issued parts in non-cancelled repair orders
-    SELECT IFNULL(SUM(rop.quantity_used * rop.unit_price), 0.00) INTO v_parts_total
-    FROM repair_order_parts rop
-    JOIN repair_orders ro ON rop.order_id = ro.order_id
-    WHERE ro.status != 'CANCELLED' AND rop.status = 'ISSUED';
-
-    -- Compute Grand Total
-    SET v_grand_total = v_labor_total + v_parts_total;
-
-    -- Compute percentages (handling division by zero fallback)
     IF v_grand_total > 0 THEN
         SET v_labor_pct = ROUND((v_labor_total / v_grand_total) * 100, 2);
         SET v_parts_pct = ROUND((v_parts_total / v_grand_total) * 100, 2);
+        SET v_unallocated_pct = ROUND((v_unallocated_total / v_grand_total) * 100, 2);
     END IF;
 
     -- Return single object result set
@@ -3765,6 +3783,8 @@ BEGIN
         v_labor_pct AS labor_percentage,
         v_parts_total AS parts_total,
         v_parts_pct AS parts_percentage,
+        v_unallocated_total AS unallocated_total,
+        v_unallocated_pct AS unallocated_percentage,
         v_grand_total AS total_revenue;
 
 END //
@@ -4309,7 +4329,10 @@ BEGIN
         rop.order_part_id,
         rop.order_id,
         rop.part_id,
-        pi.part_code,
+        CASE
+            WHEN pi.part_code LIKE 'AUTO-%' THEN CONCAT('PRT-', LPAD(pi.part_id, 3, '0'))
+            ELSE pi.part_code
+        END AS part_code,
         pi.part_name,
         pi.category,
         pi.unit,

@@ -287,7 +287,11 @@
 
                 $stmt = self::$conn->prepare("
                     SELECT
-                        pi.part_code,
+                        CASE
+                            WHEN pi.part_code LIKE 'AUTO-%'
+                            THEN CONCAT('PRT-', LPAD(pi.part_id, 3, '0'))
+                            ELSE pi.part_code
+                        END AS part_code,
                         pi.part_name,
                         rop.quantity_used,
                         rop.unit_price,

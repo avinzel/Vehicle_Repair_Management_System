@@ -188,7 +188,8 @@
             $reorderLevel = 5,
             $batchNumber = null
         ) {
-            $partCode = $partCode ?: ('AUTO-' . strtoupper(bin2hex(random_bytes(10))));
+            $generatePartCode = !$partCode;
+            $partCode = $partCode ?: ('TMP-' . strtoupper(bin2hex(random_bytes(10))));
             $batchNumber = $batchNumber ?: ('BATCH-' . date('YmdHis') . strtoupper(bin2hex(random_bytes(4))));
             $stmt = null;
 
@@ -240,6 +241,22 @@
                 $stmt->close();
                 $stmt = null;
 
+                if ($generatePartCode) {
+                    $formattedPartCode = 'PRT-' . str_pad((string)$partId, 3, '0', STR_PAD_LEFT);
+                    $stmt = self::$conn->prepare(
+                        "UPDATE parts_inventory SET part_code = ? WHERE part_id = ?"
+                    );
+                    if (!$stmt) {
+                        throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
+                    }
+                    $stmt->bind_param("si", $formattedPartCode, $partId);
+                    if (!$stmt->execute()) {
+                        throw new Exception($stmt->error, $stmt->errno);
+                    }
+                    $stmt->close();
+                    $stmt = null;
+                }
+
                 self::$conn->commit();
                 return ["success" => true, "part_id" => $partId];
             } catch (\Throwable $e) {
@@ -251,7 +268,7 @@
             }
         }
 
-        public static function updatePart($partId, $partName, $unit, $quantity, $unitPrice) {
+        public static function updatePart($partId, $partName, $unit, $quantity, $unitPrice, $vehicleTypes) {
             $stmt = null;
             try {
                 self::$conn->begin_transaction();
@@ -275,13 +292,14 @@
 
                 $stmt = self::$conn->prepare(
                     "UPDATE parts_inventory
-                     SET part_name = ?, unit = ?, quantity_on_hand = ?, unit_price = ?
+                     SET part_name = ?, unit = ?, vehicle_types = COALESCE(?, vehicle_types),
+                         quantity_on_hand = ?, unit_price = ?
                      WHERE part_id = ? AND status = 'ACTIVE'"
                 );
                 if (!$stmt) {
                     throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
                 }
-                $stmt->bind_param("ssidi", $partName, $unit, $quantity, $unitPrice, $partId);
+                $stmt->bind_param("sssidi", $partName, $unit, $vehicleTypes, $quantity, $unitPrice, $partId);
                 if (!$stmt->execute()) {
                     throw new Exception($stmt->error, $stmt->errno);
                 }
