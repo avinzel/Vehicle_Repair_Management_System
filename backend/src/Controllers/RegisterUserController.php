@@ -33,19 +33,58 @@
                 return;
             }
 
+            $specialization = isset($data['specialization']) ? trim($data['specialization']) : '';
+            $date_hired = isset($data['date_hired']) ? trim($data['date_hired']) : '';
+            $status = strtoupper(trim($data['status'] ?? 'ACTIVE'));
+            $isMechanic = (int)$role_id === 3;
+
+            if ($isMechanic) {
+                if (!preg_match('/^.+@.+\..+$/', $email)) {
+                    http_response_code(400);
+                    echo json_encode(["error" => "Email format is invalid."]);
+                    return;
+                }
+                if ($specialization === '' || strlen($specialization) > 100 || !$this->isValidDate($date_hired)) {
+                    http_response_code(400);
+                    echo json_encode(["error" => "Mechanic registration requires a specialization (100 characters or fewer) and a valid date_hired (YYYY-MM-DD)."]);
+                    return;
+                }
+                if (!in_array($status, ['ACTIVE', 'INACTIVE'], true)) {
+                    http_response_code(400);
+                    echo json_encode(["error" => "Status must be ACTIVE or INACTIVE"]);
+                    return;
+                }
+            }
+
             // Hash the password before storing it
             $password_hash = password_hash($password, PASSWORD_DEFAULT);
 
-            $response = $this->userModel->createUser(
-                $username,
-                $password_hash,
-                $first_name,
-                $middle_name,
-                $last_name,
-                $contact_no,
-                $email,
-                (int)$role_id
-            );
+            if ($isMechanic) {
+                $response = $this->userModel->createUserWithMechanic(
+                    $username,
+                    $password_hash,
+                    $first_name,
+                    $middle_name !== '' ? $middle_name : null,
+                    $last_name,
+                    $contact_no,
+                    $email,
+                    (int)$role_id,
+                    $status,
+                    $specialization,
+                    $date_hired
+                );
+            } else {
+                $response = $this->userModel->createUser(
+                    $username,
+                    $password_hash,
+                    $first_name,
+                    $middle_name,
+                    $last_name,
+                    $contact_no,
+                    $email,
+                    (int)$role_id
+                );
+            }
 
             if ($response["success"]) {
                 http_response_code(201);
@@ -80,6 +119,14 @@
         public function getInputData(){
             $input = json_decode(file_get_contents('php://input'), true);
             return $input;
+        }
+
+        private function isValidDate($date) {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                return false;
+            }
+            [$year, $month, $day] = array_map('intval', explode('-', $date));
+            return checkdate($month, $day, $year);
         }
     }
 

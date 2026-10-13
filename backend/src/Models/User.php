@@ -136,6 +136,98 @@ use Exception;
                 ];
             }
         }
+
+        public function createUserWithMechanic(
+            string $username,
+            string $passwordHash,
+            string $firstName,
+            ?string $middleName,
+            string $lastName,
+            string $contactNo,
+            string $email,
+            int $roleId,
+            string $status,
+            string $specialization,
+            string $dateHired
+        ) {
+            $stmt = null;
+            try {
+                self::$conn->begin_transaction();
+
+                $stmt = self::$conn->prepare(
+                    "INSERT INTO users (username, password_hash, first_name, middle_name, last_name, contact_no, email, role_id, status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                );
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
+                }
+                $stmt->bind_param(
+                    "sssssssis",
+                    $username,
+                    $passwordHash,
+                    $firstName,
+                    $middleName,
+                    $lastName,
+                    $contactNo,
+                    $email,
+                    $roleId,
+                    $status
+                );
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error, $stmt->errno);
+                }
+                $userId = (int)$stmt->insert_id;
+                $stmt->close();
+                $stmt = null;
+
+                $stmt = self::$conn->prepare(
+                    "INSERT INTO mechanics (user_id, specialization, date_hired, status)
+                     VALUES (?, ?, ?, ?)"
+                );
+                if (!$stmt) {
+                    throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
+                }
+                $stmt->bind_param("isss", $userId, $specialization, $dateHired, $status);
+                if (!$stmt->execute()) {
+                    throw new Exception($stmt->error, $stmt->errno);
+                }
+                $stmt->close();
+                $stmt = null;
+
+                self::$conn->commit();
+                return ["success" => true, "user_id" => $userId];
+            } catch (\Throwable $e) {
+                if ($stmt) {
+                    $stmt->close();
+                }
+                self::$conn->rollback();
+
+                $message = $e->getMessage();
+                if ((int)$e->getCode() === 1062) {
+                    $field = 'unknown';
+                    if (stripos($message, 'username') !== false) {
+                        $field = 'username';
+                    } elseif (stripos($message, 'email') !== false) {
+                        $field = 'email';
+                    } elseif (stripos($message, 'contact') !== false) {
+                        $field = 'contact_no';
+                    }
+                    return [
+                        "success" => false,
+                        "error" => "duplicate",
+                        "field" => $field,
+                        "message" => $message
+                    ];
+                }
+
+                if (in_array((int)$e->getCode(), [1452, 1644, 1406], true)) {
+                    return ["success" => false, "error" => "invalid", "message" => $message];
+                }
+
+                return ["success" => false, "error" => "Error creating user and mechanic: " . $message];
+            }
+        }
+
         public static function softDeleteUser($id) {
             $userId = (int)$id;
             $stmt = null;

@@ -136,5 +136,26 @@ class Service {
             return ["success" => false, "code" => (int)$e->getCode(), "error" => $e->getMessage()];
         }
     }
+
+    public function reactivateService($serviceId) {
+        try {
+            $stmt = self::$conn->prepare(
+                "UPDATE service_catalog SET status = 'ACTIVE'
+                 WHERE service_catalog_id = ? AND status = 'INACTIVE'"
+            );
+            if (!$stmt) {
+                throw new Exception("Prepare failed: " . self::$conn->error, self::$conn->errno);
+            }
+            $stmt->bind_param("i", $serviceId);
+            if (!$stmt->execute()) {
+                throw new Exception($stmt->error, $stmt->errno);
+            }
+            $affectedRows = $stmt->affected_rows;
+            $stmt->close();
+            return $affectedRows;
+        } catch (\Throwable $e) {
+            return ["success" => false, "code" => (int)$e->getCode(), "error" => $e->getMessage()];
+        }
+    }
 }
 ?>

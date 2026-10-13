@@ -59,6 +59,8 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
   const [phone, setPhone] = useState("");
   const [roleId, setRoleId] = useState("2");
   const [status, setStatus] = useState("ACTIVE");
+  const [specialization, setSpecialization] = useState("");
+  const [dateHired, setDateHired] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const phoneDigits = phone.trim().replace(/[\s()-]/g, "");
@@ -77,8 +79,11 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
     setPhone(staff?.phone ?? "");
     setRoleId(staff?.roleId != null ? String(staff.roleId) : "2");
     setStatus(staff?.status ?? "ACTIVE");
+    setSpecialization("");
+    setDateHired("");
   }, [open, staff]);
 
+  const addingMechanic = !isEdit && roleId === "3";
   const canSubmit =
     !submitting &&
     firstName.trim() &&
@@ -87,7 +92,8 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
     email.trim() &&
     phoneValid &&
     roleId &&
-    (isEdit || password.trim());
+    (isEdit || password.trim()) &&
+    (!addingMechanic || (specialization.trim() && dateHired));
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -105,7 +111,13 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
         role_id: Number(roleId),
         status,
       };
-      if (!isEdit) payload.password = password;
+      if (!isEdit) {
+        payload.password = password;
+        if (addingMechanic) {
+          payload.specialization = specialization.trim();
+          payload.date_hired = dateHired;
+        }
+      }
       await onSubmit(payload);
       onOpenChange(false);
     } catch (err) {
@@ -249,6 +261,30 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
               </Select>
             </Field>
           </div>
+
+          {addingMechanic && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Specialization">
+                <Input
+                  value={specialization}
+                  onChange={(e) => setSpecialization(e.target.value)}
+                  placeholder="e.g. Engine Diagnostics"
+                  maxLength={100}
+                  disabled={submitting}
+                  required
+                />
+              </Field>
+              <Field label="Date hired">
+                <Input
+                  type="date"
+                  value={dateHired}
+                  onChange={(e) => setDateHired(e.target.value)}
+                  disabled={submitting}
+                  required
+                />
+              </Field>
+            </div>
+          )}
 
           {error && (
             <p role="alert" className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">

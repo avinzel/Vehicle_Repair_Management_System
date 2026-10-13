@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -23,14 +23,12 @@ const AVATAR_COLORS = [
   "bg-blue-600", "bg-green-600", "bg-purple-600", "bg-orange-600", "bg-teal-600", "bg-rose-600",
 ];
 
-// Row shape comes from get_all_mechanics. NOTE: that SP doesn't return
-// user_id yet — editing needs it (PUT requires user_id), see the notes.
+// Row shape comes from get_all_mechanics.
 function normalizeMechanic(raw) {
   const id = raw.mechanic_id ?? raw.id;
   return {
     id,
     code: `M-${String(id).padStart(3, "0")}`,
-    userId: raw.user_id ?? null,
     name: raw.full_name ?? raw.name ?? "—",
     email: raw.email ?? "—",
     phone: raw.contact_no ?? raw.phone ?? "—",
@@ -67,7 +65,7 @@ export function MechanicsPage() {
   const [statusFilter, setStatusFilter] = useState("All");
 
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState(null); // mechanic row or null (= add)
+  const [editing, setEditing] = useState(null);
 
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -91,11 +89,6 @@ export function MechanicsPage() {
   }, [getMechanics]);
 
   const activeCount = useMemo(() => mechanics.filter((m) => m.status === "ACTIVE").length, [mechanics]);
-  const takenUserIds = useMemo(
-    () => mechanics.map((m) => Number(m.userId)).filter(Number.isFinite),
-    [mechanics]
-  );
-
   const statusLabel = (m) => (STATUS_STYLES[m.status] ?? STATUS_STYLES.INACTIVE).label;
   const filteredMechanics = useMemo(
     () =>
@@ -107,30 +100,17 @@ export function MechanicsPage() {
     [mechanics, search, statusFilter]
   );
 
-  function openAdd() {
-    setEditing(null);
-    setFormOpen(true);
-  }
-
   function openEdit(mechanic) {
     setEditing(mechanic);
     setFormOpen(true);
   }
 
   async function handleSubmit(payload) {
-    if (editing) {
-      await request(`${API}?action=mechanics`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, mechanic_id: editing.id, user_id: editing.userId ?? payload.user_id }),
-      });
-    } else {
-      await request(`${API}?action=mechanics`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    }
+    await request(`${API}?action=mechanics`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, mechanic_id: editing.id }),
+    });
     await getMechanics();
   }
 
@@ -174,10 +154,6 @@ export function MechanicsPage() {
                 {mechanics.length} mechanic{mechanics.length === 1 ? "" : "s"} · {activeCount} active
               </CardDescription>
             </div>
-            <Button onClick={openAdd} className="gap-1.5">
-              <Plus className="w-4 h-4" />
-              Add Mechanic
-            </Button>
           </CardHeader>
 
           <CardContent>
@@ -272,7 +248,7 @@ export function MechanicsPage() {
                 {!loading && mechanics.length === 0 && !loadError && (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-10">
-                      No mechanics yet. Add one to start assigning jobs.
+                      No mechanics yet. Register a mechanic in Staff to start assigning jobs.
                     </TableCell>
                   </TableRow>
                 )}
@@ -292,7 +268,6 @@ export function MechanicsPage() {
           open={formOpen}
           onOpenChange={setFormOpen}
           mechanic={editing}
-          takenUserIds={takenUserIds}
           onSubmit={handleSubmit}
         />
 

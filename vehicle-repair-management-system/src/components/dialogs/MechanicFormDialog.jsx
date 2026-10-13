@@ -19,10 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const API = "http://localhost:8000/api.php";
-const MECHANIC_ROLE_ID = 3;
-
-export const MECHANIC_STATUSES = [
+const MECHANIC_STATUSES = [
   { value: "ACTIVE", label: "Active" },
   { value: "INACTIVE", label: "Inactive" },
 ];
@@ -36,67 +33,25 @@ function Field({ label, children }) {
   );
 }
 
-// Create + edit in one modal. A mechanic is a `users` row with role 3, so
-// "add" means picking an existing mechanic-role account that isn't on the
-// roster yet (POST needs user_id). In edit mode the account is locked.
-//
 // onSubmit receives the payload shaped for the API and must throw on
 // failure so the message shows inside the modal.
-export function MechanicFormDialog({ open, onOpenChange, mechanic, takenUserIds = [], onSubmit }) {
-  const isEdit = !!mechanic;
-
-  const [users, setUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [userId, setUserId] = useState("");
+export function MechanicFormDialog({ open, onOpenChange, mechanic, onSubmit }) {
   const [specialization, setSpecialization] = useState("");
   const [dateHired, setDateHired] = useState("");
   const [status, setStatus] = useState("ACTIVE");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
-  // Reset whenever the modal opens (or switches between add / edit).
+  // Reset whenever the modal opens or switches to another mechanic.
   useEffect(() => {
     if (!open) return;
     setError(null);
-    setUserId(mechanic?.userId != null ? String(mechanic.userId) : "");
     setSpecialization(mechanic?.specialization ?? "");
     setDateHired(mechanic?.dateHired ? String(mechanic.dateHired).slice(0, 10) : "");
     setStatus(mechanic?.status ?? "ACTIVE");
   }, [open, mechanic]);
 
-  // Add mode: load accounts that can become mechanics.
-  useEffect(() => {
-    if (!open || isEdit) return;
-    let cancelled = false;
-    setLoadingUsers(true);
-    fetch(`${API}?action=users`, { credentials: "include" })
-      .then((res) => res.json())
-      .then((json) => {
-        if (cancelled) return;
-        const rows = json.data ?? json.users ?? [];
-        setUsers(Array.isArray(rows) ? rows : []);
-      })
-      .catch(() => !cancelled && setError("Failed to load staff accounts"))
-      .finally(() => !cancelled && setLoadingUsers(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [open, isEdit]);
-
-  const eligibleUsers = users.filter(
-    (u) =>
-      Number(u.role_id) === MECHANIC_ROLE_ID &&
-      u.status !== "INACTIVE" &&
-      !takenUserIds.includes(Number(u.user_id))
-  );
-
-  const userItems = eligibleUsers.map((u) => ({
-    value: String(u.user_id),
-    label: u.full_name,
-  }));
-
-  const canSubmit =
-    !submitting && (isEdit || userId) && specialization.trim() && dateHired;
+  const canSubmit = !submitting && specialization.trim() && dateHired;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -105,7 +60,6 @@ export function MechanicFormDialog({ open, onOpenChange, mechanic, takenUserIds 
     setError(null);
     try {
       await onSubmit({
-        user_id: Number(userId),
         specialization: specialization.trim(),
         date_hired: dateHired,
         status,
@@ -122,45 +76,15 @@ export function MechanicFormDialog({ open, onOpenChange, mechanic, takenUserIds 
     <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Mechanic" : "Add Mechanic"}</DialogTitle>
+          <DialogTitle>Edit Mechanic</DialogTitle>
           <DialogDescription>
-            {isEdit
-              ? "Update this mechanic's specialization, hire date, or status."
-              : "Add an existing mechanic account to the workshop roster."}
+            Update this mechanic's specialization, hire date, or status.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Field label="Staff account">
-            {isEdit ? (
-              <Input value={mechanic.name} disabled />
-            ) : (
-              <Select
-                items={userItems}
-                value={userId || null}
-                onValueChange={(v) => setUserId(v ?? "")}
-                disabled={loadingUsers || submitting}
-              >
-                <SelectTrigger className="w-full bg-background">
-                  <SelectValue
-                    placeholder={loadingUsers ? "Loading accounts..." : "Select a mechanic account..."}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {eligibleUsers.map((u) => (
-                    <SelectItem key={u.user_id} value={String(u.user_id)}>
-                      {u.full_name}
-                      {u.email && <span className="text-muted-foreground"> · {u.email}</span>}
-                    </SelectItem>
-                  ))}
-                  {!loadingUsers && eligibleUsers.length === 0 && (
-                    <p className="p-2 text-sm text-muted-foreground">
-                      No unassigned mechanic accounts. Register one in Staff first.
-                    </p>
-                  )}
-                </SelectContent>
-              </Select>
-            )}
+            <Input value={mechanic?.name ?? ""} disabled />
           </Field>
 
           <Field label="Specialization">
@@ -213,7 +137,7 @@ export function MechanicFormDialog({ open, onOpenChange, mechanic, takenUserIds 
               Cancel
             </Button>
             <Button type="submit" disabled={!canSubmit}>
-              {submitting ? "Saving..." : isEdit ? "Save changes" : "Add Mechanic"}
+              {submitting ? "Saving..." : "Save changes"}
             </Button>
           </DialogFooter>
         </form>

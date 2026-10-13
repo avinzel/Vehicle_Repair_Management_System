@@ -247,6 +247,34 @@ class ServiceController {
             return;
         }
 
+        if (array_key_exists('status', $input)) {
+            $status = strtoupper(trim((string)$input['status']));
+            if (
+                $status !== 'ACTIVE' ||
+                array_key_exists('service_name', $input) ||
+                array_key_exists('description', $input) ||
+                array_key_exists('standard_labor_cost', $input)
+            ) {
+                http_response_code(400);
+                echo json_encode(["status" => "error", "error" => "Use status ACTIVE without service fields to reactivate a service."]);
+                return;
+            }
+
+            $result = self::$model->reactivateService((int)$serviceId);
+            if (is_array($result)) {
+                error_log($result['error'] ?? 'Service reactivation failed');
+                http_response_code(500);
+                echo json_encode(["status" => "error", "error" => "Failed to reactivate service"]);
+            } elseif ($result > 0) {
+                http_response_code(200);
+                echo json_encode(["status" => "success", "message" => "Service reactivated successfully"]);
+            } else {
+                http_response_code(404);
+                echo json_encode(["status" => "error", "error" => "Inactive service not found"]);
+            }
+            return;
+        }
+
         $validated = $this->validateServiceInput($input);
         if (isset($validated['error'])) {
             http_response_code(400);
