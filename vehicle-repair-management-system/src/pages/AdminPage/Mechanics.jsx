@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MechanicFormDialog } from "@/components/dialogs/MechanicFormDialog";
 import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
+import { showToast } from "@/lib/notifications";
 
 const API = "http://localhost:8000/api.php";
 
@@ -106,12 +107,18 @@ export function MechanicsPage() {
   }
 
   async function handleSubmit(payload) {
-    await request(`${API}?action=mechanics`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, mechanic_id: editing.id }),
-    });
-    await getMechanics();
+    try {
+      await request(`${API}?action=mechanics`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, mechanic_id: editing.id }),
+      });
+      await getMechanics();
+      showToast("success", "Mechanic updated", "The mechanic was updated successfully.");
+    } catch (err) {
+      showToast("error", "Could not update mechanic", err.message);
+      throw err;
+    }
   }
 
   async function handleDelete() {
@@ -125,8 +132,11 @@ export function MechanicsPage() {
       });
       setDeleting(null);
       await getMechanics();
+      showToast("success", "Mechanic removed", "The mechanic was removed successfully.");
     } catch (err) {
-      setDeleteError(err.message || "Failed to remove mechanic");
+      const message = err.message || "Failed to remove mechanic";
+      setDeleteError(message);
+      showToast("error", "Could not remove mechanic", message);
     } finally {
       setDeleteBusy(false);
     }

@@ -12,6 +12,7 @@ import { PartFormDialog, unitLabel } from "@/components/dialogs/PartFormDialog";
 import { RestockPartDialog } from "@/components/dialogs/RestockPartDialog";
 import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
 import { normalizePart } from "@/utils/normalizeOrder";
+import { showToast } from "@/lib/notifications";
 
 const API = "http://localhost:8000/api.php";
 
@@ -95,14 +96,6 @@ export function PartsInventory() {
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
-  const [actionSuccess, setActionSuccess] = useState(null);
-
-  useEffect(() => {
-    if (!actionSuccess) return undefined;
-
-    const timeoutId = window.setTimeout(() => setActionSuccess(null), 5000);
-    return () => window.clearTimeout(timeoutId);
-  }, [actionSuccess]);
 
   const getParts = useCallback(async () => {
     const requestId = ++partsRequestId.current;
@@ -152,43 +145,53 @@ export function PartsInventory() {
 
   function openAdd() {
     setEditing(null);
-    setActionSuccess(null);
     setFormOpen(true);
   }
 
   function openEdit(part) {
     setEditing(part);
-    setActionSuccess(null);
     setFormOpen(true);
   }
 
   async function handleSubmit(payload) {
     setLoadError(null);
-    if (editing) {
-      await request(`${API}?action=parts`, {
-        method: "PUT",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ ...payload, part_id: editing.part_id }),
-      });
-    } else {
-      await request(`${API}?action=parts`, {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify(payload),
-      });
+    const action = editing ? "updated" : "added";
+    try {
+      if (editing) {
+        await request(`${API}?action=parts`, {
+          method: "PUT",
+          headers: JSON_HEADERS,
+          body: JSON.stringify({ ...payload, part_id: editing.part_id }),
+        });
+      } else {
+        await request(`${API}?action=parts`, {
+          method: "POST",
+          headers: JSON_HEADERS,
+          body: JSON.stringify(payload),
+        });
+      }
+      await getParts();
+      showToast("success", `Part ${action}`, `The part was ${action} successfully.`);
+    } catch (err) {
+      showToast("error", `Could not ${editing ? "update" : "add"} part`, err.message);
+      throw err;
     }
-    await getParts();
-    setActionSuccess(`Part ${editing ? "updated" : "added"} successfully.`);
   }
 
   async function handleRestock(quantity) {
     setLoadError(null);
-    await request(`${API}?action=parts&post-method=restock`, {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify({ part_id: restocking.part_id, quantity }),
-    });
-    await getParts();
+    try {
+      await request(`${API}?action=parts&post-method=restock`, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ part_id: restocking.part_id, quantity }),
+      });
+      await getParts();
+      showToast("success", "Part restocked", `${restocking.part_name} was restocked successfully.`);
+    } catch (err) {
+      showToast("error", "Could not restock part", err.message);
+      throw err;
+    }
   }
 
   async function handleDelete() {
@@ -210,9 +213,11 @@ export function PartsInventory() {
       setParts((currentParts) =>
         currentParts.filter((part) => part.part_id !== deletedPart.part_id)
       );
-      setActionSuccess(`${deletedPart.part_name} was discontinued successfully.`);
+      showToast("success", "Part discontinued", `${deletedPart.part_name} was discontinued successfully.`);
     } catch (err) {
-      setDeleteError(err.message || "Failed to remove part");
+      const message = err.message || "Failed to remove part";
+      setDeleteError(message);
+      showToast("error", "Could not discontinue part", message);
     } finally {
       setDeleteBusy(false);
     }
@@ -221,7 +226,6 @@ export function PartsInventory() {
   async function handleReactivate(part) {
     setReactivatingId(part.part_id);
     setLoadError(null);
-    setActionSuccess(null);
     try {
       await request(`${API}?action=parts`, {
         method: "PUT",
@@ -229,7 +233,7 @@ export function PartsInventory() {
         body: JSON.stringify({ part_id: part.part_id, status: "ACTIVE" }),
       });
       await getParts();
-      setActionSuccess(`${part.part_name} was activated successfully.`);
+      showToast("success", "Part reactivated", `${part.part_name} was activated successfully.`);
       try {
         const activeJson = await request(`${API}?action=parts&status=ACTIVE`);
         const activeParts = Array.isArray(activeJson.data) ? activeJson.data.map(normalizePart) : [];
@@ -239,9 +243,12 @@ export function PartsInventory() {
       } catch (err) {
         console.error("Failed to refresh active parts stock count:", err);
         setLoadError("The part was activated, but the stock summary could not be refreshed.");
+        showToast("error", "Stock summary could not refresh", "The part was activated, but the stock summary could not be refreshed.");
       }
     } catch (err) {
-      setLoadError(err.message || "Failed to activate part");
+      const message = err.message || "Failed to activate part";
+      setLoadError(message);
+      showToast("error", "Could not reactivate part", message);
     } finally {
       setReactivatingId(null);
     }
@@ -303,12 +310,6 @@ export function PartsInventory() {
           </CardHeader>
 
           <CardContent>
-            {actionSuccess && (
-              <p role="status" className="mb-4 text-sm text-green-800 bg-green-100 border border-green-200 rounded-lg p-3">
-                {actionSuccess}
-              </p>
-            )}
-
             {loadError && (
               <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
                 {loadError}
@@ -386,7 +387,6 @@ export function PartsInventory() {
                                 className="hover:text-destructive"
                                 onClick={() => {
                                   setDeleteError(null);
-                                  setActionSuccess(null);
                                   setDeleting(part);
                                 }}
                               >

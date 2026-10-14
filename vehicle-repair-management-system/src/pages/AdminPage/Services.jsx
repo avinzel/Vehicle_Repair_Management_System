@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ServiceFormDialog } from "@/components/dialogs/ServiceFormDialog";
 import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
+import { showToast } from "@/lib/notifications";
 
 const API = "http://localhost:8000/api.php";
 const STATUS_TABS = ["All", "Active", "Inactive"];
@@ -97,20 +98,27 @@ export function Services() {
   }
 
   async function handleSubmit(payload) {
-    if (editing) {
-      await request(`${API}?action=services`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, service_catalog_id: editing.id }),
-      });
-    } else {
-      await request(`${API}?action=services`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    const action = editing ? "updated" : "created";
+    try {
+      if (editing) {
+        await request(`${API}?action=services`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, service_catalog_id: editing.id }),
+        });
+      } else {
+        await request(`${API}?action=services`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      await getServices();
+      showToast("success", `Service ${action}`, `The service was ${action} successfully.`);
+    } catch (err) {
+      showToast("error", `Could not ${editing ? "update" : "create"} service`, err.message);
+      throw err;
     }
-    await getServices();
   }
 
   async function handleDelete() {
@@ -124,8 +132,11 @@ export function Services() {
       });
       setDeleting(null);
       await getServices();
+      showToast("success", "Service deleted", "The service was deleted successfully.");
     } catch (err) {
-      setDeleteError(err.message || "Failed to delete service");
+      const message = err.message || "Failed to delete service";
+      setDeleteError(message);
+      showToast("error", "Could not delete service", message);
     } finally {
       setDeleteBusy(false);
     }
@@ -143,8 +154,11 @@ export function Services() {
       setServices((current) =>
         current.map((item) => item.id === service.id ? { ...item, status: "ACTIVE" } : item)
       );
+      showToast("success", "Service reactivated", `${service.name} is active again.`);
     } catch (err) {
-      setReactivateError(err.message || "Failed to reactivate service");
+      const message = err.message || "Failed to reactivate service";
+      setReactivateError(message);
+      showToast("error", "Could not reactivate service", message);
     } finally {
       setReactivatingId(null);
     }

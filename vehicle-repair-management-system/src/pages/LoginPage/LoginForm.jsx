@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { Wrench, Eye, EyeOff } from "lucide-react";
 import { getFormKeys } from "../../utils/getFormKeys";
 import cover from "../../assets/login-cover.jpg";
+import { showToast } from "@/lib/notifications";
 
 
 const COVER_IMAGE = cover;
@@ -33,7 +34,9 @@ export function LoginForm({ authenticateUser }) {
             const data = await response.json().catch(() => ({}));
 
             if (!response.ok) {
-                setError(data.error ?? "Unable to sign in. Please try again.");
+                const message = data.error ?? "Unable to sign in. Please try again.";
+                setError(message);
+                showToast("error", "Sign-in failed", message);
                 return;
             }
 
@@ -45,10 +48,13 @@ export function LoginForm({ authenticateUser }) {
                 3: "/mechanic",
             };
 
+            showToast("success", "Signed in", "You have signed in successfully.");
             navigate(roleRoutes[data.role_id] ?? "/", { replace: true });
         } catch (err) {
             console.error("Login failed:", err);
-            setError("Can't reach the server. Check your connection and try again.");
+            const message = "Can't reach the server. Check your connection and try again.";
+            setError(message);
+            showToast("error", "Sign-in failed", err.message || message);
         } finally {
             setSubmitting(false);
         }

@@ -10,6 +10,7 @@ import { RepairOrderFormDialog } from "@/components/dialogs/RepairOrderFormDialo
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
 import { normalizeOrderDetail } from "@/utils/normalizeOrder";
+import { showToast } from "@/lib/notifications";
 
 const API = "http://localhost:8000/api.php";
 
@@ -145,12 +146,18 @@ export function ActiveRepairOrder() {
   }
 
   async function handleEditSubmit(changes) {
-    await request(`${API}?action=repair-orders&put-method=update-order`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ order_id: selectedOrder.rawId, ...changes }),
-    });
-    await handleUpdateOrder(selectedOrder.id); // refetch lists + this order's details
+    try {
+      await request(`${API}?action=repair-orders&put-method=update-order`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: selectedOrder.rawId, ...changes }),
+      });
+      await handleUpdateOrder(selectedOrder.id); // refetch lists + this order's details
+      showToast("success", "Repair order updated", "The repair order was updated successfully.");
+    } catch (err) {
+      showToast("error", "Could not update repair order", err.message);
+      throw err;
+    }
   }
 
   async function handleCancelConfirm() {
@@ -163,8 +170,11 @@ export function ActiveRepairOrder() {
       setCancelOpen(false);
       // Order drops off the active list, so selectedOrder becomes null and the drawer closes.
       await handleUpdateOrder(selectedOrder.id);
+      showToast("success", "Repair order cancelled", "The repair order was cancelled.");
     } catch (err) {
-      setCancelError(err.message || "Failed to cancel the order.");
+      const message = err.message || "Failed to cancel the order.";
+      setCancelError(message);
+      showToast("error", "Could not cancel repair order", message);
     } finally {
       setCancelling(false);
     }

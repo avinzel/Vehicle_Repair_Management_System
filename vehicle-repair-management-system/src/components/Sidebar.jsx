@@ -42,6 +42,7 @@ import {
     CollapsibleContent,
 } from '@/components/ui/collapsible';
 import { useNavigate } from 'react-router';
+import { showToast } from "@/lib/notifications";
 
 // Nav links per role. Add/remove items here as the system's role-based
 // access rules change, rather than editing the render logic below.
@@ -240,16 +241,20 @@ export function AppSidebar({
     }
 
     async function logout() {
-        const response = await fetch("http://localhost:8000/api.php?action=logout", {
-            credentials: "include"
-        });
-        const data = await response.json();
+        try {
+            const response = await fetch("http://localhost:8000/api.php?action=logout", {
+                credentials: "include"
+            });
+            const data = await response.json().catch(() => ({}));
 
-        if (!response.ok) {
-            alert(data.error);//taost notification
-        } else {
+            if (!response.ok) {
+                throw new Error(data.error ?? data.message ?? `Request failed (HTTP ${response.status})`);
+            }
             setUser(null)
+            showToast("success", "Signed out", "You have signed out successfully.");
             navigate("/", { replace: true });
+        } catch (err) {
+            showToast("error", "Sign-out failed", err.message || "Unable to sign out. Please try again.");
         }
     }
 

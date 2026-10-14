@@ -31,6 +31,7 @@ import { MechanicsTab } from "./pages/AdminPage/reports/MechanicsTab";
 import { PartsUsageTab } from "./pages/AdminPage/reports/PartsUsage";
 import { MonthlyRevenueTab } from "./pages/AdminPage/reports/MonthlyRevenue";
 import { PartsByVehicleTab } from "./pages/AdminPage/reports/PartsByVehicle";
+import { Toaster } from "./components/ui/toast";
 
 function App() {
   const [user, setUser] = useState(null)
@@ -60,6 +61,7 @@ function App() {
   }
   return (
     <>
+      <Toaster>
       <Routes>
 
         <Route path="/" element={
@@ -140,6 +142,7 @@ function App() {
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </Toaster>
     </>
   )
 }

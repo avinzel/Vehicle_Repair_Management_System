@@ -9,6 +9,7 @@ import { getMyPositionOnOrder } from "@/components/MechanicOrderStages";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { OrderFilterBar, matchesSearch } from "@/components/OrderSearchFilter";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
+import { showToast } from "@/lib/notifications";
 import { normalizeOrderDetail, normalizeLoggedPart } from "@/utils/normalizeOrder";
 
 const API = "http://localhost:8000/api.php";
@@ -184,9 +185,12 @@ export function AssignedOrders() {
 
       setCompleteOrderId(null);
       getTableData(); // order leaves the actionable list, which also closes the drawer
+      showToast("success", "Repair marked complete", "The repair order is ready for invoicing.");
     } catch (err) {
       console.error("Failed to mark job complete:", err);
-      setCompleteError(err.message || "Something went wrong. Please try again.");
+      const message = err.message || "Something went wrong. Please try again.";
+      setCompleteError(message);
+      showToast("error", "Could not complete repair", message);
     } finally {
       setCompleting(false);
     }

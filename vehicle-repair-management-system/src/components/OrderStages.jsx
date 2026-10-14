@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
+import { showToast } from "@/lib/notifications";
 import { Badge } from "@/components/ui/badge";
 import { Info, Check, ChevronsUpDown, X } from "lucide-react";
 import { MechanicChip } from "@/components/MechanicChip";
@@ -155,11 +156,16 @@ function AssignDiagnosticianStage({ order, onUpdateOrder }) {
       if (json.status === "success") {
         // Parent refetches everything; the updates object is ignored.
         onUpdateOrder(order.id, {});
+        showToast("success", "Diagnostician assigned", "The diagnostician was assigned successfully.");
       } else {
-        setError(json.error ?? "Failed to assign diagnostician");
+        const message = json.error ?? "Failed to assign diagnostician";
+        setError(message);
+        showToast("error", "Could not assign diagnostician", message);
       }
     } catch (err) {
-      setError("Failed to assign diagnostician");
+      const message = err.message || "Failed to assign diagnostician";
+      setError(message);
+      showToast("error", "Could not assign diagnostician", message);
     } finally {
       setAssigning(false);
     }
@@ -352,7 +358,9 @@ function AssignMechanicsStage({ order, onUpdateOrder, inProgress = false }) {
         // Drop rows that already succeeded so a retry doesn't re-send them.
         setRows((prev) => prev.filter((r) => r.rowId !== row.rowId));
       } catch (err) {
-        setSubmitError(`Could not assign ${mechanic?.full_name ?? "mechanic"}: ${err.message}`);
+        const message = `Could not assign ${mechanic?.full_name ?? "mechanic"}: ${err.message}`;
+        setSubmitError(message);
+        showToast("error", "Could not assign mechanic", message);
         setSubmitting(false);
         // Earlier rows may have succeeded (order can already be In Progress).
         onUpdateOrder(order.id, {});
@@ -362,6 +370,7 @@ function AssignMechanicsStage({ order, onUpdateOrder, inProgress = false }) {
 
     setSubmitting(false);
     onUpdateOrder(order.id, {});
+    showToast("success", "Mechanics assigned", "The repair team was assigned successfully.");
   }
 
   const serviceNames = getServiceNames(order);
@@ -719,8 +728,11 @@ function ReleaseVehicleStage({ order, onUpdateOrder }) {
       }
       // Parent refetches everything; the updates object is ignored.
       onUpdateOrder(order.id, {});
+      showToast("success", "Vehicle released", "The vehicle was released successfully.");
     } catch (err) {
-      setError(err.message || "Failed to release vehicle");
+      const message = err.message || "Failed to release vehicle";
+      setError(message);
+      showToast("error", "Could not release vehicle", message);
     } finally {
       setReleasing(false);
     }

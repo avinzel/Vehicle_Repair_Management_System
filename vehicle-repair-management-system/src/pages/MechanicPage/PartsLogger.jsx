@@ -22,6 +22,7 @@ import {
 import { normalizePart, normalizeLoggedPart } from "@/utils/normalizeOrder";
 import { OrderFilterBar, matchesSearch } from "@/components/OrderSearchFilter";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
+import { showToast } from "@/lib/notifications";
 
 const API = "http://localhost:8000/api.php";
 
@@ -244,12 +245,17 @@ export function PartsLogger() {
         // order to AWAITING_PARTS), so refetch everything instead of guessing.
         await Promise.all([fetchInventory(), fetchOrderParts(selectedOrder.rawId), fetchLoggedParts(selectedOrder.rawId), getTableData()]);
         resetPartSelection();
+        showToast("success", "Part logged", `${quantity} ${selectedPart.part_name} logged to the repair order.`);
       } else {
-        setActionError(json.error ?? json.message ?? `Failed to log part (HTTP ${response.status})`);
+        const message = json.error ?? json.message ?? `Failed to log part (HTTP ${response.status})`;
+        setActionError(message);
+        showToast("error", "Could not log part", message);
       }
     } catch (err) {
       console.error("Failed to log part:", err);
-      setActionError("Something went wrong while logging the part. Please try again.");
+      const message = err.message || "Something went wrong while logging the part. Please try again.";
+      setActionError(message);
+      showToast("error", "Could not log part", message);
     } finally {
       setSubmitting(false);
     }
@@ -274,12 +280,17 @@ export function PartsLogger() {
 
       if (response.ok && json.status === "success") {
         await Promise.all([fetchInventory(), fetchOrderParts(selectedOrder.rawId), fetchLoggedParts(selectedOrder.rawId), getTableData()]);
+        showToast("success", "Logged part cancelled", "The logged part was cancelled successfully.");
       } else {
-        setActionError(json.error ?? json.message ?? `Failed to cancel part (HTTP ${response.status})`);
+        const message = json.error ?? json.message ?? `Failed to cancel part (HTTP ${response.status})`;
+        setActionError(message);
+        showToast("error", "Could not cancel logged part", message);
       }
     } catch (err) {
       console.error("Failed to cancel part:", err);
-      setActionError("Something went wrong while cancelling the part. Please try again.");
+      const message = err.message || "Something went wrong while cancelling the part. Please try again.";
+      setActionError(message);
+      showToast("error", "Could not cancel logged part", message);
     } finally {
       setConfirmingCancelId(null);
     }

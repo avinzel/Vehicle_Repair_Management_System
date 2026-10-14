@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { RepairOrderFormDialog } from "@/components/dialogs/RepairOrderFormDialog";
 import { OrderFilterBar } from "@/components/OrderSearchFilter";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
+import { showToast } from "@/lib/notifications";
 
 const API = "http://localhost:8000/api.php";
 
@@ -141,12 +142,18 @@ export function OrdersPage() {
   }
 
   async function handleSubmit(payload) {
-    await request(`${API}?action=repair-orders&put-method=update-order`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await getOrders(search);
+    try {
+      await request(`${API}?action=repair-orders&put-method=update-order`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      await getOrders(search);
+      showToast("success", "Repair order updated", "The repair order was updated successfully.");
+    } catch (err) {
+      showToast("error", "Could not update repair order", err.message);
+      throw err;
+    }
   }
 
   async function handleCancel() {
@@ -158,8 +165,11 @@ export function OrdersPage() {
       });
       setCancelling(null);
       await getOrders(search);
+      showToast("success", "Repair order cancelled", "The repair order was cancelled.");
     } catch (err) {
-      setCancelError(err.message || "Failed to cancel repair order");
+      const message = err.message || "Failed to cancel repair order";
+      setCancelError(message);
+      showToast("error", "Could not cancel repair order", message);
     } finally {
       setCancelBusy(false);
     }

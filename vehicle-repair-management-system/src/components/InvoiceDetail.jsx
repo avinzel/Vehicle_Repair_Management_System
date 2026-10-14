@@ -5,6 +5,7 @@ import { Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { normalizeInvoiceDetail } from "@/utils/normalizeOrder";
 import { downloadInvoicePdf } from "@/utils/downloadInvoicePdf";
+import { showToast } from "@/lib/notifications";
 
 const API = "http://localhost:8000/api.php";
 
@@ -165,8 +166,16 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
       // Parent refreshes all order lists; the status effect above then
       // re-pulls this invoice.
       await onUpdateOrder(order.id);
+      const title = url.includes("post-method=payment")
+        ? "Payment recorded"
+        : url.includes("post-method=release-vehicle")
+          ? "Vehicle released"
+          : "Invoice generated";
+      showToast("success", title, `${title} successfully.`);
     } catch (err) {
-      setError(err.message || "Something went wrong. Please try again.");
+      const message = err.message || "Something went wrong. Please try again.";
+      setError(message);
+      showToast("error", "Invoice action failed", message);
     } finally {
       setSubmitting(false);
     }
@@ -174,7 +183,9 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
 
   function handleGenerateInvoice() {
     if (!inputsValid) {
-      setError("Tax rate and discount must be non-negative numbers.");
+      const message = "Tax rate and discount must be non-negative numbers.";
+      setError(message);
+      showToast("error", "Invalid invoice values", message);
       return;
     }
     post(`${API}?action=invoices`, {
@@ -202,8 +213,11 @@ export function InvoiceDetail({ order, onUpdateOrder, onClose }) {
     setError(null);
     try {
       await downloadInvoicePdf(rawId);
+      showToast("success", "Invoice downloaded", "The invoice PDF was downloaded.");
     } catch (err) {
-      setError(err.message || "Could not download invoice PDF. Please try again.");
+      const message = err.message || "Could not download invoice PDF. Please try again.";
+      setError(message);
+      showToast("error", "Could not download invoice", message);
     } finally {
       setDownloading(false);
     }

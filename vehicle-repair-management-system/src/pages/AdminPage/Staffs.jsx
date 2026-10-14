@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StaffFormDialog } from "@/components/dialogs/StaffFormDialog";
 import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
+import { showToast } from "@/lib/notifications";
 
 const API = "http://localhost:8000/api.php";
 
@@ -139,20 +140,27 @@ export function Staffs() {
   }
 
   async function handleSubmit(payload) {
-    if (editing) {
-      await request(`${API}?action=users`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, user_id: editing.id }),
-      });
-    } else {
-      await request(`${API}?action=register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    const action = editing ? "updated" : "created";
+    try {
+      if (editing) {
+        await request(`${API}?action=users`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, user_id: editing.id }),
+        });
+      } else {
+        await request(`${API}?action=register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      await getStaff();
+      showToast("success", `Staff member ${action}`, `The staff member was ${action} successfully.`);
+    } catch (err) {
+      showToast("error", `Could not ${editing ? "update" : "create"} staff member`, err.message);
+      throw err;
     }
-    await getStaff();
   }
 
   async function handleDelete() {
@@ -166,8 +174,11 @@ export function Staffs() {
       });
       setDeleting(null);
       await getStaff();
+      showToast("success", "Staff member removed", "The staff member was removed successfully.");
     } catch (err) {
-      setDeleteError(err.message || "Failed to remove staff member");
+      const message = err.message || "Failed to remove staff member";
+      setDeleteError(message);
+      showToast("error", "Could not remove staff member", message);
     } finally {
       setDeleteBusy(false);
     }

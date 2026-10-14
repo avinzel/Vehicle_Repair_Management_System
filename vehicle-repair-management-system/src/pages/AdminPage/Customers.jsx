@@ -11,6 +11,7 @@ import { CustomerFormDialog } from "@/components/dialogs/CustomerFormDialog";
 import { FilterBar } from "@/components/OrderSearchFilter";
 import { DetailDrawer } from "@/components/DetailDrawer";
 import { CustomerDetail } from "@/components/CustomerDetail";
+import { showToast } from "@/lib/notifications";
 
 const API = "http://localhost:8000/api.php";
 
@@ -126,12 +127,18 @@ export function CustomersPage() {
   }
 
   async function handleSubmit(payload) {
-    await request(`${API}?action=customers&customer_id=${encodeURIComponent(editing.id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await getCustomers(search);
+    try {
+      await request(`${API}?action=customers&customer_id=${encodeURIComponent(editing.id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      await getCustomers(search);
+      showToast("success", "Customer updated", "The customer record was updated successfully.");
+    } catch (err) {
+      showToast("error", "Could not update customer", err.message);
+      throw err;
+    }
   }
 
   async function handleDeactivate() {
@@ -145,9 +152,12 @@ export function CustomersPage() {
       if (selectedCustomer?.id === deactivating.id) setSelectedCustomer(null);
       setDeactivating(null);
       await getCustomers(search);
+      showToast("success", "Customer deactivated", "The customer was deactivated successfully.");
     } catch (err) {
       // 409 when the customer still has a repair order that isn't FULFILLED/CANCELLED
-      setDeleteError(err.message || "Failed to deactivate customer");
+      const message = err.message || "Failed to deactivate customer";
+      setDeleteError(message);
+      showToast("error", "Could not deactivate customer", message);
     } finally {
       setDeleteBusy(false);
     }

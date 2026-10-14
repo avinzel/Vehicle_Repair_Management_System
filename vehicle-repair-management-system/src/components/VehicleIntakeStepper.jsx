@@ -16,6 +16,7 @@ import { VehicleForm, DEFAULT_VEHICLE_VALUES } from "@/components/forms/VehicleF
 import { RepairOrderForm, DEFAULT_REPAIR_ORDER_VALUES } from "@/components/forms/RepairOrderForm";
 
 import { rememberVehicle } from "@/utils/vehicleLookup";
+import { showToast } from "@/lib/notifications";
 
 import { useState, useRef } from "react";
 
@@ -134,17 +135,18 @@ export function VehicleIntakeStepper({ getTableData, getCardData, intakeContext 
     const valid = await orderRef.current?.validate();
     if (!valid) return;
 
-    const response = await fetch("http://localhost:8000/api.php?action=repair-orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-      credentials: "include",
-    });
+    try {
+      const response = await fetch("http://localhost:8000/api.php?action=repair-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+        credentials: "include",
+      });
 
-    let data = await response.json();
-    if (!response.ok) {
-      alert(data["error"]);
-    } else {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error ?? data.message ?? `Request failed (HTTP ${response.status})`);
+      }
       // Snapshot before the form is reset. Adjust field names to match your forms.
       const c = formData.customer;
       const v = formData.vehicle;
@@ -168,6 +170,9 @@ export function VehicleIntakeStepper({ getTableData, getCardData, intakeContext 
       setCurrent(1);
       if (typeof getCardData === "function") await getCardData();
       if (typeof getTableData === "function") await getTableData();
+      showToast("success", "Repair order created", "The new repair order was created successfully.");
+    } catch (err) {
+      showToast("error", "Could not create repair order", err.message || "Please try again.");
     }
   };
 

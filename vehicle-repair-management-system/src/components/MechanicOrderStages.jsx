@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { showToast } from "@/lib/notifications";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Info, X, Check, ChevronsUpDown } from "lucide-react";
@@ -180,9 +181,11 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
         diagnosticNotes: notes.trim(),
         status: "PENDING_MECHANICS",
       });
+      showToast("success", "Diagnosis submitted", "The diagnosis and required services were saved.");
     } catch (err) {
       console.error("Failed to submit diagnosis:", err);
       setSubmitError(err.message || "Something went wrong. Please try again.");
+      showToast("error", "Could not submit diagnosis", err.message || "Please try again.");
     } finally {
       setSubmitting(false);
     }
