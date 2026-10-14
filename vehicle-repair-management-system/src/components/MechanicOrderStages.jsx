@@ -4,14 +4,20 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Info, X } from "lucide-react";
+import { Info, X, Check, ChevronsUpDown } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { formatStatusLabel } from "@/utils/formatStatusLabel";
 
 // getServices is a real endpoint (GET action=services ->
@@ -43,6 +49,7 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
   const [hydrated, setHydrated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [comboboxOpen, setComboboxOpen] = useState(false);
 
   // Ids of services already saved on this order. Only needed in update mode.
   // null = still loading. The assigned-orders SP doesn't return services, and
@@ -204,29 +211,52 @@ function DiagnosisFormStage({ order, onUpdateOrder, isUpdate }) {
         <h3 className="text-xs font-semibold text-muted-foreground tracking-wide ">
           Required Services
         </h3>
-        <Select value="" onValueChange={addService} disabled={formLoading || submitting}>
-          <SelectTrigger className="w-full bg-background">
-            <SelectValue
-              placeholder={
-                formLoading
-                  ? "Loading services..."
-                  : selectedServices.length > 0
-                    ? `${selectedServices.length} service${selectedServices.length === 1 ? "" : "s"} selected`
-                    : "Select applicable services..."
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {availableServices.map((service) => (
-              <SelectItem key={service.id} value={String(service.id)}>
-                {service.name}
-              </SelectItem>
-            ))}
-            {!formLoading && availableServices.length === 0 && (
-              <p className="p-2 text-sm text-muted-foreground">All services added.</p>
-            )}
-          </SelectContent>
-        </Select>
+        <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              role="combobox"
+              aria-expanded={comboboxOpen}
+              disabled={formLoading || submitting}
+              className="w-full justify-between font-normal bg-background"
+            >
+              {formLoading
+                ? "Loading services..."
+                : selectedServices.length > 0
+                  ? `${selectedServices.length} service${selectedServices.length === 1 ? "" : "s"} selected`
+                  : "Select applicable services..."}
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            <Command>
+              <CommandInput placeholder="Search services..." />
+              <CommandList>
+                <CommandEmpty>
+                  {availableServices.length === 0 && catalog.length > 0
+                    ? "All services added."
+                    : "No service found."}
+                </CommandEmpty>
+                <CommandGroup>
+                  {availableServices.map((service) => (
+                    <CommandItem
+                      key={service.id}
+                      value={service.name}
+                      onSelect={() => addService(String(service.id))}
+                    >
+                      <Check className="mr-2 h-4 w-4 opacity-0" />
+                      <span className="flex-1">{service.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ₱{service.laborCost.toLocaleString("en-PH")}
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
 
         {selectedServices.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
