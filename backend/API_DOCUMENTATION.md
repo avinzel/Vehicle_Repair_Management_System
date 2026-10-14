@@ -297,6 +297,7 @@ Also accepted:
 - Optional query parameter:
   - `mechanic_id`
 - If no `mechanic_id` is provided, the backend attempts to infer the current logged-in user’s mechanic record.
+- Each order includes a `services` array with the assigned services' `service_catalog_id`, `service_name`, and `labor_cost`.
 
 ### 6.10 Create vehicle intake
 

@@ -17,7 +17,7 @@ function formatCurrency(amount) {
 // used by the Mechanic view to preview diagnostic notes on the card.
 // footerNote: optional small text line under notesPreview — used by the
 // Mechanic view for the "N parts logged · N mechanics on job" summary.
-export function OrderCard({ order, isSelected = false, onClick, onMenuClick, roleBadge, notesPreview, footerNote }) {
+export function OrderCard({ order, isSelected = false, onClick, onMenuClick, roleBadge, notesPreview, footerNote, showServices = false }) {
     const amountLabel = formatCurrency(order.amount);
     const team = order.team ?? [];
 
@@ -72,6 +72,22 @@ export function OrderCard({ order, isSelected = false, onClick, onMenuClick, rol
 
                 {footerNote && (
                     <p className="text-xs text-muted-foreground">{footerNote}</p>
+                )}
+
+                {showServices && (
+                    <div className="space-y-1">
+                        {order.services?.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                                {order.services.map((service) => (
+                                    <Badge key={service.id} variant="outline">
+                                        {service.name}
+                                    </Badge>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-muted-foreground">No services listed</p>
+                        )}
+                    </div>
                 )}
             </div>
 

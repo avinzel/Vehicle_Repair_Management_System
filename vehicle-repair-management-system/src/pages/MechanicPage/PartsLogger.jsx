@@ -312,6 +312,7 @@ export function PartsLogger() {
                 order={order}
                 isSelected={selectedOrderId === order.id}
                 onClick={() => handleSelectOrder(order.id)}
+                showServices
               />
 
               {selectedOrderId === order.id && selectedOrder && (

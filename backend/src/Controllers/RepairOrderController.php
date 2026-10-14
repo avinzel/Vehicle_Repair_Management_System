@@ -830,6 +830,10 @@ class RepairOrderController {
             // Call model method executing CALL sp_get_mechanic_work_orders(?)
             $workOrders = $this->repairOrderModel->getMechanicWorkOrders((int)$mechanicId);
 
+            if (isset($workOrders['error'])) {
+                throw new Exception($workOrders['error']);
+            }
+
             http_response_code(200);
             echo json_encode([
                 "status" => "success",

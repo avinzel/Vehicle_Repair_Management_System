@@ -711,12 +711,51 @@
                     }
                 }
 
+                $servicesQuery = "
+                    SELECT
+                        ros.order_id,
+                        ros.service_catalog_id,
+                        sc.service_name,
+                        sc.standard_labor_cost AS labor_cost
+                    FROM repair_order_services ros
+                    INNER JOIN service_catalog sc
+                        ON ros.service_catalog_id = sc.service_catalog_id
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM repair_order_mechanics rom
+                        WHERE rom.order_id = ros.order_id
+                          AND rom.mechanic_id = ?
+                    )
+                    ORDER BY ros.order_id, ros.order_service_id
+                ";
+                $servicesStmt = self::$conn->prepare($servicesQuery);
+                if (!$servicesStmt) {
+                    throw new Exception("Services query prepare failed: " . self::$conn->error);
+                }
+
+                $mechanicIdVal = (int)$mechanicId;
+                $servicesStmt->bind_param("i", $mechanicIdVal);
+                $servicesStmt->execute();
+                $servicesResult = $servicesStmt->get_result();
+                $servicesByOrder = [];
+                while ($service = $servicesResult->fetch_assoc()) {
+                    $servicesByOrder[$service['order_id']][] = [
+                        "service_catalog_id" => (int)$service['service_catalog_id'],
+                        "service_name" => $service['service_name'],
+                        "labor_cost" => $service['labor_cost']
+                    ];
+                }
+                $servicesStmt->close();
+
+                foreach ($workOrders as &$workOrder) {
+                    $workOrder['services'] = $servicesByOrder[$workOrder['order_id']] ?? [];
+                }
+                unset($workOrder);
+
                 return $workOrders;
 
             } catch (Exception $e) {
-                return [
-                    "error" => "Database operation failed: " . $e->getMessage()
-                ];
+                throw new Exception("Database operation failed: " . $e->getMessage(), 0, $e);
             }
         }
     }
