@@ -615,7 +615,8 @@ Action: `parts`
 - `GET /api.php?action=parts`
 - Auth required
 - When the authenticated user has `role_id = 1`, this route uses the admin inventory handler.
-- Optional query params:
+- Supplying `status` (`ACTIVE`, `INACTIVE`, or `ALL`) uses the status-filtered inventory list, including inactive parts. This list also accepts `search`.
+- Without `status`, the admin inventory handler returns active parts and accepts:
   - `search`
   - `stock_level`
   - `sort_by`
@@ -677,7 +678,15 @@ Returns `201` with `part_id`; duplicate supplied part codes return `409`.
 All fields shown are required. Include `vehicle_types` as a comma-separated selection of one or more supported values; editing updates this field. Only active parts can be edited. Returns `200` on success, `400` for invalid fields, and `404` if no active part matches.
 Updating to another existing part name returns HTTP `409` with `A part with this name already exists.`
 
-### 8.5 Delete part
+### 8.5 Reactivate part
+
+- `PUT /api.php?action=parts`
+- Admin role (`role_id = 1`) required.
+- JSON body: `{"part_id":7,"status":"ACTIVE"}`
+- Makes the existing inactive part available again without creating a new inventory row.
+- Returns `200` on success or `404` if no inactive part matches.
+
+### 8.6 Delete part
 
 - `DELETE /api.php?action=parts`
 - Admin role (`role_id = 1`) required.
@@ -686,7 +695,7 @@ Updating to another existing part name returns HTTP `409` with `A part with this
 - Returns `204` on success or `404` if no active part matches.
 - Returns `409` if any associated `repair_order_parts` row is pending. The current schema names this state `PENDING_PARTS`; the API check also recognizes `PENDING` for compatible databases.
 
-### 8.6 Restock inventory
+### 8.7 Restock inventory
 
 - `POST /api.php?action=parts&post-method=restock`
 - Auth required
