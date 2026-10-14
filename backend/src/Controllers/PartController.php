@@ -125,6 +125,31 @@
                 return;
             }
 
+            if (array_key_exists('status', $input)) {
+                if (
+                    strtoupper(trim((string)$input['status'])) !== 'ACTIVE' ||
+                    count(array_diff(array_keys($input), ['part_id', 'status'])) > 0
+                ) {
+                    http_response_code(400);
+                    echo json_encode(["status" => "error", "error" => "Use status ACTIVE without part fields to reactivate a part."]);
+                    return;
+                }
+
+                $result = Part::reactivatePart((int)$partId);
+                if (is_array($result)) {
+                    error_log($result['error'] ?? 'Part reactivation failed');
+                    http_response_code(500);
+                    echo json_encode(["status" => "error", "error" => "Failed to activate part"]);
+                } elseif ($result > 0) {
+                    http_response_code(200);
+                    echo json_encode(["status" => "success", "message" => "Part activated successfully"]);
+                } else {
+                    http_response_code(404);
+                    echo json_encode(["status" => "error", "error" => "Inactive part not found"]);
+                }
+                return;
+            }
+
             $validated = $this->validatePartInput($input);
             if (isset($validated['error'])) {
                 http_response_code(400);
@@ -196,7 +221,17 @@
             // Capture query parameters
             $orderId = $_GET['order_id'] ?? null;   // optional: only parts that fit this order's vehicle
             $status  = $_GET['status']   ?? ($orderId !== null ? 'ACTIVE' : 'ALL');
+            $status = strtoupper(trim((string)$status));
             $search  = $_GET['search']   ?? '';
+
+            if (!in_array($status, ['ACTIVE', 'INACTIVE', 'ALL'], true)) {
+                http_response_code(400);
+                echo json_encode([
+                    "status" => "error",
+                    "error"  => "Invalid status filter. Use ACTIVE, INACTIVE or ALL."
+                ]);
+                return;
+            }
 
             // Fetch data from model
             $result = self::$model::getAllParts($status, $search, $orderId);
@@ -228,6 +263,11 @@
 
         public function getPartsInventoryAdmin() {
             header('Content-Type: application/json');
+
+            if (isset($_GET['status'])) {
+                $this->getParts();
+                return;
+            }
 
             // Parse request body if available
             $input = $this->getInputData();

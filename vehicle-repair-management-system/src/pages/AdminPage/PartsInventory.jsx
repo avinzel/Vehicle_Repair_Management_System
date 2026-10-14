@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useOutletContext } from "react-router";
-import { Plus, Pencil, Trash2, PackagePlus  } from "lucide-react";
+import { Plus, Pencil, Trash2, PackagePlus, RotateCcw } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -80,38 +80,55 @@ export function PartsInventory() {
   const [parts, setParts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const partsRequestId = useRef(0);
 
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
+  const [inventoryStatus, setInventoryStatus] = useState("ACTIVE");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // part row or null (= add)
 
   const [restocking, setRestocking] = useState(null);
+  const [reactivatingId, setReactivatingId] = useState(null);
 
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
 
-  // status=ACTIVE: removed parts are soft-deleted (DISCONTINUED) and
-  // shouldn't show up in the admin list.
+  useEffect(() => {
+    if (!actionSuccess) return undefined;
+
+    const timeoutId = window.setTimeout(() => setActionSuccess(null), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [actionSuccess]);
+
   const getParts = useCallback(async () => {
+    const requestId = ++partsRequestId.current;
     setLoadError(null);
     try {
-      const json = await request(`${API}?action=parts&status=ACTIVE`);
+      const json = await request(`${API}?action=parts&status=${inventoryStatus}`);
       const rows = Array.isArray(json.data) ? json.data : [];
       const normalizedParts = rows.map(normalizePart);
-      setParts(normalizedParts);
-      setOutOfStockCount?.(
-        normalizedParts.filter((part) => part.quantity_on_hand <= 5).length
-      );
+      if (requestId === partsRequestId.current) {
+        setParts(normalizedParts);
+      }
+      if (inventoryStatus === "ACTIVE" && requestId === partsRequestId.current) {
+        setOutOfStockCount?.(
+          normalizedParts.filter((part) => part.quantity_on_hand <= 5).length
+        );
+      }
     } catch (err) {
-      setLoadError(err.message || "Failed to load parts");
+      if (requestId === partsRequestId.current) {
+        setLoadError(err.message || "Failed to load parts");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === partsRequestId.current) {
+        setLoading(false);
+      }
     }
-  }, [setOutOfStockCount]);
+  }, [inventoryStatus, setOutOfStockCount]);
 
   useEffect(() => {
     getParts();
@@ -146,6 +163,7 @@ export function PartsInventory() {
   }
 
   async function handleSubmit(payload) {
+    setLoadError(null);
     if (editing) {
       await request(`${API}?action=parts`, {
         method: "PUT",
@@ -164,6 +182,7 @@ export function PartsInventory() {
   }
 
   async function handleRestock(quantity) {
+    setLoadError(null);
     await request(`${API}?action=parts&post-method=restock`, {
       method: "POST",
       headers: JSON_HEADERS,
@@ -176,18 +195,55 @@ export function PartsInventory() {
     setDeleteBusy(true);
     setDeleteError(null);
     try {
+      const deletedPart = deleting;
       await request(`${API}?action=parts`, {
         method: "DELETE",
         headers: JSON_HEADERS,
         body: JSON.stringify({ part_id: deleting.part_id }),
       });
       setDeleting(null);
+      setLoadError(null);
+      setParts((currentParts) =>
+        currentParts.filter((part) => part.part_id !== deletedPart.part_id)
+      );
       await getParts();
-      setActionSuccess(`${deleting.part_name} was discontinued successfully.`);
+      setParts((currentParts) =>
+        currentParts.filter((part) => part.part_id !== deletedPart.part_id)
+      );
+      setActionSuccess(`${deletedPart.part_name} was discontinued successfully.`);
     } catch (err) {
       setDeleteError(err.message || "Failed to remove part");
     } finally {
       setDeleteBusy(false);
+    }
+  }
+
+  async function handleReactivate(part) {
+    setReactivatingId(part.part_id);
+    setLoadError(null);
+    setActionSuccess(null);
+    try {
+      await request(`${API}?action=parts`, {
+        method: "PUT",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ part_id: part.part_id, status: "ACTIVE" }),
+      });
+      await getParts();
+      setActionSuccess(`${part.part_name} was activated successfully.`);
+      try {
+        const activeJson = await request(`${API}?action=parts&status=ACTIVE`);
+        const activeParts = Array.isArray(activeJson.data) ? activeJson.data.map(normalizePart) : [];
+        setOutOfStockCount?.(
+          activeParts.filter((activePart) => activePart.quantity_on_hand <= 5).length
+        );
+      } catch (err) {
+        console.error("Failed to refresh active parts stock count:", err);
+        setLoadError("The part was activated, but the stock summary could not be refreshed.");
+      }
+    } catch (err) {
+      setLoadError(err.message || "Failed to activate part");
+    } finally {
+      setReactivatingId(null);
     }
   }
 
@@ -206,17 +262,44 @@ export function PartsInventory() {
 
       <div className="pt-6 space-y-6">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="font-bold pb-1">Parts Inventory</CardTitle>
               <CardDescription>
                 {parts.length} part{parts.length === 1 ? "" : "s"} · {lowStockCount} low stock
               </CardDescription>
             </div>
-            <Button onClick={openAdd} className="gap-1.5">
-              <Plus className="w-4 h-4" />
-              Add Part
-            </Button>
+            <div className="flex items-center gap-2">
+              <div role="group" aria-label="Filter parts by status" className="flex items-center gap-1">
+                {[
+                  { label: "Active", value: "ACTIVE" },
+                  { label: "Inactive", value: "INACTIVE" },
+                ].map((filter) => (
+                  <Button
+                    key={filter.value}
+                    type="button"
+                    size="sm"
+                    variant={inventoryStatus === filter.value ? "default" : "outline"}
+                    aria-pressed={inventoryStatus === filter.value}
+                    onClick={() => {
+                      setLoading(true);
+                      setLoadError(null);
+                      if (inventoryStatus === filter.value) {
+                        getParts();
+                      } else {
+                        setInventoryStatus(filter.value);
+                      }
+                    }}
+                  >
+                    {filter.label}
+                  </Button>
+                ))}
+              </div>
+              <Button onClick={openAdd} className="gap-1.5">
+                <Plus className="w-4 h-4" />
+                Add Part
+              </Button>
+            </div>
           </CardHeader>
 
           <CardContent>
@@ -265,37 +348,52 @@ export function PartsInventory() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Restock ${part.part_name}`}
-                            className="hover:text-muted-foreground"
-                            onClick={() => setRestocking(part)}
-                          >
-                            <PackagePlus className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Edit ${part.part_name}`}
-                            className="hover:text-muted-foreground"
-                            onClick={() => openEdit(part)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Remove ${part.part_name}`}
-                            className="hover:text-destructive"
-                            onClick={() => {
-                              setDeleteError(null);
-                              setActionSuccess(null);
-                              setDeleting(part);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {inventoryStatus === "INACTIVE" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              aria-label={`Activate ${part.part_name}`}
+                              disabled={reactivatingId === part.part_id}
+                              onClick={() => handleReactivate(part)}
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                              {reactivatingId === part.part_id ? "Activating..." : "Activate"}
+                            </Button>
+                          ) : (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Restock ${part.part_name}`}
+                                className="hover:text-muted-foreground"
+                                onClick={() => setRestocking(part)}
+                              >
+                                <PackagePlus className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Edit ${part.part_name}`}
+                                className="hover:text-muted-foreground"
+                                onClick={() => openEdit(part)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Remove ${part.part_name}`}
+                                className="hover:text-destructive"
+                                onClick={() => {
+                                  setDeleteError(null);
+                                  setActionSuccess(null);
+                                  setDeleting(part);
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -304,21 +402,23 @@ export function PartsInventory() {
 
                 {!loading && parts.length > 0 && filteredParts.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
+                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-10">
                       No parts match your filters.
                     </TableCell>
                   </TableRow>
                 )}
                 {!loading && parts.length === 0 && !loadError && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
-                      No parts yet. Add one to start tracking stock.
+                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-10">
+                      {inventoryStatus === "INACTIVE"
+                        ? "No inactive parts."
+                        : "No parts yet. Add one to start tracking stock."}
                     </TableCell>
                   </TableRow>
                 )}
                 {loading && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
+                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-10">
                       Loading parts...
                     </TableCell>
                   </TableRow>
