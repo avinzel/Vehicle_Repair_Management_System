@@ -137,6 +137,7 @@
 		diagnosis_completed_at DATETIME NULL,
 		priority        ENUM('STANDARD','URGENT','RUSH') NOT NULL DEFAULT 'STANDARD',
 		created_by      INT NOT NULL,
+		INDEX idx_repair_orders_status_date_received (status, date_received),
 		CONSTRAINT fk_order_vehicle  FOREIGN KEY (vehicle_id)  REFERENCES vehicles(vehicle_id),
 		CONSTRAINT fk_order_user     FOREIGN KEY (created_by)  REFERENCES users(user_id)
 	);
@@ -161,6 +162,7 @@
 		order_service_id   INT PRIMARY KEY AUTO_INCREMENT,
 		order_id            INT NOT NULL,
 		service_catalog_id  INT NOT NULL,
+		INDEX idx_ros_order_catalog (order_id, service_catalog_id),
 		CONSTRAINT fk_ros_order   FOREIGN KEY (order_id)           REFERENCES repair_orders(order_id),
 		CONSTRAINT fk_ros_catalog FOREIGN KEY (service_catalog_id) REFERENCES service_catalog(service_catalog_id)
 	);
@@ -177,6 +179,9 @@
         mechanic_id     INT NOT NULL,
         position_id     INT NOT NULL,
         date_assigned   DATETIME DEFAULT CURRENT_TIMESTAMP,
+		INDEX idx_rom_order_mechanic (order_id, mechanic_id),
+		INDEX idx_rom_mechanic_order (mechanic_id, order_id),
+		INDEX idx_rom_order_position (order_id, position_id),
         CONSTRAINT fk_rom_order    FOREIGN KEY (order_id)    REFERENCES repair_orders(order_id),
         CONSTRAINT fk_rom_mechanic FOREIGN KEY (mechanic_id) REFERENCES mechanics(mechanic_id),
         CONSTRAINT fk_rom_position FOREIGN KEY (position_id) REFERENCES mechanic_positions(position_id)
@@ -192,6 +197,8 @@
 		quantity_used INT NOT NULL,
 		unit_price    DECIMAL(10,2) NOT NULL,
 		status ENUM('ISSUED', 'PENDING_PARTS', 'CANCELLED') DEFAULT 'ISSUED',
+		INDEX idx_rop_order_status (order_id, status),
+		INDEX idx_rop_status_part_order (status, part_id, order_id),
 		CONSTRAINT fk_rop_order FOREIGN KEY (order_id) REFERENCES repair_orders(order_id),
 		CONSTRAINT fk_rop_part  FOREIGN KEY (part_id)  REFERENCES parts_inventory(part_id)
 	);
