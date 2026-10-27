@@ -639,7 +639,8 @@
             } catch (Exception $e) {
                 return [
                     "success" => false,
-                    "error"   => "Failed to mark ready to invoice: " . $e->getMessage()
+                    "error"   => "Failed to mark ready to invoice: " . $e->getMessage(),
+                    "code"    => (int)$e->getCode()
                 ];
             }
         }

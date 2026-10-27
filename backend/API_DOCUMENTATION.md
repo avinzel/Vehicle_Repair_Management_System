@@ -484,6 +484,7 @@ Also accepted:
 
 - `POST /api.php?action=repair-orders&post-method=mark-ready-to-invoice`
 - Auth required
+- Only the active Lead Mechanic assigned to the order can complete it; other callers receive HTTP `403`.
 - Request body:
 
 ```json
@@ -739,6 +740,12 @@ Action: `mechanics`
   - `order_id` or `orderId`
 - Returns mechanics who are not already assigned to that repair order.
 
+### 9.2.1 Preview open assignments before deactivation
+
+- `GET /api.php?action=mechanics&handoff-preview=1&mechanic_id=3`
+- Auth required; Admin role only
+- Returns the mechanic's assignments on open repair orders, each order's current crew IDs and position, and active mechanics eligible to replace them.
+
 ### 9.3 Create mechanic record
 
 - `POST /api.php?action=mechanics`
@@ -775,7 +782,13 @@ Optional:
   "mechanic_id": 3,
   "specialization": "Engine",
   "date_hired": "2025-01-15",
-  "status": "ACTIVE"
+  "status": "INACTIVE",
+  "handoffs": [
+    {
+      "assignment_id": 12,
+      "replacement_mechanic_id": 5
+    }
+  ]
 }
 ```
 
@@ -788,9 +801,10 @@ Required:
 Optional:
 
 - `status` (`ACTIVE` or `INACTIVE`; defaults to `ACTIVE`)
+- `handoffs` (required as one assignment/replacement pair per open assignment when setting `INACTIVE`; use an empty array when there are no open assignments)
 
 The linked `user_id` is looked up from the mechanic record; it is not required from the edit form. Mechanic and linked user statuses update together.
-Setting status to `INACTIVE` is rejected with HTTP `409` if the mechanic has an active repair order (`PENDING_DIAGNOSIS`, `AWAITING_DIAGNOSIS`, `PENDING_MECHANICS`, `IN_PROGRESS`, or `AWAITING_PARTS`).
+When setting status to `INACTIVE`, every open assignment (`PENDING_DIAGNOSIS`, `AWAITING_DIAGNOSIS`, `PENDING_MECHANICS`, `IN_PROGRESS`, or `AWAITING_PARTS`) must be handed to an active mechanic. The replacement inherits the assignment's position; a replacement already assigned to the same order is not accepted. Reassignments, assignment-history records, and account deactivation are committed together or rolled back together. Invalid or stale handoffs return HTTP `409`.
 
 ### 9.5 Delete mechanic record
 
@@ -806,7 +820,7 @@ Setting status to `INACTIVE` is rejected with HTTP `409` if the mechanic has an 
 
 This performs a soft delete.
 - Both `mechanics.status` and the linked `users.status` are set to `INACTIVE` in one transaction.
-- Deactivation is rejected with HTTP `409` if the mechanic has an active repair order (`PENDING_DIAGNOSIS`, `AWAITING_DIAGNOSIS`, `PENDING_MECHANICS`, `IN_PROGRESS`, or `AWAITING_PARTS`).
+- This endpoint does not accept handoffs and returns HTTP `409` if open assignments remain. Use the update endpoint to deactivate with handoffs.
 
 ## 10) Customers
 

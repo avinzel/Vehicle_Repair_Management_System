@@ -186,6 +186,25 @@
         CONSTRAINT fk_rom_mechanic FOREIGN KEY (mechanic_id) REFERENCES mechanics(mechanic_id),
         CONSTRAINT fk_rom_position FOREIGN KEY (position_id) REFERENCES mechanic_positions(position_id)
     );
+
+    CREATE TABLE repair_order_mechanic_handoffs (
+        handoff_id              INT PRIMARY KEY AUTO_INCREMENT,
+        assignment_id           INT NOT NULL,
+        order_id                INT NOT NULL,
+        mechanic_id             INT NOT NULL,
+        position_id             INT NOT NULL,
+        date_assigned           DATETIME NULL,
+        replacement_mechanic_id INT NOT NULL,
+        reassigned_by           INT NOT NULL,
+        reassigned_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_romh_order (order_id, reassigned_at),
+        CONSTRAINT fk_romh_assignment   FOREIGN KEY (assignment_id) REFERENCES repair_order_mechanics(assignment_id),
+        CONSTRAINT fk_romh_order        FOREIGN KEY (order_id) REFERENCES repair_orders(order_id),
+        CONSTRAINT fk_romh_mechanic     FOREIGN KEY (mechanic_id) REFERENCES mechanics(mechanic_id),
+        CONSTRAINT fk_romh_position     FOREIGN KEY (position_id) REFERENCES mechanic_positions(position_id),
+        CONSTRAINT fk_romh_replacement  FOREIGN KEY (replacement_mechanic_id) REFERENCES mechanics(mechanic_id),
+        CONSTRAINT fk_romh_reassigned_by FOREIGN KEY (reassigned_by) REFERENCES users(user_id)
+    );
 	-- =====================================================================
 	-- REPAIR_ORDER_PARTS
 	-- =====================================================================
@@ -1706,7 +1725,7 @@ BEGIN
         
         -- COALESCE handles missing mechanics or converts multiple into comma-separated list
         COALESCE(
-            GROUP_CONCAT(DISTINCT CONCAT(u.first_name, ' ', u.last_name) SEPARATOR ', '), 
+            GROUP_CONCAT(DISTINCT mechanic_names.full_name SEPARATOR ', '),
             'Unassigned'
         ) AS mechanics_list,
 
@@ -1718,9 +1737,17 @@ BEGIN
     JOIN vehicles v ON ro.vehicle_id = v.vehicle_id
     JOIN customers c ON v.customer_id = c.customer_id
     LEFT JOIN invoices i ON ro.order_id = i.order_id
-    LEFT JOIN repair_order_mechanics rom ON ro.order_id = rom.order_id
-    LEFT JOIN mechanics m ON rom.mechanic_id = m.mechanic_id
-    LEFT JOIN users u ON m.user_id = u.user_id
+    LEFT JOIN (
+        SELECT rom.order_id, CONCAT(u.first_name, ' ', u.last_name) AS full_name
+        FROM repair_order_mechanics rom
+        JOIN mechanics m ON m.mechanic_id = rom.mechanic_id
+        JOIN users u ON u.user_id = m.user_id
+        UNION
+        SELECT romh.order_id, CONCAT(u.first_name, ' ', u.last_name) AS full_name
+        FROM repair_order_mechanic_handoffs romh
+        JOIN mechanics m ON m.mechanic_id = romh.mechanic_id
+        JOIN users u ON u.user_id = m.user_id
+    ) mechanic_names ON mechanic_names.order_id = ro.order_id
 
     WHERE ro.status = 'FULFILLED'
       AND (
@@ -1730,8 +1757,7 @@ BEGIN
             OR v.manufacturer LIKE CONCAT('%', p_search, '%')
             OR v.model LIKE CONCAT('%', p_search, '%')
             OR v.plate_number LIKE CONCAT('%', p_search, '%')
-            OR u.first_name LIKE CONCAT('%', p_search, '%')
-            OR u.last_name LIKE CONCAT('%', p_search, '%')
+            OR mechanic_names.full_name LIKE CONCAT('%', p_search, '%')
       )
 
     GROUP BY 
@@ -4404,11 +4430,20 @@ CREATE PROCEDURE sp_mark_ready_to_invoice(
 sp_lbl: BEGIN
     DECLARE v_pending_parts_count INT DEFAULT 0;
     DECLARE v_current_status VARCHAR(50);
+    DECLARE v_is_active_lead INT DEFAULT 0;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
 
     -- 1. Check if repair order exists & fetch current status
+    START TRANSACTION;
     SELECT status INTO v_current_status
     FROM repair_orders
-    WHERE order_id = p_order_id;
+    WHERE order_id = p_order_id
+    FOR UPDATE;
 
     IF v_current_status IS NULL THEN
         SIGNAL SQLSTATE '45000'
@@ -4421,6 +4456,22 @@ sp_lbl: BEGIN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Repair order has already passed the work stage or is cancelled.';
         LEAVE sp_lbl;
+    END IF;
+
+    SELECT COUNT(*) INTO v_is_active_lead
+    FROM repair_order_mechanics rom
+    JOIN mechanic_positions mp ON mp.position_id = rom.position_id
+    JOIN mechanics m ON m.mechanic_id = rom.mechanic_id
+    JOIN users u ON u.user_id = m.user_id
+    WHERE rom.order_id = p_order_id
+      AND u.user_id = p_user_id
+      AND mp.position_name = 'Lead Mechanic'
+      AND m.status = 'ACTIVE'
+      AND u.status = 'ACTIVE';
+
+    IF v_is_active_lead = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Only the active Lead Mechanic assigned to this repair order can mark it ready to invoice.';
     END IF;
 
     -- 3. Ensure no parts are still pending stock fulfillment
@@ -4441,6 +4492,7 @@ sp_lbl: BEGIN
         date_completed = NOW()
     WHERE order_id = p_order_id;
 
+    COMMIT;
 END$$
 
 DELIMITER ;

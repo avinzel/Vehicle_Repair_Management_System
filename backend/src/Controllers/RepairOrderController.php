@@ -739,7 +739,7 @@ class RepairOrderController {
                     "message" => $response['message'] ?? "Repair order marked as ready to invoice successfully"
                 ]);
             } else {
-                http_response_code(400);
+                http_response_code(($response['code'] ?? 0) === 1645 ? 403 : 400);
                 echo json_encode([
                     "status" => "error",
                     "error"  => $response['error'] ?? "Failed to mark order as ready to invoice"

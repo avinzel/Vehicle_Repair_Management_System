@@ -353,9 +353,8 @@ function RepairTeamStage({ order, onUpdateOrder, currentUserName, myPositionOnTh
   // Only an in-progress job can be marked complete from here; later
   // stages (Awaiting Payment, Ready for Release, Completed) are read-only
   // from the mechanic's side — those are advisor/billing actions.
-  // Only the Lead Mechanic on this job can do it (the advisor-side stage
-  // text says the same). NOTE: sp_mark_ready_to_invoice does not check the
-  // caller's position, so this gate is UI-only for now.
+  // Only the active Lead Mechanic assigned to this job can do it. The
+  // database procedure enforces the same rule for direct API requests.
   const isLeadMechanic = myPositionOnThisJob === "Lead Mechanic";
   const canMarkComplete = statusLabel === "In Progress" && isLeadMechanic;
   const showLeadOnlyHint = statusLabel === "In Progress" && !isLeadMechanic;

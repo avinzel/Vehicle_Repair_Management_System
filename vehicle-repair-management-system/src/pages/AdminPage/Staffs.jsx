@@ -282,8 +282,14 @@ export function Staffs() {
                             size="icon-sm"
                             aria-label={`Remove ${m.name}`}
                             className="hover:text-destructive"
-                            disabled={isSelf}
-                            title={isSelf ? "You can't remove your own account" : undefined}
+                            disabled={isSelf || Number(m.roleId) === 3}
+                            title={
+                              isSelf
+                                ? "You can't remove your own account"
+                                : Number(m.roleId) === 3
+                                  ? "Manage mechanic deactivation on the Mechanics page"
+                                  : undefined
+                            }
                             onClick={() => {
                               setDeleteError(null);
                               setDeleting(m);

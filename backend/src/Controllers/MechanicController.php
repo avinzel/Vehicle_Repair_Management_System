@@ -3,6 +3,7 @@ namespace App\Controllers;
 
 use Exception;
 use App\Models\Mechanic;
+use App\Auth\Auth;
 
 class MechanicController {
     private $mechanicModel;
@@ -95,13 +96,21 @@ class MechanicController {
             echo json_encode(["error" => "Status must be ACTIVE or INACTIVE"]);
             return;
         }
+        $handoffs = $data['handoffs'] ?? [];
+        if (!is_array($handoffs)) {
+            http_response_code(400);
+            echo json_encode(["error" => "handoffs must be an array"]);
+            return;
+        }
 
         try {
             $affectedRows = $this->mechanicModel->updateMechanic(
                 (int)$mechanicId,
                 $specialization,
                 $dateHired,
-                $status
+                $status,
+                $handoffs,
+                Auth::getUserId()
             );
 
             if ($affectedRows > 0) {
@@ -123,6 +132,38 @@ class MechanicController {
             }
             http_response_code(500);
             echo json_encode(["error" => "Failed to update mechanic"]);
+        }
+    }
+
+    // GET: Preview assignments that must be handed off before deactivation
+    public function getOpenAssignments() {
+        header('Content-Type: application/json');
+        if ((int)Auth::getRoleId() !== 1) {
+            http_response_code(403);
+            echo json_encode(["error" => "Only administrators can preview mechanic handoffs"]);
+            return;
+        }
+
+        $mechanicId = $_GET['mechanic_id'] ?? null;
+        if (filter_var($mechanicId, FILTER_VALIDATE_INT) === false || (int)$mechanicId <= 0) {
+            http_response_code(400);
+            echo json_encode(["error" => "A valid mechanic_id is required"]);
+            return;
+        }
+
+        try {
+            $assignments = Mechanic::getOpenAssignments((int)$mechanicId);
+            $candidates = Mechanic::getActiveHandoffCandidates((int)$mechanicId);
+            http_response_code(200);
+            echo json_encode([
+                "status" => "success",
+                "data" => $assignments,
+                "candidates" => $candidates
+            ]);
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            http_response_code(500);
+            echo json_encode(["error" => "Failed to load open mechanic assignments"]);
         }
     }
 

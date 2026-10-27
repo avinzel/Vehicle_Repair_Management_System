@@ -49,6 +49,7 @@ function Field({ label, children, className = "" }) {
 // failure so the message shows inside the modal.
 export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
   const isEdit = !!staff;
+  const mechanicStatusManagedElsewhere = isEdit && Number(staff?.roleId) === 3;
 
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
@@ -246,7 +247,7 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
                 items={STAFF_STATUSES}
                 value={status}
                 onValueChange={(v) => setStatus(v ?? "ACTIVE")}
-                disabled={submitting}
+                disabled={submitting || mechanicStatusManagedElsewhere}
               >
                 <SelectTrigger className="w-full bg-background">
                   <SelectValue />
@@ -259,6 +260,11 @@ export function StaffFormDialog({ open, onOpenChange, staff, onSubmit }) {
                   ))}
                 </SelectContent>
               </Select>
+              {mechanicStatusManagedElsewhere && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Manage mechanic status on the Mechanics page so open repair orders can be handed off safely.
+                </p>
+              )}
             </Field>
           </div>
 

@@ -1,12 +1,11 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, UserRoundX } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MechanicFormDialog } from "@/components/dialogs/MechanicFormDialog";
 import { FilterBar, matchesSearch } from "@/components/OrderSearchFilter";
 import { showToast } from "@/lib/notifications";
@@ -68,10 +67,6 @@ export function MechanicsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
-  const [deleting, setDeleting] = useState(null);
-  const [deleteBusy, setDeleteBusy] = useState(false);
-  const [deleteError, setDeleteError] = useState(null);
-
   const getMechanics = useCallback(async () => {
     setLoadError(null);
     try {
@@ -118,27 +113,6 @@ export function MechanicsPage() {
     } catch (err) {
       showToast("error", "Could not update mechanic", err.message);
       throw err;
-    }
-  }
-
-  async function handleDelete() {
-    setDeleteBusy(true);
-    setDeleteError(null);
-    try {
-      await request(`${API}?action=mechanics`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mechanic_id: deleting.id }),
-      });
-      setDeleting(null);
-      await getMechanics();
-      showToast("success", "Mechanic removed", "The mechanic was removed successfully.");
-    } catch (err) {
-      const message = err.message || "Failed to remove mechanic";
-      setDeleteError(message);
-      showToast("error", "Could not remove mechanic", message);
-    } finally {
-      setDeleteBusy(false);
     }
   }
 
@@ -233,14 +207,11 @@ export function MechanicsPage() {
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={`Remove ${m.name}`}
+                            aria-label={`Deactivate ${m.name}`}
                             className="hover:text-destructive"
-                            onClick={() => {
-                              setDeleteError(null);
-                              setDeleting(m);
-                            }}
+                            onClick={() => openEdit({ ...m, deactivateOnOpen: true })}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <UserRoundX className="w-4 h-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -274,24 +245,14 @@ export function MechanicsPage() {
           </CardContent>
         </Card>
 
-        <MechanicFormDialog
-          open={formOpen}
-          onOpenChange={setFormOpen}
-          mechanic={editing}
-          onSubmit={handleSubmit}
-        />
-
-        <ConfirmDialog
-          open={!!deleting}
-          onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}
-          title="Remove mechanic?"
-          description={`${deleting?.name ?? "This mechanic"} will be marked inactive and can no longer be assigned to repair orders. Past orders keep their history.`}
-          confirmLabel="Remove"
-          destructive
-          loading={deleteBusy}
-          error={deleteError}
-          onConfirm={handleDelete}
-        />
+        {formOpen && (
+          <MechanicFormDialog
+            open={formOpen}
+            onOpenChange={setFormOpen}
+            mechanic={editing}
+            onSubmit={handleSubmit}
+          />
+        )}
       </div>
     </div>
   );

@@ -358,6 +358,10 @@
         break;
         case "mechanics":{
             if ($_SERVER["REQUEST_METHOD"] === "GET"){
+                if (isset($_GET["handoff-preview"])) {
+                   $mechanicsController->getOpenAssignments();
+                   exit();
+                }
                 if (isset($_GET["available"])) {
                    $mechanicsController->getAvailableMechanics(); 
                    exit();

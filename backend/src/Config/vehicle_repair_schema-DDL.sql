@@ -186,6 +186,25 @@
         CONSTRAINT fk_rom_mechanic FOREIGN KEY (mechanic_id) REFERENCES mechanics(mechanic_id),
         CONSTRAINT fk_rom_position FOREIGN KEY (position_id) REFERENCES mechanic_positions(position_id)
     );
+
+    CREATE TABLE repair_order_mechanic_handoffs (
+        handoff_id              INT PRIMARY KEY AUTO_INCREMENT,
+        assignment_id           INT NOT NULL,
+        order_id                INT NOT NULL,
+        mechanic_id             INT NOT NULL,
+        position_id             INT NOT NULL,
+        date_assigned           DATETIME NULL,
+        replacement_mechanic_id INT NOT NULL,
+        reassigned_by           INT NOT NULL,
+        reassigned_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_romh_order (order_id, reassigned_at),
+        CONSTRAINT fk_romh_assignment   FOREIGN KEY (assignment_id) REFERENCES repair_order_mechanics(assignment_id),
+        CONSTRAINT fk_romh_order        FOREIGN KEY (order_id) REFERENCES repair_orders(order_id),
+        CONSTRAINT fk_romh_mechanic     FOREIGN KEY (mechanic_id) REFERENCES mechanics(mechanic_id),
+        CONSTRAINT fk_romh_position     FOREIGN KEY (position_id) REFERENCES mechanic_positions(position_id),
+        CONSTRAINT fk_romh_replacement  FOREIGN KEY (replacement_mechanic_id) REFERENCES mechanics(mechanic_id),
+        CONSTRAINT fk_romh_reassigned_by FOREIGN KEY (reassigned_by) REFERENCES users(user_id)
+    );
 	-- =====================================================================
 	-- REPAIR_ORDER_PARTS
 	-- =====================================================================
